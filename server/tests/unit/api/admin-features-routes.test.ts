@@ -125,6 +125,13 @@ describe('Admin Feature Flags Routes', () => {
       expect(mockFeatureFlagService.getAuditLog).toHaveBeenCalledWith('aiAssistant', expect.any(Number), expect.any(Number));
     });
 
+    it('should reject unknown key filter', async () => {
+      const response = await request(app).get('/api/v1/admin/features/audit-log?key=nonExistent');
+
+      expect(response.status).toBe(400);
+      expect(mockFeatureFlagService.getAuditLog).not.toHaveBeenCalled();
+    });
+
     it('should accept limit parameter', async () => {
       mockFeatureFlagService.getAuditLog.mockResolvedValue([]);
 
@@ -171,12 +178,11 @@ describe('Admin Feature Flags Routes', () => {
     });
 
     it('should return 404 for unknown flag', async () => {
-      mockFeatureFlagService.getFlag.mockResolvedValue(null);
-
       const response = await request(app).get('/api/v1/admin/features/nonExistent');
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Not Found');
+      expect(mockFeatureFlagService.getFlag).not.toHaveBeenCalled();
     });
 
     it('should return 500 on service error', async () => {
@@ -243,13 +249,13 @@ describe('Admin Feature Flags Routes', () => {
     });
 
     it('should return 404 for unknown flag', async () => {
-      mockFeatureFlagService.getFlag.mockResolvedValue(null);
-
       const response = await request(app)
         .patch('/api/v1/admin/features/nonExistent')
         .send({ enabled: true });
 
       expect(response.status).toBe(404);
+      expect(mockFeatureFlagService.getFlag).not.toHaveBeenCalled();
+      expect(mockFeatureFlagService.setFlag).not.toHaveBeenCalled();
     });
 
     it('should return 500 on service error', async () => {
@@ -285,12 +291,12 @@ describe('Admin Feature Flags Routes', () => {
     });
 
     it('should return 404 for unknown flag', async () => {
-      mockFeatureFlagService.getFlag.mockResolvedValue(null);
-
       const response = await request(app)
         .post('/api/v1/admin/features/nonExistent/reset');
 
       expect(response.status).toBe(404);
+      expect(mockFeatureFlagService.getFlag).not.toHaveBeenCalled();
+      expect(mockFeatureFlagService.resetToDefault).not.toHaveBeenCalled();
     });
 
     it('should return 500 on service error', async () => {

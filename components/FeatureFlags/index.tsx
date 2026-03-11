@@ -4,11 +4,6 @@ import * as adminApi from '../../src/api/admin';
 import type { FeatureFlagInfo, FeatureFlagAuditEntry } from '../../src/api/admin';
 import { useLoadingState } from '../../hooks/useLoadingState';
 
-// Flags that trigger background job changes when toggled
-const SIDE_EFFECT_FLAGS: Record<string, string> = {
-  treasuryAutopilot: 'Toggling this starts or stops background consolidation jobs without requiring a restart.',
-};
-
 const CATEGORY_LABELS: Record<string, string> = {
   general: 'General',
   experimental: 'Experimental',
@@ -226,10 +221,12 @@ export function FeatureFlags() {
                 </div>
 
                 {/* Side-effect warning */}
-                {SIDE_EFFECT_FLAGS[flag.key] && (
+                {flag.hasSideEffects && (
                   <div className="mt-2 flex items-start space-x-2 p-2 rounded-lg bg-warning-50 dark:bg-warning-900/20 text-warning-700 dark:text-warning-400">
                     <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                    <span className="text-[11px]">{SIDE_EFFECT_FLAGS[flag.key]}</span>
+                    <span className="text-[11px]">
+                      {flag.sideEffectDescription || 'Toggling this flag has immediate runtime side effects.'}
+                    </span>
                   </div>
                 )}
               </div>

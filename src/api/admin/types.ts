@@ -274,6 +274,8 @@ export interface FeatureFlagInfo {
   source: 'environment' | 'database';
   modifiedBy: string | null;
   updatedAt: string | null;
+  hasSideEffects?: boolean;
+  sideEffectDescription?: string | null;
 }
 
 export interface FeatureFlagAuditEntry {

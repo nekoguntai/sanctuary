@@ -46,6 +46,7 @@ import { getConfig, type FeatureFlags, type FeatureFlagKey, type ExperimentalFea
 import { db as prisma } from '../repositories/db';
 import { getDistributedCache, getDistributedEventBus } from '../infrastructure';
 import { createLogger } from '../utils/logger';
+import { getFeatureFlagDefinition } from './featureFlags/definitions';
 
 const log = createLogger('FeatureFlags');
 
@@ -61,6 +62,8 @@ export interface FeatureFlagInfo {
   source: 'environment' | 'database';
   modifiedBy: string | null;
   updatedAt: Date | null;
+  hasSideEffects?: boolean;
+  sideEffectDescription?: string | null;
 }
 
 export interface SetFlagOptions {
@@ -83,24 +86,6 @@ export interface AuditEntry {
 // =============================================================================
 // Feature Flag Definitions
 // =============================================================================
-
-const FEATURE_DESCRIPTIONS: Record<string, { description: string; category: string }> = {
-  hardwareWalletSigning: { description: 'Enable hardware wallet signing support', category: 'general' },
-  qrCodeSigning: { description: 'Enable QR code based transaction signing', category: 'general' },
-  multisigWallets: { description: 'Enable multi-signature wallet support', category: 'general' },
-  batchSync: { description: 'Enable batch synchronization of wallets', category: 'general' },
-  payjoinSupport: { description: 'Enable PayJoin (BIP78) transaction support', category: 'general' },
-  batchTransactions: { description: 'Enable batch transaction creation', category: 'general' },
-  rbfTransactions: { description: 'Enable Replace-By-Fee transaction support', category: 'general' },
-  priceAlerts: { description: 'Enable price alert notifications', category: 'general' },
-  aiAssistant: { description: 'Enable AI-powered transaction analysis', category: 'general' },
-  telegramNotifications: { description: 'Enable Telegram bot notifications', category: 'general' },
-  treasuryAutopilot: { description: 'Enable Treasury Autopilot consolidation jobs', category: 'general' },
-  websocketV2Events: { description: 'Enable WebSocket v2 event format', category: 'general' },
-  'experimental.taprootAddresses': { description: 'Enable Taproot (P2TR) address support', category: 'experimental' },
-  'experimental.silentPayments': { description: 'Enable Silent Payments (BIP352)', category: 'experimental' },
-  'experimental.coinJoin': { description: 'Enable CoinJoin transaction support', category: 'experimental' },
-};
 
 // =============================================================================
 // Cache
@@ -137,13 +122,13 @@ class FeatureFlagService {
         const existing = await prisma.featureFlag.findUnique({ where: { key } });
 
         if (!existing) {
-          const meta = FEATURE_DESCRIPTIONS[key] || { description: null, category: 'general' };
+          const meta = getFeatureFlagDefinition(key);
           await prisma.featureFlag.create({
             data: {
               key,
               enabled,
-              description: meta.description,
-              category: meta.category,
+              description: meta?.description ?? null,
+              category: meta?.category ?? 'general',
               modifiedBy: 'system',
             },
           });
@@ -330,15 +315,21 @@ class FeatureFlagService {
       orderBy: [{ category: 'asc' }, { key: 'asc' }],
     });
 
-    return flags.map((flag) => ({
-      key: flag.key,
-      enabled: flag.enabled,
-      description: flag.description,
-      category: flag.category,
-      source: 'database' as const,
-      modifiedBy: flag.modifiedBy,
-      updatedAt: flag.updatedAt,
-    }));
+    return flags.map((flag) => {
+      const definition = getFeatureFlagDefinition(flag.key);
+
+      return {
+        key: flag.key,
+        enabled: flag.enabled,
+        description: flag.description,
+        category: flag.category,
+        source: 'database' as const,
+        modifiedBy: flag.modifiedBy,
+        updatedAt: flag.updatedAt,
+        hasSideEffects: definition?.hasSideEffects,
+        sideEffectDescription: definition?.sideEffectDescription ?? null,
+      };
+    });
   }
 
   /**
@@ -373,6 +364,8 @@ class FeatureFlagService {
 
     if (!flag) return null;
 
+    const definition = getFeatureFlagDefinition(flag.key);
+
     return {
       key: flag.key,
       enabled: flag.enabled,
@@ -381,6 +374,8 @@ class FeatureFlagService {
       source: 'database',
       modifiedBy: flag.modifiedBy,
       updatedAt: flag.updatedAt,
+      hasSideEffects: definition?.hasSideEffects,
+      sideEffectDescription: definition?.sideEffectDescription ?? null,
     };
   }
 

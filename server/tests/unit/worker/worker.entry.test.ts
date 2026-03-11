@@ -290,6 +290,55 @@ describe('worker entrypoint', () => {
     );
   });
 
+  it('reacts to featureFlag.changed events by scheduling and removing autopilot jobs', async () => {
+    vi.spyOn(process, 'on').mockImplementation(((event: string, handler: (...args: any[]) => any) => {
+      void event;
+      void handler;
+      return process;
+    }) as any);
+    vi.spyOn(process, 'exit').mockImplementation((() => undefined) as any);
+
+    await import('../../../src/worker.ts');
+    await vi.dynamicImportSettled();
+
+    const workerListener = mocks.mockEventBus.on.mock.calls.find(
+      (call: any) => call[0] === 'system:featureFlag.changed'
+    )?.[1];
+    expect(workerListener).toBeDefined();
+
+    mocks.queueInstance.scheduleRecurring.mockClear();
+    mocks.queueInstance.removeRecurring.mockClear();
+
+    await workerListener({ key: 'treasuryAutopilot', enabled: true });
+
+    expect(mocks.queueInstance.scheduleRecurring).toHaveBeenCalledWith(
+      'maintenance',
+      'autopilot:record-fees',
+      {},
+      '*/10 * * * *'
+    );
+    expect(mocks.queueInstance.scheduleRecurring).toHaveBeenCalledWith(
+      'maintenance',
+      'autopilot:evaluate',
+      {},
+      '5/10 * * * *'
+    );
+    expect(mocks.queueInstance.removeRecurring).not.toHaveBeenCalled();
+
+    await workerListener({ key: 'treasuryAutopilot', enabled: false });
+
+    expect(mocks.queueInstance.removeRecurring).toHaveBeenCalledWith(
+      'maintenance',
+      'autopilot:record-fees',
+      { purgeQueued: true }
+    );
+    expect(mocks.queueInstance.removeRecurring).toHaveBeenCalledWith(
+      'maintenance',
+      'autopilot:evaluate',
+      { purgeQueued: true }
+    );
+  });
+
   it('covers timer, queue-error handlers, process handlers, and graceful shutdown branches', async () => {
     const handlers: Record<string, Array<(...args: any[]) => any>> = {};
     let intervalCallback: (() => Promise<void> | void) | undefined;

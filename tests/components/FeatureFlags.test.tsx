@@ -34,6 +34,8 @@ describe('FeatureFlags', () => {
       source: 'database' as const,
       modifiedBy: 'system',
       updatedAt: null,
+      hasSideEffects: true,
+      sideEffectDescription: 'Toggling this starts or stops background consolidation jobs without requiring a restart.',
     },
     {
       key: 'experimental.taprootAddresses',

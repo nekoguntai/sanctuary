@@ -5,6 +5,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import type { ZodError } from 'zod';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
@@ -18,6 +19,11 @@ import {
 
 const router = Router();
 const log = createLogger('ADMIN:FEATURES');
+const UNKNOWN_FEATURE_FLAG_KEY_MESSAGE = 'Unknown feature flag key';
+
+function hasUnknownFeatureKeyIssue(error: ZodError): boolean {
+  return error.issues.some((issue) => issue.message === UNKNOWN_FEATURE_FLAG_KEY_MESSAGE);
+}
 
 /**
  * GET /api/v1/admin/features
@@ -78,8 +84,9 @@ router.get('/:key', authenticate, requireAdmin, async (req: Request, res: Respon
   try {
     const params = FeatureFlagKeyParamSchema.safeParse(req.params);
     if (!params.success) {
-      return res.status(400).json({
-        error: 'Validation Error',
+      const isUnknownKey = hasUnknownFeatureKeyIssue(params.error);
+      return res.status(isUnknownKey ? 404 : 400).json({
+        error: isUnknownKey ? 'Not Found' : 'Validation Error',
         message: params.error.issues.map(i => i.message).join(', '),
       });
     }
@@ -110,8 +117,9 @@ router.patch('/:key', authenticate, requireAdmin, async (req: Request, res: Resp
   try {
     const params = FeatureFlagKeyParamSchema.safeParse(req.params);
     if (!params.success) {
-      return res.status(400).json({
-        error: 'Validation Error',
+      const isUnknownKey = hasUnknownFeatureKeyIssue(params.error);
+      return res.status(isUnknownKey ? 404 : 400).json({
+        error: isUnknownKey ? 'Not Found' : 'Validation Error',
         message: params.error.issues.map(i => i.message).join(', '),
       });
     }
@@ -160,8 +168,9 @@ router.post('/:key/reset', authenticate, requireAdmin, async (req: Request, res:
   try {
     const params = FeatureFlagKeyParamSchema.safeParse(req.params);
     if (!params.success) {
-      return res.status(400).json({
-        error: 'Validation Error',
+      const isUnknownKey = hasUnknownFeatureKeyIssue(params.error);
+      return res.status(isUnknownKey ? 404 : 400).json({
+        error: isUnknownKey ? 'Not Found' : 'Validation Error',
         message: params.error.issues.map(i => i.message).join(', '),
       });
     }

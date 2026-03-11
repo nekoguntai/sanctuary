@@ -483,6 +483,29 @@ describe('Feature Flag Service', () => {
         orderBy: [{ category: 'asc' }, { key: 'asc' }],
       });
     });
+
+    it('includes side-effect metadata for flags that have runtime effects', async () => {
+      mockPrisma.featureFlag.findMany.mockResolvedValue([
+        {
+          key: 'treasuryAutopilot',
+          enabled: true,
+          description: 'Enable Treasury Autopilot consolidation jobs',
+          category: 'general',
+          modifiedBy: 'admin',
+          updatedAt: new Date(),
+        },
+      ]);
+
+      const [flag] = await featureFlagService.getAllFlags();
+
+      expect(flag).toEqual(
+        expect.objectContaining({
+          key: 'treasuryAutopilot',
+          hasSideEffects: true,
+          sideEffectDescription: expect.stringContaining('starts or stops background consolidation jobs'),
+        })
+      );
+    });
   });
 
   describe('getAuditLog', () => {
@@ -568,6 +591,26 @@ describe('Feature Flag Service', () => {
       const result = await featureFlagService.getFlag('nonExistent' as any);
 
       expect(result).toBeNull();
+    });
+
+    it('includes side-effect metadata for treasuryAutopilot', async () => {
+      mockPrisma.featureFlag.findUnique.mockResolvedValue({
+        key: 'treasuryAutopilot',
+        enabled: true,
+        description: 'Enable Treasury Autopilot consolidation jobs',
+        category: 'general',
+        modifiedBy: 'admin',
+        updatedAt: new Date(),
+      });
+
+      const result = await featureFlagService.getFlag('treasuryAutopilot');
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          hasSideEffects: true,
+          sideEffectDescription: expect.stringContaining('starts or stops background consolidation jobs'),
+        })
+      );
     });
   });
 

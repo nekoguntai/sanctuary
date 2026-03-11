@@ -7,6 +7,7 @@
 import { z } from 'zod';
 import { UuidSchema, UsernameSchema, EmailSchema, NetworkTypeSchema, PaginationSchema } from './common';
 import { PasswordSchema } from './auth';
+import { isKnownFeatureFlagKey } from '../../services/featureFlags/definitions';
 
 // =============================================================================
 // Electrum Server Configuration
@@ -161,11 +162,18 @@ export const UpdateFeatureFlagSchema = z.object({
 });
 
 export const FeatureFlagKeyParamSchema = z.object({
-  key: z.string().min(1),
+  key: z
+    .string()
+    .min(1)
+    .refine(isKnownFeatureFlagKey, { message: 'Unknown feature flag key' }),
 });
 
 export const FeatureFlagAuditQuerySchema = z.object({
-  key: z.string().min(1).optional(),
+  key: z
+    .string()
+    .min(1)
+    .refine(isKnownFeatureFlagKey, { message: 'Unknown feature flag key' })
+    .optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 });

@@ -1,10 +1,9 @@
-import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { describe,expect,it,vi } from 'vitest';
 import { ActionMenu } from '../../../components/TransactionList/ActionMenu';
+import type { Transaction,Wallet } from '../../../types';
 import { getTxExplorerUrl } from '../../../utils/explorer';
-import type { Transaction, Wallet } from '../../../types';
 
 vi.mock('../../../utils/explorer', () => ({
   getTxExplorerUrl: vi.fn(() => 'https://explorer.example/tx/mock'),

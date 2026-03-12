@@ -66,7 +66,7 @@ process.on('uncaughtException', (error: Error) => {
   setTimeout(() => process.exit(1), 1000);
 });
 
-process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
+process.on('unhandledRejection', (reason: unknown, _promise: Promise<unknown>) => {
   log.error('Unhandled promise rejection', {
     reason: getErrorMessage(reason),
     stack: reason instanceof Error ? reason.stack : undefined,
@@ -165,7 +165,7 @@ app.use((req: Request, res: Response) => {
 });
 
 // Error handler
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   log.error('Unhandled error', { error: err });
   res.status(500).json({
     error: 'Internal Server Error',

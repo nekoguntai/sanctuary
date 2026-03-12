@@ -1,4 +1,3 @@
-import React from 'react';
 import { Brain, Check, AlertTriangle, Loader2, X, Cpu, HardDrive, Zap } from 'lucide-react';
 import type { EnableModalProps } from '../types';
 

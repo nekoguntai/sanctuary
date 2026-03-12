@@ -18,7 +18,7 @@ const log = createLogger('BITCOIN:FEES');
  * GET /api/v1/bitcoin/fees
  * Get current fee estimates from configured source (mempool.space API or Electrum)
  */
-router.get('/fees', async (req: Request, res: Response) => {
+router.get('/fees', async (_req: Request, res: Response) => {
   try {
     // Check configured fee estimator source
     const nodeConfig = await prisma.nodeConfig.findFirst({
@@ -65,7 +65,7 @@ router.get('/fees', async (req: Request, res: Response) => {
  * GET /api/v1/bitcoin/fees/advanced
  * Get advanced fee estimates with time predictions
  */
-router.get('/fees/advanced', async (req: Request, res: Response) => {
+router.get('/fees/advanced', async (_req: Request, res: Response) => {
   try {
     const advancedTx = await import('../../services/bitcoin/advancedTx');
     const fees = await advancedTx.getAdvancedFeeEstimates();

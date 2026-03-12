@@ -27,10 +27,6 @@ import {
   subscribeToAddress,
   subscribeWallet,
   unsubscribeWalletAddresses,
-  handleAddressUpdate,
-  handleTransaction,
-  checkConfirmationUpdate,
-  handleBalanceUpdate,
 } from './subscriptions';
 import type {
   TransactionNotification,
@@ -96,46 +92,6 @@ export class NotificationService {
    */
   async subscribeWallet(walletId: string) {
     await subscribeWallet(walletId, this.subscribedAddresses);
-  }
-
-  /**
-   * Subscribe to new blocks with retry logic
-   * Delegated to subscriptions module
-   */
-  private async subscribeToBlocks(maxRetries?: number, delayMs?: number) {
-    await subscribeToBlocks(maxRetries, delayMs);
-  }
-
-  /**
-   * Handle address status update from Electrum
-   * Delegated to subscriptions module
-   */
-  private async handleAddressUpdate(address: string, walletId: string) {
-    await handleAddressUpdate(address, walletId);
-  }
-
-  /**
-   * Handle new/updated transaction
-   * Delegated to subscriptions module
-   */
-  private async handleTransaction(txid: string, walletId: string, address: string) {
-    await handleTransaction(txid, walletId, address);
-  }
-
-  /**
-   * Check for confirmation updates on a transaction
-   * Delegated to subscriptions module
-   */
-  private async checkConfirmationUpdate(txid: string, walletId: string) {
-    await checkConfirmationUpdate(txid, walletId);
-  }
-
-  /**
-   * Handle balance update from Electrum
-   * Delegated to subscriptions module
-   */
-  private async handleBalanceUpdate(walletId: string, balance: { confirmed: number; unconfirmed: number }) {
-    await handleBalanceUpdate(walletId, balance);
   }
 
   /**

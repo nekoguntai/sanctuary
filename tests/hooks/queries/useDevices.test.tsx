@@ -4,17 +4,17 @@
  * Tests for the device query hooks (react-query based).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
-import React, { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient,QueryClientProvider } from '@tanstack/react-query';
+import { renderHook,waitFor } from '@testing-library/react';
+import { ReactNode } from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import {
-  useDevices,
-  useDevice,
-  useCreateDevice,
-  useDeleteDevice,
-  useInvalidateDevices,
-  deviceKeys,
+deviceKeys,
+useCreateDevice,
+useDeleteDevice,
+useDevice,
+useDevices,
+useInvalidateDevices,
 } from '../../../hooks/queries/useDevices';
 
 // Mock the devices API
@@ -31,6 +31,14 @@ const mockGetDevices = vi.mocked(devicesApi.getDevices);
 const mockGetDevice = vi.mocked(devicesApi.getDevice);
 const mockCreateDevice = vi.mocked(devicesApi.createDevice);
 const mockDeleteDevice = vi.mocked(devicesApi.deleteDevice);
+
+const makeDevice = (overrides: Record<string, unknown> = {}) => ({
+  id: 'device-1',
+  type: 'ledger',
+  label: 'My Device',
+  fingerprint: 'abc123',
+  ...overrides,
+});
 
 // Create a test query client
 const createTestQueryClient = () =>
@@ -78,10 +86,10 @@ describe('Device Query Hooks', () => {
   describe('useDevices', () => {
     it('should fetch devices on mount', async () => {
       const mockDevices = [
-        { id: '1', name: 'Device 1', fingerprint: 'fp1' },
-        { id: '2', name: 'Device 2', fingerprint: 'fp2' },
+        makeDevice({ id: '1', label: 'Device 1', fingerprint: 'fp1' }),
+        makeDevice({ id: '2', label: 'Device 2', fingerprint: 'fp2' }),
       ];
-      mockGetDevices.mockResolvedValue(mockDevices);
+      mockGetDevices.mockResolvedValue(mockDevices as any);
 
       const wrapper = createWrapper(queryClient);
       const { result } = renderHook(() => useDevices(), { wrapper });
@@ -119,8 +127,8 @@ describe('Device Query Hooks', () => {
 
   describe('useDevice', () => {
     it('should fetch single device when id is provided', async () => {
-      const mockDevice = { id: 'device-1', name: 'My Device', fingerprint: 'abc123' };
-      mockGetDevice.mockResolvedValue(mockDevice);
+      const mockDevice = makeDevice({ id: 'device-1', label: 'My Device', fingerprint: 'abc123' });
+      mockGetDevice.mockResolvedValue(mockDevice as any);
 
       const wrapper = createWrapper(queryClient);
       const { result } = renderHook(() => useDevice('device-1'), { wrapper });
@@ -155,13 +163,13 @@ describe('Device Query Hooks', () => {
 
   describe('useCreateDevice', () => {
     it('should create device and invalidate cache', async () => {
-      const newDevice = { id: 'new-1', name: 'New Device', fingerprint: 'new-fp' };
-      mockCreateDevice.mockResolvedValue(newDevice);
+      const newDevice = makeDevice({ id: 'new-1', label: 'New Device', fingerprint: 'new-fp', type: 'ledger' });
+      mockCreateDevice.mockResolvedValue(newDevice as any);
 
       const wrapper = createWrapper(queryClient);
       const { result } = renderHook(() => useCreateDevice(), { wrapper });
 
-      const deviceData = { name: 'New Device', fingerprint: 'new-fp' };
+      const deviceData = { type: 'ledger', label: 'New Device', fingerprint: 'new-fp' };
 
       await result.current.mutateAsync(deviceData);
 
@@ -174,7 +182,9 @@ describe('Device Query Hooks', () => {
       const wrapper = createWrapper(queryClient);
       const { result } = renderHook(() => useCreateDevice(), { wrapper });
 
-      await expect(result.current.mutateAsync({ name: 'Test' })).rejects.toThrow('Creation failed');
+      await expect(
+        result.current.mutateAsync({ type: 'ledger', label: 'Test', fingerprint: 'ffff0000' })
+      ).rejects.toThrow('Creation failed');
     });
   });
 

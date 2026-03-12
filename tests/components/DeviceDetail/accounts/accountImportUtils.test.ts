@@ -1,11 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  createSingleAccount,
-  parseFileContent,
-  processImportedAccounts,
+createSingleAccount,
+parseFileContent,
+processImportedAccounts,
 } from '../../../../components/DeviceDetail/accounts/accountImportUtils';
+import type { DeviceAccount } from '../../../../services/deviceParsers';
 
-const makeParsedAccount = (overrides: Record<string, unknown> = {}) => ({
+const makeParsedAccount = (overrides: Partial<DeviceAccount> = {}): DeviceAccount => ({
   purpose: 'single_sig',
   scriptType: 'native_segwit',
   derivationPath: "m/84'/0'/0'",

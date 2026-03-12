@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  validateAddress,
-  getAddressType,
-  isMainnetAddress,
-  isTestnetAddress,
-  getAddressNetwork,
-  addressMatchesNetwork,
+addressMatchesNetwork,
+getAddressNetwork,
+getAddressType,
+isMainnetAddress,
+isTestnetAddress,
+validateAddress,
 } from '../../utils/validateAddress';
 
 describe('validateAddress', () => {

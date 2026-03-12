@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as bitcoin from 'bitcoinjs-lib';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { fetchRefTxs } from '../../../services/hardwareWallet/adapters/trezor/refTxs';
 
 const {

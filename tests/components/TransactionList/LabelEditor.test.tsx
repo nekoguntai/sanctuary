@@ -1,9 +1,8 @@
-import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { describe,expect,it,vi } from 'vitest';
 import { LabelEditor } from '../../../components/TransactionList/LabelEditor';
-import type { Label, Transaction } from '../../../types';
+import type { Label,Transaction } from '../../../types';
 
 vi.mock('../../../components/AILabelSuggestion', () => ({
   AILabelSuggestion: ({
@@ -29,8 +28,8 @@ const selectedTx: Transaction = {
 };
 
 const labels: Label[] = [
-  { id: 'l1', name: 'Groceries', color: '#22c55e' },
-  { id: 'l2', name: 'Savings', color: '#3b82f6' },
+  { id: 'l1', walletId: 'wallet-1', name: 'Groceries', color: '#22c55e' },
+  { id: 'l2', walletId: 'wallet-1', name: 'Savings', color: '#3b82f6' },
 ];
 
 describe('TransactionList LabelEditor', () => {

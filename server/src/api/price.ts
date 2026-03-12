@@ -152,7 +152,7 @@ router.post('/convert/to-sats', async (req: Request, res: Response) => {
  * GET /api/v1/price/currencies
  * Get list of supported currencies
  */
-router.get('/currencies', (req: Request, res: Response) => {
+router.get('/currencies', (_req: Request, res: Response) => {
   const currencies = priceService.getSupportedCurrencies();
   res.json({
     currencies,
@@ -164,7 +164,7 @@ router.get('/currencies', (req: Request, res: Response) => {
  * GET /api/v1/price/providers
  * Get list of available price providers
  */
-router.get('/providers', (req: Request, res: Response) => {
+router.get('/providers', (_req: Request, res: Response) => {
   const providers = priceService.getProviders();
   res.json({
     providers,
@@ -176,7 +176,7 @@ router.get('/providers', (req: Request, res: Response) => {
  * GET /api/v1/price/health
  * Health check for price providers
  */
-router.get('/health', async (req: Request, res: Response) => {
+router.get('/health', async (_req: Request, res: Response) => {
   try {
     const health = await priceService.healthCheck();
     res.json(health);
@@ -193,7 +193,7 @@ router.get('/health', async (req: Request, res: Response) => {
  * GET /api/v1/price/cache/stats
  * Get cache statistics (admin only)
  */
-router.get('/cache/stats', authenticate, requireAdmin, (req: Request, res: Response) => {
+router.get('/cache/stats', authenticate, requireAdmin, (_req: Request, res: Response) => {
   const stats = priceService.getCacheStats();
   res.json(stats);
 });

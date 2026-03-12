@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, render, screen, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter } from 'react-router-dom';
+import { QueryClient,QueryClientProvider } from '@tanstack/react-query';
+import { render,screen,waitFor } from '@testing-library/react';
 import React from 'react';
+import { BrowserRouter } from 'react-router-dom';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock the API modules
 vi.mock('../../src/api/transactions', () => ({
@@ -138,8 +138,8 @@ describe('Dashboard stable array constants', () => {
     expect(ref1).toBe(ref2);
 
     // Compare with inline empty array (different references)
-    const inline1 = [];
-    const inline2 = [];
+    const inline1: unknown[] = [];
+    const inline2: unknown[] = [];
     expect(inline1).not.toBe(inline2);
   });
 
@@ -169,13 +169,13 @@ describe('Dashboard stable array constants', () => {
     const queryClient = new QueryClient();
 
     // Render stable component
-    const { rerender: rerenderStable } = render(
+    render(
       <QueryClientProvider client={queryClient}>
         <StableComponent />
       </QueryClientProvider>
     );
 
-    const { rerender: rerenderInline } = render(
+    render(
       <QueryClientProvider client={queryClient}>
         <InlineComponent />
       </QueryClientProvider>
@@ -393,7 +393,7 @@ describe('Infinite re-render prevention patterns', () => {
 
       function TestComponent({ hasData }: { hasData: boolean }) {
         // Track hook calls - useState is always called but initializer only runs once
-        const [state] = React.useState(() => {
+        React.useState(() => {
           useStateCallCount++;
           return null;
         });
@@ -441,7 +441,7 @@ describe('Infinite re-render prevention patterns', () => {
       // Simulates the pattern that was fixed in Dashboard/TransactionList
       function ComponentWithConditionalEarlyReturn({ items }: { items: string[] }) {
         // All hooks called first
-        const [count, setCount] = React.useState(0);
+        React.useState(0);
 
         const processedItems = React.useMemo(() => {
           return items.map(i => i.toUpperCase());

@@ -189,12 +189,6 @@ export async function revokeAllUserTokens(userId: string, reason?: string): Prom
   log.info('Revoke all user tokens requested', { userId, reason });
 
   try {
-    // Get all refresh tokens for the user and revoke their associated access tokens
-    const refreshTokens = await prisma.refreshToken.findMany({
-      where: { userId },
-      select: { id: true },
-    });
-
     // Delete all refresh tokens for the user
     const result = await prisma.refreshToken.deleteMany({
       where: { userId },

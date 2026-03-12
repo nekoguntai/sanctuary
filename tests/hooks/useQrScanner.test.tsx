@@ -5,40 +5,13 @@
  * with support for multiple formats: UR, ur:bytes, BBQr, and plain JSON.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { act,renderHook } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Create mock instances that will be returned by constructors
-let mockUrRegistryDecoder: {
-  receivePart: ReturnType<typeof vi.fn>;
-  estimatedPercentComplete: ReturnType<typeof vi.fn>;
-  isComplete: ReturnType<typeof vi.fn>;
-  isSuccess: ReturnType<typeof vi.fn>;
-  resultError: ReturnType<typeof vi.fn>;
-  resultRegistryType: ReturnType<typeof vi.fn>;
-};
-
-let mockBytesDecoder: {
-  receivePart: ReturnType<typeof vi.fn>;
-  estimatedPercentComplete: ReturnType<typeof vi.fn>;
-  expectedPartCount: ReturnType<typeof vi.fn>;
-  receivedPartIndexes: ReturnType<typeof vi.fn>;
-  isComplete: ReturnType<typeof vi.fn>;
-  isSuccess: ReturnType<typeof vi.fn>;
-  resultError: ReturnType<typeof vi.fn>;
-  resultUR: ReturnType<typeof vi.fn>;
-};
-
-let mockBbqrDecoder: {
-  receivePart: ReturnType<typeof vi.fn>;
-  getError: ReturnType<typeof vi.fn>;
-  getProgress: ReturnType<typeof vi.fn>;
-  getReceivedCount: ReturnType<typeof vi.fn>;
-  getTotalParts: ReturnType<typeof vi.fn>;
-  getFileType: ReturnType<typeof vi.fn>;
-  isComplete: ReturnType<typeof vi.fn>;
-  decode: ReturnType<typeof vi.fn>;
-};
+let mockUrRegistryDecoder: any;
+let mockBytesDecoder: any;
+let mockBbqrDecoder: any;
 
 // Factory function to create fresh mock instances
 function createMockDecoders() {
@@ -164,12 +137,12 @@ vi.mock('../../utils/logger', () => ({
 import { useQrScanner } from '../../hooks/useQrScanner';
 import { isBBQr } from '../../services/bbqr';
 import { parseDeviceJson } from '../../services/deviceParsers';
-import {
-  extractFromUrResult,
-  extractFromUrBytesContent,
-  getUrType,
-} from '../../utils/urDeviceDecoder';
 import { generateMissingFieldsWarning } from '../../utils/deviceConnection';
+import {
+extractFromUrBytesContent,
+extractFromUrResult,
+getUrType,
+} from '../../utils/urDeviceDecoder';
 
 describe('useQrScanner', () => {
   beforeEach(() => {

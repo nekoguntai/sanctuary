@@ -5,14 +5,12 @@
  * event handling, and user preferences.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
-import React, { ReactNode } from 'react';
+import { act,renderHook } from '@testing-library/react';
+import { afterEach,beforeEach,describe,expect,it,Mock,vi } from 'vitest';
 import {
-  useNotificationSound,
-  getSoundPresets,
-  SOUND_EVENTS,
-  SoundEvent,
+getSoundPresets,
+SOUND_EVENTS,
+useNotificationSound
 } from '../../hooks/useNotificationSound';
 
 // Mock the logger

@@ -1,13 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import type { PendingTransaction } from '../../../src/types';
-import type { BlockData } from '../../../components/BlockVisualizer/types';
+import { describe,expect,it } from 'vitest';
 import {
-  formatTimeInQueue,
-  getBlockColors,
-  getStuckTxs,
-  getTxsForBlock,
-  parseFeeRange,
+formatTimeInQueue,
+getBlockColors,
+getStuckTxs,
+getTxsForBlock,
+parseFeeRange,
 } from '../../../components/BlockVisualizer/blockUtils';
+import type { BlockData } from '../../../components/BlockVisualizer/types';
+import type { PendingTransaction } from '../../../src/types';
 
 const makeTx = (feeRate: number): PendingTransaction => ({
   txid: `tx-${feeRate}`,

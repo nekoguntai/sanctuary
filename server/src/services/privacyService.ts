@@ -10,10 +10,7 @@
  */
 
 import { db as prisma } from '../repositories/db';
-import { createLogger } from '../utils/logger';
 import { getPrivacyGrade } from '../utils/privacy';
-
-const log = createLogger('PRIVACY');
 
 /**
  * Privacy scoring weights (negative values reduce privacy score)

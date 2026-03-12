@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Download, FileSpreadsheet, FileJson, Loader2, Calendar } from 'lucide-react';
 import { Button } from './ui/Button';
 import * as transactionsApi from '../src/api/transactions';

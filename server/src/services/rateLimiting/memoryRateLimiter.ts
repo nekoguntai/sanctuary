@@ -55,7 +55,6 @@ export class MemoryRateLimiter implements IRateLimiter {
     entry.lastCleanup = now;
 
     const current = entry.timestamps.length;
-    const remaining = Math.max(0, limit - current);
 
     // Check if allowed
     if (current + cost <= limit) {

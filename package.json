@@ -27,6 +27,10 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:hygiene": "node scripts/test-hygiene.mjs",
+    "typecheck": "npm run typecheck:app",
+    "typecheck:app": "tsc --noEmit -p tsconfig.app.json --noUnusedLocals --noUnusedParameters",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json --noUnusedLocals --noUnusedParameters",
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json --noUnusedLocals --noUnusedParameters",
     "test:mutation": "stryker run",
     "test:mutation:backend": "cd server && npx stryker run",
     "test:mutation:critical:backend": "cd server && npm run test:mutation:critical:gate"
@@ -56,8 +60,6 @@
     "regenerator-runtime": "^0.14.1"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-code": "^2.0.69",
-    "@anthropic-ai/sdk": "^0.71.2",
     "@faker-js/faker": "^9.3.0",
     "@playwright/test": "^1.49.1",
     "@stryker-mutator/core": "^8.7.1",

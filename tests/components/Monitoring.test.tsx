@@ -2,10 +2,10 @@
  * Tests for Monitoring component
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderToString } from 'react-dom/server';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { Monitoring } from '../../components/Monitoring';
 import * as adminApi from '../../src/api/admin';
 
@@ -77,8 +77,8 @@ describe('Monitoring', () => {
 
     vi.mocked(adminApi.getMonitoringServices).mockResolvedValue(mockServices as any);
     vi.mocked(adminApi.getGrafanaConfig).mockResolvedValue(mockGrafanaConfig as any);
-    vi.mocked(adminApi.updateGrafanaConfig).mockResolvedValue(undefined);
-    vi.mocked(adminApi.updateMonitoringServiceUrl).mockResolvedValue(undefined);
+    vi.mocked(adminApi.updateGrafanaConfig).mockResolvedValue({ success: true, message: 'Updated' });
+    vi.mocked(adminApi.updateMonitoringServiceUrl).mockResolvedValue({ success: true });
   });
 
   afterEach(() => {

@@ -7,12 +7,10 @@
 
 import { Router, Request, Response } from 'express';
 import { db as prisma } from '../../repositories/db';
-import { createLogger } from '../../utils/logger';
 import { handleApiError, bigIntToNumber, bigIntToNumberOrZero } from '../../utils/errors';
 import { getCachedBlockHeight, type Network } from '../../services/bitcoin/blockchain';
 
 const router = Router();
-const log = createLogger('TX:CROSSWALLET');
 
 /**
  * Calculate confirmations dynamically from block height using cached current height

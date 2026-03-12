@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  generateMissingFieldsWarning,
-  getAvailableMethods,
-  getDeviceTypeFromModel,
-  isMethodAvailable,
-  normalizeDerivationPath,
+generateMissingFieldsWarning,
+getAvailableMethods,
+getDeviceTypeFromModel,
+isMethodAvailable,
+normalizeDerivationPath,
 } from '../../utils/deviceConnection';
 
 describe('deviceConnection utilities', () => {

@@ -1,6 +1,5 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent,render,screen } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { DetailsTab } from '../../../../components/DeviceDetail/tabs/DetailsTab';
 
 const { mockNavigate } = vi.hoisted(() => ({

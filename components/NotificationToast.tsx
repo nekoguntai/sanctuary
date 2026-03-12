@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { X, ArrowDownLeft, ArrowUpRight, CheckCircle, TrendingUp, Activity } from 'lucide-react';
+import { X, ArrowDownLeft, ArrowUpRight, CheckCircle, TrendingUp, Activity, AlertTriangle } from 'lucide-react';
 
-export type NotificationType = 'transaction' | 'balance' | 'confirmation' | 'block' | 'success' | 'error' | 'info';
+export type NotificationType = 'transaction' | 'balance' | 'confirmation' | 'block' | 'success' | 'error' | 'warning' | 'info';
 
 export interface Notification {
   id: string;
   type: NotificationType;
   title: string;
-  message: string;
+  message?: string;
   duration?: number; // milliseconds, undefined = persistent
   data?: any;
 }
@@ -73,6 +73,8 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
         return <CheckCircle className="w-5 h-5 text-success-600 dark:text-success-400" />;
       case 'error':
         return <X className="w-5 h-5 text-rose-600 dark:text-rose-400" />;
+      case 'warning':
+        return <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />;
       default:
         return <Activity className="w-5 h-5 text-primary-600 dark:text-primary-400" />;
     }
@@ -100,6 +102,8 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
         return 'bg-success-50 dark:bg-success-900/30 border-success-200 dark:border-success-700';
       case 'error':
         return 'bg-rose-50 dark:bg-rose-950/80 border-rose-300 dark:border-rose-700';
+      case 'warning':
+        return 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700';
       default:
         return 'surface-secondary border-primary-200 dark:border-primary-700';
     }
@@ -120,9 +124,11 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
         <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-50">
           {notification.title}
         </p>
-        <p className="text-xs text-sanctuary-600 dark:text-sanctuary-400 mt-1">
-          {notification.message}
-        </p>
+        {notification.message && (
+          <p className="text-xs text-sanctuary-600 dark:text-sanctuary-400 mt-1">
+            {notification.message}
+          </p>
+        )}
       </div>
       <button
         onClick={handleDismiss}

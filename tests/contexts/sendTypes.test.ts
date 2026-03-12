@@ -4,18 +4,18 @@
  * Tests state serialization/deserialization and wizard step navigation helpers.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  serializeState,
-  deserializeState,
-  getNextStep,
-  getPrevStep,
-  canJumpToStep,
-  WIZARD_STEPS,
-  STEP_LABELS,
-  type TransactionState,
-  type SerializableTransactionState,
-  type WizardStep,
+canJumpToStep,
+deserializeState,
+getNextStep,
+getPrevStep,
+serializeState,
+STEP_LABELS,
+WIZARD_STEPS,
+type SerializableTransactionState,
+type TransactionState,
+type WizardStep,
 } from '../../contexts/send/types';
 
 describe('send/types', () => {

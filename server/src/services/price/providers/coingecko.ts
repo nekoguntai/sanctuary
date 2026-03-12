@@ -6,10 +6,8 @@
  * Includes 24h change data and historical prices.
  */
 
-import axios from 'axios';
 import { createCircuitBreaker, CircuitBreaker } from '../../circuitBreaker';
 import { BasePriceProvider } from './base';
-import { createLogger } from '../../../utils/logger';
 import type { IPriceProviderWithHistory, PriceData, PriceHistoryPoint } from '../types';
 
 interface CoinGeckoPriceResponse {

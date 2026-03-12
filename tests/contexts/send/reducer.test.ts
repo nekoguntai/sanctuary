@@ -1,13 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  transactionReducer,
-  createInitialState,
+createInitialState,
+transactionReducer,
 } from '../../../contexts/send/reducer';
 import type {
-  TransactionState,
-  TransactionAction,
-  WizardStep,
-  OutputEntry,
+OutputEntry,
+TransactionAction,
+WizardStep
 } from '../../../contexts/send/types';
 
 describe('transactionReducer', () => {

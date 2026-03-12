@@ -7,7 +7,7 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import { getNetwork, estimateTransactionSize, calculateFee } from '../utils';
+import { getNetwork, estimateTransactionSize } from '../utils';
 import { getNodeClient } from '../nodeClient';
 import { db as prisma } from '../../../repositories/db';
 import { getDustThreshold } from './shared';
@@ -58,7 +58,7 @@ export async function createCPFPTransaction(
   parentVout: number,
   targetFeeRate: number,
   recipientAddress: string,
-  walletId: string,
+  _walletId: string,
   network: 'mainnet' | 'testnet' | 'regtest' = 'mainnet'
 ): Promise<{
   psbt: bitcoin.Psbt;

@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, renderHook, waitFor } from '@testing-library/react';
-import type { Label, Transaction } from '../../../types';
-import type { TransactionStats } from '../../../src/api/transactions';
+import { act,renderHook,waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { useTransactionList } from '../../../components/TransactionList/hooks/useTransactionList';
 import * as bitcoinApi from '../../../src/api/bitcoin';
 import * as labelsApi from '../../../src/api/labels';
+import type { TransactionStats } from '../../../src/api/transactions';
 import * as transactionsApi from '../../../src/api/transactions';
+import type { Label,Transaction } from '../../../types';
 
 vi.mock('../../../src/api/bitcoin', () => ({
   getStatus: vi.fn(),
@@ -48,11 +48,10 @@ describe('useTransactionList branches', () => {
       explorerUrl: 'https://mempool.space',
     } as Awaited<ReturnType<typeof bitcoinApi.getStatus>>);
     vi.mocked(labelsApi.getLabels).mockResolvedValue([]);
-    vi.mocked(labelsApi.setTransactionLabels).mockResolvedValue({});
+    vi.mocked(labelsApi.setTransactionLabels).mockResolvedValue([]);
     vi.mocked(labelsApi.createLabel).mockResolvedValue({
       id: 'lbl-new',
       walletId: 'wallet-1',
-      userId: 'user-1',
       name: 'New Label',
       color: '#6366f1',
       createdAt: new Date().toISOString(),
@@ -208,7 +207,6 @@ describe('useTransactionList branches', () => {
     const labelA: Label = {
       id: 'lbl-a',
       walletId: 'wallet-1',
-      userId: 'user-1',
       name: 'A',
       color: '#111111',
       createdAt: new Date().toISOString(),
@@ -217,7 +215,6 @@ describe('useTransactionList branches', () => {
     const labelB: Label = {
       id: 'lbl-b',
       walletId: 'wallet-1',
-      userId: 'user-1',
       name: 'B',
       color: '#222222',
       createdAt: new Date().toISOString(),
@@ -307,7 +304,6 @@ describe('useTransactionList branches', () => {
     const existing: Label = {
       id: 'lbl-existing',
       walletId: 'wallet-ai',
-      userId: 'user-1',
       name: 'Groceries',
       color: '#00aa00',
       createdAt: new Date().toISOString(),
@@ -316,7 +312,6 @@ describe('useTransactionList branches', () => {
     const created: Label = {
       id: 'lbl-created',
       walletId: 'wallet-ai',
-      userId: 'user-1',
       name: 'Coffee',
       color: '#6366f1',
       createdAt: new Date().toISOString(),

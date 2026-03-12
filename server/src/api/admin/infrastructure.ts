@@ -25,7 +25,7 @@ const log = createLogger('ADMIN:INFRA');
  * GET /api/v1/admin/tor-container/status
  * Get the status of the bundled Tor container
  */
-router.get('/tor-container/status', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.get('/tor-container/status', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
     const proxyAvailable = await docker.isDockerProxyAvailable();
 
@@ -57,7 +57,7 @@ router.get('/tor-container/status', authenticate, requireAdmin, async (req: Requ
  * POST /api/v1/admin/tor-container/start
  * Start the bundled Tor container
  */
-router.post('/tor-container/start', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.post('/tor-container/start', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
     const result = await docker.startTor();
 
@@ -82,7 +82,7 @@ router.post('/tor-container/start', authenticate, requireAdmin, async (req: Requ
  * POST /api/v1/admin/tor-container/stop
  * Stop the bundled Tor container
  */
-router.post('/tor-container/stop', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.post('/tor-container/stop', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
     const result = await docker.stopTor();
 
@@ -111,7 +111,7 @@ router.post('/tor-container/stop', authenticate, requireAdmin, async (req: Reque
  * GET /api/v1/admin/metrics/cache
  * Get cache statistics for monitoring
  */
-router.get('/metrics/cache', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.get('/metrics/cache', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
     const stats = cache.getStats();
     const total = stats.hits + stats.misses;

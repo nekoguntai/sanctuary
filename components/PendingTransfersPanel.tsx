@@ -6,16 +6,13 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowRight, Check, X, Clock, AlertTriangle, Send, Inbox, RefreshCw } from 'lucide-react';
+import { ArrowRight, Check, X, Clock, AlertTriangle, Send, Inbox } from 'lucide-react';
 import { Button } from './ui/Button';
 import { useUser } from '../contexts/UserContext';
 import * as transfersApi from '../src/api/transfers';
 import { Transfer } from '../types';
 import { ApiError } from '../src/api/client';
 import { useLoadingState } from '../hooks/useLoadingState';
-import { createLogger } from '../utils/logger';
-
-const log = createLogger('PendingTransfersPanel');
 
 interface PendingTransfersPanelProps {
   resourceType: 'wallet' | 'device';

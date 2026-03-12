@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  getExplorerUrl,
-  getTxExplorerUrl,
-  getAddressExplorerUrl,
-  getBlockExplorerUrl,
+getAddressExplorerUrl,
+getBlockExplorerUrl,
+getExplorerUrl,
+getTxExplorerUrl,
 } from '../../utils/explorer';
 
 describe('getExplorerUrl', () => {

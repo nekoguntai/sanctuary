@@ -1,9 +1,9 @@
-import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ImportValidationResult } from '../../../src/api/wallets';
+import React from 'react';
+import { describe,expect,it,vi } from 'vitest';
 import { DeviceResolutionStep } from '../../../components/ImportWallet/DeviceResolution';
+import type { ImportValidationResult } from '../../../src/api/wallets';
 
 vi.mock('../../../components/ui/CustomIcons', () => ({
   SingleSigIcon: (props: React.HTMLAttributes<HTMLSpanElement>) => (

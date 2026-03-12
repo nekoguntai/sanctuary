@@ -18,7 +18,7 @@ const log = createLogger('ADMIN:GROUPS');
  * GET /api/v1/admin/groups
  * Get all groups (admin only)
  */
-router.get('/', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.get('/', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
     const groups = await prisma.group.findMany({
       include: {

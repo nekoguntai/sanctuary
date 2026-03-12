@@ -3,9 +3,6 @@ import { Tag, Plus, X, Check, ChevronDown } from 'lucide-react';
 import * as labelsApi from '../src/api/labels';
 import type { Label } from '../src/api/labels';
 import { useLoadingState } from '../hooks/useLoadingState';
-import { createLogger } from '../utils/logger';
-
-const log = createLogger('LabelSelector');
 
 interface LabelSelectorProps {
   walletId: string;

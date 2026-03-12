@@ -2,10 +2,10 @@
  * Tests for WalletList component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { WalletList } from '../../components/WalletList';
 import * as CurrencyContext from '../../contexts/CurrencyContext';
 import * as UserContext from '../../contexts/UserContext';
@@ -272,7 +272,6 @@ describe('WalletList', () => {
     });
 
     it('filters wallets by network', async () => {
-      const user = userEvent.setup();
       renderWalletList();
 
       // Initially shows mainnet wallets

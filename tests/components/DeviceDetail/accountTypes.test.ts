@@ -6,18 +6,17 @@
  * handles known and unknown types correctly.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  ACCOUNT_TYPE_CONFIG,
-  getAccountTypeInfo,
-  type AccountTypeInfo,
+ACCOUNT_TYPE_CONFIG,
+getAccountTypeInfo
 } from '../../../components/DeviceDetail/accountTypes';
 import type { DeviceAccount } from '../../../types';
 
 describe('ACCOUNT_TYPE_CONFIG', () => {
   describe('Configuration Validity', () => {
     it('should have all required fields for each account type', () => {
-      Object.entries(ACCOUNT_TYPE_CONFIG).forEach(([key, config]) => {
+      Object.entries(ACCOUNT_TYPE_CONFIG).forEach(([, config]) => {
         expect(config.title.length).toBeGreaterThan(0);
         expect(typeof config.title).toBe('string');
         expect(config.description.length).toBeGreaterThan(0);

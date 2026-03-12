@@ -1,6 +1,6 @@
+import { fireEvent,render,screen } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 import { QrImport } from '../../../../components/DeviceDetail/accounts/QrImport';
 
 vi.mock('@yudiel/react-qr-scanner', () => ({

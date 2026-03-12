@@ -17,7 +17,6 @@ import * as transactionsApi from '../../src/api/transactions';
 import * as bitcoinApi from '../../src/api/bitcoin';
 import * as devicesApi from '../../src/api/devices';
 import type { DraftTransaction } from '../../src/api/drafts';
-import { ApiError } from '../../src/api/client';
 import { useUser } from '../../contexts/UserContext';
 import { useErrorHandler } from '../../hooks/useErrorHandler';
 import { useLoadingState } from '../../hooks/useLoadingState';

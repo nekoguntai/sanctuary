@@ -93,7 +93,7 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
  *
  * SEC-006: Verifies token audience if present
  */
-export async function optionalAuth(req: Request, res: Response, next: NextFunction) {
+export async function optionalAuth(req: Request, _res: Response, next: NextFunction) {
   try {
     const token = extractTokenFromHeader(req.headers.authorization);
 

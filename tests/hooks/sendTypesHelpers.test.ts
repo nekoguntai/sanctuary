@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   logger: {
@@ -14,8 +14,8 @@ vi.mock('../../utils/logger', () => ({
 }));
 
 import {
-  extractXpubsFromDescriptor,
-  getHardwareWalletType,
+extractXpubsFromDescriptor,
+getHardwareWalletType,
 } from '../../hooks/send/types';
 
 describe('hooks/send/types helpers', () => {

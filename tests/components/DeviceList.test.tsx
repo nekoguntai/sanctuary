@@ -5,11 +5,11 @@
  * sorting, filtering, editing, and deletion.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
-import type { Device, HardwareDeviceModel } from '../../types';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
+import type { Device,HardwareDeviceModel } from '../../types';
 
 // Mock react-router-dom
 const mockNavigate = vi.fn();
@@ -163,6 +163,26 @@ vi.mock('../../components/cells/DeviceCells', () => ({
 }));
 
 // Create mock device
+const createMockModel = (overrides: Partial<HardwareDeviceModel> = {}): HardwareDeviceModel => ({
+  id: 'model-1',
+  slug: 'ledger-nano-s',
+  name: 'Ledger Nano S',
+  manufacturer: 'Ledger',
+  connectivity: ['usb'],
+  secureElement: true,
+  openSource: false,
+  airGapped: false,
+  supportsBitcoinOnly: false,
+  supportsMultisig: true,
+  supportsTaproot: true,
+  supportsPassphrase: true,
+  scriptTypes: ['native_segwit', 'nested_segwit', 'taproot'],
+  hasScreen: true,
+  integrationTested: true,
+  discontinued: false,
+  ...overrides,
+});
+
 const createMockDevice = (overrides: Partial<Device> = {}): Device => ({
   id: 'device-1',
   userId: 'user-123',
@@ -171,18 +191,24 @@ const createMockDevice = (overrides: Partial<Device> = {}): Device => ({
   fingerprint: 'abc123def',
   xpub: 'xpub661MyMwAqRbcF...',
   derivationPath: "m/84'/0'/0'",
-  modelId: 'ledger-nano-s',
+  model: createMockModel(),
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   wallets: [],
-  isShared: false,
   isOwner: true,
   ...overrides,
 });
 
 const mockDeviceModels: HardwareDeviceModel[] = [
-  { id: 'model-1', slug: 'ledger-nano-s', name: 'Ledger Nano S', manufacturer: 'Ledger' },
-  { id: 'model-2', slug: 'trezor-model-t', name: 'Trezor Model T', manufacturer: 'Trezor' },
+  createMockModel(),
+  createMockModel({
+    id: 'model-2',
+    slug: 'trezor-model-t',
+    name: 'Trezor Model T',
+    manufacturer: 'Trezor',
+    secureElement: false,
+    openSource: true,
+  }),
 ];
 
 describe('DeviceList Component', () => {
@@ -264,7 +290,7 @@ describe('DeviceList - Ownership Filter', () => {
   it('should show all devices by default', async () => {
     const devices = [
       createMockDevice({ id: 'device-1', label: 'Owned Device', isOwner: true }),
-      createMockDevice({ id: 'device-2', label: 'Shared Device', isOwner: false, isShared: true }),
+      createMockDevice({ id: 'device-2', label: 'Shared Device', isOwner: false }),
     ];
     mockGetDevices.mockResolvedValue(devices);
 
@@ -474,7 +500,7 @@ describe('DeviceList - Preference Controls', () => {
     mockGetDeviceModels.mockResolvedValue(mockDeviceModels);
     mockGetDevices.mockResolvedValue([
       createMockDevice({ id: 'owned-1', label: 'Owned Device', isOwner: true }),
-      createMockDevice({ id: 'shared-1', label: 'Shared Device', isOwner: false, isShared: true }),
+      createMockDevice({ id: 'shared-1', label: 'Shared Device', isOwner: false }),
     ]);
   });
 

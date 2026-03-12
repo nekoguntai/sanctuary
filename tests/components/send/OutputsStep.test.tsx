@@ -2,12 +2,12 @@
  * Tests for OutputsStep component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { OutputsStep } from '../../../components/send/steps/OutputsStep';
-import * as SendContext from '../../../contexts/send';
 import * as CurrencyContext from '../../../contexts/CurrencyContext';
+import * as SendContext from '../../../contexts/send';
 import * as TransactionsApi from '../../../src/api/transactions';
 
 // Mock the context
@@ -162,7 +162,18 @@ describe('OutputsStep', () => {
     vi.clearAllMocks();
     vi.mocked(SendContext.useSendTransaction).mockReturnValue(defaultContext as any);
     vi.mocked(CurrencyContext.useCurrency).mockReturnValue(defaultCurrencyContext as any);
-    vi.mocked(TransactionsApi.getWalletPrivacy).mockResolvedValue({ utxos: [] });
+    vi.mocked(TransactionsApi.getWalletPrivacy).mockResolvedValue({
+      utxos: [],
+      summary: {
+        averageScore: 0,
+        grade: 'poor',
+        utxoCount: 0,
+        addressReuseCount: 0,
+        roundAmountCount: 0,
+        clusterCount: 0,
+        recommendations: [],
+      },
+    });
     vi.mocked(TransactionsApi.analyzeSpendPrivacy).mockResolvedValue({} as any);
   });
 

@@ -30,7 +30,6 @@ import { ElectrumSubscriptionManager, type BitcoinNetwork } from './worker/elect
 import { startHealthServer, type HealthServerHandle } from './worker/healthServer';
 import { registerWorkerJobs } from './worker/jobs';
 import { featureFlagService } from './services/featureFlagService';
-import type { CheckStaleWalletsResult } from './worker/jobs/types';
 
 const log = createLogger('WORKER');
 

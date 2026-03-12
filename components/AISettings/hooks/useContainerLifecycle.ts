@@ -17,9 +17,7 @@ const log = createLogger('AISettings:useContainerLifecycle');
 interface UseContainerLifecycleParams {
   aiEnabled: boolean;
   setAiEnabled: (value: boolean) => void;
-  aiEndpoint: string;
   setAiEndpoint: (value: string) => void;
-  aiModel: string;
   setAiModel: (value: string) => void;
   containerStatus: aiApi.OllamaContainerStatus | null;
   setContainerStatus: (status: aiApi.OllamaContainerStatus | null) => void;
@@ -61,9 +59,7 @@ export function toRunningContainerStatus(
 export function useContainerLifecycle({
   aiEnabled,
   setAiEnabled,
-  aiEndpoint,
   setAiEndpoint,
-  aiModel,
   setAiModel,
   containerStatus,
   setContainerStatus,

@@ -77,7 +77,7 @@ export const WalletDetail: React.FC = () => {
     loadAddresses, loadAddressSummary, addressOffset, ADDRESS_PAGE_SIZE,
     draftsCount, setDraftsCount,
     explorerUrl,
-    users, groups,
+    groups,
     walletShareInfo, setWalletShareInfo,
     fetchData,
   } = useWalletData({ id, user });
@@ -471,7 +471,6 @@ export const WalletDetail: React.FC = () => {
             onSetShowDangerZone={setShowDangerZone}
             onShowDelete={() => setShowDelete(true)}
             onShowExport={() => setShowExport(true)}
-            explorerUrl={explorerUrl}
           />
         )}
       </div>
@@ -506,7 +505,6 @@ export const WalletDetail: React.FC = () => {
         <ReceiveModal
           walletId={wallet.id}
           addresses={addresses}
-          network={wallet.network || 'mainnet'}
           onClose={() => setShowReceive(false)}
           onNavigateToSettings={() => { setShowReceive(false); setActiveTab('settings'); }}
         />
@@ -531,7 +529,6 @@ export const WalletDetail: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {showDelete && wallet && (
         <DeleteModal
-          walletName={wallet.name}
           onConfirm={async () => {
             if (id) {
               try {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import { formatModelSize } from '../../../components/AISettings/utils';
 
 describe('AISettings utils branch coverage', () => {

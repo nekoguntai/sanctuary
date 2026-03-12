@@ -2,7 +2,7 @@
  * Focused behavior tests for DeviceParserRegistry class internals.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import type { DeviceParser } from '../../../services/deviceParsers/types';
 
 const { mockDebug, mockWarn } = vi.hoisted(() => ({

@@ -5,15 +5,15 @@
  * satoshi amount validation and BIP derivation path handling.
  */
 
-import { vi } from 'vitest';
 import {
-  validateSatoshiAmount,
-  getTrezorScriptType,
-  isBip48MultisigPath,
-  getAccountPathPrefix,
-  buildTrezorMultisig,
-  convertToStandardXpub,
+buildTrezorMultisig,
+convertToStandardXpub,
+getAccountPathPrefix,
+getTrezorScriptType,
+isBip48MultisigPath,
+validateSatoshiAmount,
 } from '@/services/hardwareWallet/adapters/trezor';
+import { vi } from 'vitest';
 
 vi.mock('../../../utils/logger', () => ({
   createLogger: () => ({

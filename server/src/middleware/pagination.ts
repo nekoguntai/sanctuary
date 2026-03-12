@@ -83,7 +83,6 @@ declare global {
  */
 export function paginationMiddleware(options: PaginationOptions = {}): RequestHandler {
   const {
-    defaultPageSize = PAGINATION_DEFAULTS.pageSize,
     maxPageSize = PAGINATION_DEFAULTS.maxPageSize,
     minPageSize = 1,
   } = options;

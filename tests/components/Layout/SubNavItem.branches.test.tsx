@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render,screen } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { SubNavItem } from '../../../components/Layout/SubNavItem';
 
 const routerState = vi.hoisted(() => ({ pathname: '/initial' }));
@@ -36,14 +36,14 @@ describe('SubNavItem branch coverage', () => {
         icon={<span data-testid="icon">I</span>}
         activeColorClass="text-success-700"
         badgeCount={3}
-        badgeSeverity="error"
+        badgeSeverity="critical"
       />
     );
 
     const link = screen.getByTestId('link');
     expect(link.className).toContain('text-success-700');
     expect(screen.getByTestId('icon')).toBeInTheDocument();
-    expect(screen.getByTestId('badge')).toHaveTextContent('error:3');
+    expect(screen.getByTestId('badge')).toHaveTextContent('critical:3');
   });
 
   it('covers icon-absent path and default warning badge severity', () => {

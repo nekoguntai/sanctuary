@@ -1,20 +1,30 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import type { Device } from '../../../types';
 
-const mockNavigate = vi.fn();
-const mockGetDevices = vi.fn();
-const mockGetDeviceModels = vi.fn();
-const mockUpdateDevice = vi.fn();
-const mockDeleteDevice = vi.fn();
-const mockUpdatePreferences = vi.fn();
-const extractErrorMessageMock = vi.fn((error: unknown, fallback: string) => {
-  const message = error instanceof Error ? error.message : '';
-  return message || fallback;
-});
-const loggerErrorMock = vi.fn();
+const {
+  mockNavigate,
+  mockGetDevices,
+  mockGetDeviceModels,
+  mockUpdateDevice,
+  mockDeleteDevice,
+  mockUpdatePreferences,
+  extractErrorMessageMock,
+  loggerErrorMock,
+} = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+  mockGetDevices: vi.fn(),
+  mockGetDeviceModels: vi.fn(),
+  mockUpdateDevice: vi.fn(),
+  mockDeleteDevice: vi.fn(),
+  mockUpdatePreferences: vi.fn(),
+  extractErrorMessageMock: vi.fn((error: unknown, fallback: string) => {
+    const message = error instanceof Error ? error.message : '';
+    return message || fallback;
+  }),
+  loggerErrorMock: vi.fn(),
+}));
 
 let currentUser: any = null;
 
@@ -25,8 +35,8 @@ vi.mock('react-router-dom', () => ({
 vi.mock('../../../src/api/devices', () => ({
   getDevices: () => mockGetDevices(),
   getDeviceModels: () => mockGetDeviceModels(),
-  updateDevice: (...args: unknown[]) => mockUpdateDevice(...args),
-  deleteDevice: (...args: unknown[]) => mockDeleteDevice(...args),
+  updateDevice: mockUpdateDevice,
+  deleteDevice: mockDeleteDevice,
 }));
 
 vi.mock('../../../contexts/UserContext', () => ({
@@ -46,7 +56,7 @@ vi.mock('../../../hooks/useLoadingState', () => ({
 }));
 
 vi.mock('../../../utils/errorHandler', () => ({
-  extractErrorMessage: (...args: unknown[]) => extractErrorMessageMock(...args),
+  extractErrorMessage: extractErrorMessageMock,
 }));
 
 vi.mock('../../../utils/logger', () => ({
@@ -54,7 +64,7 @@ vi.mock('../../../utils/logger', () => ({
     info: vi.fn(),
     debug: vi.fn(),
     warn: vi.fn(),
-    error: (...args: unknown[]) => loggerErrorMock(...args),
+    error: loggerErrorMock,
   }),
 }));
 
@@ -186,7 +196,6 @@ const makeDevice = (overrides: Partial<Device> = {}): Device => ({
   updatedAt: '2025-01-01T00:00:00.000Z',
   wallets: [],
   isOwner: true,
-  isShared: false,
   ...overrides,
 });
 
@@ -320,10 +329,10 @@ describe('DeviceList branch coverage', () => {
     const devices = [
       makeDevice({ id: 'o1', label: 'Owned Trezor', isOwner: true, type: 'trezor', fingerprint: 'ccc', walletCount: 1 }),
       makeDevice({ id: 'o2', label: 'Owned Ledger', isOwner: true, type: 'ledger', fingerprint: 'aaa', wallets: [{ wallet: { id: 'w1', name: 'W1', type: 'single_sig' } }] as any, walletCount: undefined }),
-      makeDevice({ id: 's1', label: 'Shared Coldcard', isOwner: false, isShared: true, type: 'coldcard', fingerprint: 'bbb', walletCount: 3 }),
-      makeDevice({ id: 's2', label: 'Shared Bitbox', isOwner: false, isShared: true, type: 'bitbox', fingerprint: 'ddd', walletCount: 0 }),
+      makeDevice({ id: 's1', label: 'Shared Coldcard', isOwner: false, type: 'coldcard', fingerprint: 'bbb', walletCount: 3 }),
+      makeDevice({ id: 's2', label: 'Shared Bitbox', isOwner: false, type: 'bitbox', fingerprint: 'ddd', walletCount: 0 }),
       makeDevice({ id: 'z1', label: 'Unknown Wallets 1', isOwner: true, type: 'jade', fingerprint: 'eee', walletCount: undefined, wallets: undefined }),
-      makeDevice({ id: 'z2', label: 'Unknown Wallets 2', isOwner: false, isShared: true, type: 'passport', fingerprint: 'fff', walletCount: undefined, wallets: undefined }),
+      makeDevice({ id: 'z2', label: 'Unknown Wallets 2', isOwner: false, type: 'passport', fingerprint: 'fff', walletCount: undefined, wallets: undefined }),
     ];
     mockGetDevices.mockResolvedValue(devices);
 

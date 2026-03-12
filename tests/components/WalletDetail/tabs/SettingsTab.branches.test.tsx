@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent,render,screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 import { SettingsTab } from '../../../../components/WalletDetail/tabs/SettingsTab';
-import { WalletType, type Device } from '../../../../types';
+import { WalletType,type Device } from '../../../../types';
 
 const navigateMock = vi.fn();
 

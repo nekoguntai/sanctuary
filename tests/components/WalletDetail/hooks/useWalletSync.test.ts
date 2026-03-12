@@ -1,9 +1,9 @@
-import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act,renderHook } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { useWalletSync } from '../../../../components/WalletDetail/hooks/useWalletSync';
+import { useErrorHandler } from '../../../../hooks/useErrorHandler';
 import * as syncApi from '../../../../src/api/sync';
 import * as walletsApi from '../../../../src/api/wallets';
-import { useErrorHandler } from '../../../../hooks/useErrorHandler';
 
 vi.mock('../../../../utils/logger', () => ({
   createLogger: () => ({
@@ -39,7 +39,12 @@ describe('useWalletSync', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useErrorHandler).mockReturnValue({ handleError, showSuccess } as never);
-    vi.mocked(syncApi.syncWallet).mockResolvedValue({ success: true });
+    vi.mocked(syncApi.syncWallet).mockResolvedValue({
+      success: true,
+      syncedAddresses: 1,
+      newTransactions: 0,
+      newUtxos: 0,
+    });
     vi.mocked(syncApi.resyncWallet).mockResolvedValue({ message: 'queued' } as never);
     vi.mocked(walletsApi.repairWallet).mockResolvedValue({ success: true, message: 'repaired' } as never);
     (globalThis as typeof globalThis & { confirm: (msg?: string) => boolean }).confirm = vi.fn(() => true);
@@ -81,7 +86,12 @@ describe('useWalletSync', () => {
   });
 
   it('refreshes data when sync result is non-success without an explicit error', async () => {
-    vi.mocked(syncApi.syncWallet).mockResolvedValue({ success: false } as never);
+    vi.mocked(syncApi.syncWallet).mockResolvedValue({
+      success: false,
+      syncedAddresses: 0,
+      newTransactions: 0,
+      newUtxos: 0,
+    } as never);
 
     const { result } = renderHook(() =>
       useWalletSync({
@@ -99,7 +109,13 @@ describe('useWalletSync', () => {
   });
 
   it('still refreshes when sync returns an explicit API error payload', async () => {
-    vi.mocked(syncApi.syncWallet).mockResolvedValue({ success: false, error: 'backend timeout' } as never);
+    vi.mocked(syncApi.syncWallet).mockResolvedValue({
+      success: false,
+      syncedAddresses: 0,
+      newTransactions: 0,
+      newUtxos: 0,
+      error: 'backend timeout',
+    } as never);
 
     const { result } = renderHook(() =>
       useWalletSync({
@@ -257,19 +273,17 @@ describe('useWalletSync', () => {
     act(() => {
       result.current.setSyncing(true);
       result.current.setSyncRetryInfo({
-        active: true,
-        currentRetry: 2,
+        retryCount: 2,
         maxRetries: 5,
-        retryInSeconds: 8,
+        error: 'temporary failure',
       });
     });
 
     expect(result.current.syncing).toBe(true);
     expect(result.current.syncRetryInfo).toEqual({
-      active: true,
-      currentRetry: 2,
+      retryCount: 2,
       maxRetries: 5,
-      retryInSeconds: 8,
+      error: 'temporary failure',
     });
   });
 });

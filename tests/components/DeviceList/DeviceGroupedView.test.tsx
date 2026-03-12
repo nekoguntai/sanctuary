@@ -1,8 +1,8 @@
+import { fireEvent,render,screen } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
-import type { Device, HardwareDeviceModel } from '../../../types';
+import { describe,expect,it,vi } from 'vitest';
 import { DeviceGroupedView } from '../../../components/DeviceList/DeviceGroupedView';
+import type { Device,HardwareDeviceModel } from '../../../types';
 
 const mockNavigate = vi.fn();
 
@@ -29,11 +29,16 @@ vi.mock('lucide-react', () => ({
   ),
 }));
 
-const getDeviceIconMock = vi.fn(() => <span data-testid="device-type-icon" />);
-const getWalletIconMock = vi.fn(() => <span data-testid="wallet-type-icon" />);
+const {
+  getDeviceIconMock,
+  getWalletIconMock,
+} = vi.hoisted(() => ({
+  getDeviceIconMock: vi.fn(() => <span data-testid="device-type-icon" />),
+  getWalletIconMock: vi.fn(() => <span data-testid="wallet-type-icon" />),
+}));
 vi.mock('../../../components/ui/CustomIcons', () => ({
-  getDeviceIcon: (...args: unknown[]) => getDeviceIconMock(...args),
-  getWalletIcon: (...args: unknown[]) => getWalletIconMock(...args),
+  getDeviceIcon: getDeviceIconMock,
+  getWalletIcon: getWalletIconMock,
 }));
 
 const deviceModels: HardwareDeviceModel[] = [
@@ -68,7 +73,6 @@ const makeDevice = (overrides: Partial<Device> = {}): Device => ({
   createdAt: '2025-01-01T00:00:00.000Z',
   updatedAt: '2025-01-01T00:00:00.000Z',
   wallets: [],
-  isShared: false,
   isOwner: true,
   ...overrides,
 });
@@ -195,7 +199,6 @@ describe('DeviceGroupedView', () => {
       id: 'device-shared',
       label: 'Shared Device',
       isOwner: false,
-      isShared: true,
       sharedBy: 'alice',
       wallets: [
         { wallet: { id: 'w1', name: 'Multisig Vault', type: 'multi_sig' } },

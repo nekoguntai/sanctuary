@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent,render,screen } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { AppearanceTab } from '../../../../../components/Settings/sections/ThemeSection/AppearanceTab';
 
 const mockUpdatePreferences = vi.fn();

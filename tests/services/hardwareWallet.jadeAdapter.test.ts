@@ -2,8 +2,8 @@
  * Jade adapter coverage tests
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { decode, encode } from 'cbor-x';
+import { decode,encode } from 'cbor-x';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 
 const mockSerialGetPorts = vi.fn();
 const mockSerialRequestPort = vi.fn();
@@ -93,7 +93,7 @@ function makeConnection({
 describe('JadeAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(encode).mockImplementation(() => new Uint8Array([1, 2, 3]));
+    vi.mocked(encode).mockImplementation(() => Buffer.from([1, 2, 3]));
     vi.mocked(decode).mockReset();
     setWebSerialEnv({ secure: true, withSerial: true });
     mockSerialGetPorts.mockResolvedValue([]);

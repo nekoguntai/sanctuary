@@ -1,5 +1,4 @@
-import React from 'react';
-import { Brain, Loader2, Shield, Play, Square, RefreshCw } from 'lucide-react';
+import { Loader2, Shield } from 'lucide-react';
 import type { StatusTabProps } from '../types';
 import { ContainerControls } from '../components/ContainerControls';
 

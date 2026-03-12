@@ -11,7 +11,7 @@
  * Extracted from SendTransaction.tsx for maintainability.
  */
 
-import React, { RefObject, useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Scanner, IDetectedBarcode } from '@yudiel/react-qr-scanner';
 import { Check, X, Shield, QrCode, ChevronDown, Trash2, Camera, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -50,10 +50,6 @@ export interface OutputRowProps {
   // Payjoin
   payjoinUrl?: string | null;
   payjoinStatus?: 'idle' | 'attempting' | 'success' | 'failed';
-
-  // QR Scanner refs (legacy - no longer needed, kept for compatibility)
-  videoRef?: RefObject<HTMLVideoElement>;
-  canvasRef?: RefObject<HTMLCanvasElement>;
 
   // Currency display
   unit: string;

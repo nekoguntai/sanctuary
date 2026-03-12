@@ -1,10 +1,9 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { ReviewStep } from '../../../components/send/steps/ReviewStep';
-import * as SendContext from '../../../contexts/send';
 import * as CurrencyContext from '../../../contexts/CurrencyContext';
+import * as SendContext from '../../../contexts/send';
 import { lookupAddresses } from '../../../src/api/bitcoin';
 
 const capture = vi.hoisted(() => ({

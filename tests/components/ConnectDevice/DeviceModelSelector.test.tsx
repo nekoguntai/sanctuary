@@ -1,8 +1,7 @@
-import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DeviceModelSelector, renderCapabilities } from '../../../components/ConnectDevice/DeviceModelSelector';
+import { describe,expect,it,vi } from 'vitest';
+import { DeviceModelSelector,renderCapabilities } from '../../../components/ConnectDevice/DeviceModelSelector';
 import type { HardwareDeviceModel } from '../../../src/api/devices';
 
 vi.mock('../../../components/ui/CustomIcons', () => ({

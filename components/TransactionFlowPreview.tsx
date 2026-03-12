@@ -109,7 +109,7 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
         <div className="flex items-stretch gap-2 min-h-[80px] min-w-0">
           {/* Inputs Column */}
           <div className="flex-1 flex flex-col gap-2">
-            {inputs.map((input, idx) => (
+            {inputs.map((input) => (
               <div
                 key={`${input.txid}:${input.vout}`}
                 className="flex items-center rounded-xl overflow-hidden transition-all duration-200 hover:scale-[1.01]"

@@ -146,19 +146,25 @@ export class HardwareWalletService {
    * @param type Device type to connect to
    */
   async connect(type?: DeviceType): Promise<HardwareWalletDevice> {
+    let resolvedType = type;
+
     // If no type specified and only one adapter, use it
-    if (!type) {
+    if (!resolvedType) {
       if (this.adapters.size === 1) {
-        type = this.adapters.keys().next().value;
+        resolvedType = this.adapters.keys().next().value as DeviceType | undefined;
       } else {
         throw new Error('Device type must be specified when multiple adapters are registered');
       }
     }
 
-    await this.ensureAdapter(type);
-    const adapter = this.adapters.get(type);
+    if (!resolvedType) {
+      throw new Error('No device type available');
+    }
+
+    await this.ensureAdapter(resolvedType);
+    const adapter = this.adapters.get(resolvedType);
     if (!adapter) {
-      throw new Error(`No adapter registered for device type: ${type}`);
+      throw new Error(`No adapter registered for device type: ${resolvedType}`);
     }
 
     if (!adapter.isSupported()) {

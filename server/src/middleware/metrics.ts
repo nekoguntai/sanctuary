@@ -122,7 +122,7 @@ export function metricsMiddleware(options: MetricsMiddlewareOptions = {}): Reque
  *
  * Exposes Prometheus metrics at /metrics
  */
-export async function metricsHandler(req: Request, res: Response): Promise<void> {
+export async function metricsHandler(_req: Request, res: Response): Promise<void> {
   try {
     const metrics = await metricsService.getMetrics();
     res.set('Content-Type', metricsService.getContentType());
@@ -140,7 +140,7 @@ export async function metricsHandler(req: Request, res: Response): Promise<void>
  * Use this if you want timing info without full metrics.
  */
 export function responseTimeMiddleware(): RequestHandler {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (_req: Request, res: Response, next: NextFunction) => {
     const startTime = process.hrtime.bigint();
 
     const originalEnd = res.end;

@@ -5,7 +5,6 @@
  */
 
 import { z } from 'zod';
-import { UuidSchema } from './common';
 
 // =============================================================================
 // Sync Priority

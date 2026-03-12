@@ -4,11 +4,11 @@
  * Tests for the notification panel and bell components.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
-import React, { ReactNode } from 'react';
-import { NotificationPanel, NotificationBell } from '../../components/NotificationPanel';
-import { AppNotificationProvider, useAppNotifications } from '../../contexts/AppNotificationContext';
+import { fireEvent,render,screen } from '@testing-library/react';
+import React,{ ReactNode } from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
+import { NotificationBell,NotificationPanel } from '../../components/NotificationPanel';
+import { AppNotificationProvider,useAppNotifications } from '../../contexts/AppNotificationContext';
 
 // Mock react-router-dom
 const mockNavigate = vi.fn();
@@ -25,10 +25,6 @@ vi.mock('../../utils/logger', () => ({
     error: vi.fn(),
   })),
 }));
-
-const wrapper = ({ children }: { children: ReactNode }) => (
-  <AppNotificationProvider>{children}</AppNotificationProvider>
-);
 
 // Helper component to add notifications for testing
 const TestSetup = ({

@@ -4,11 +4,11 @@
  * Renders the list of output rows and the add-recipient button.
  */
 
-import React, { RefObject } from 'react';
+import React from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '../../../../ui/Button';
 import { OutputRow } from '../../../OutputRow';
-import type { OutputEntry, TransactionType } from '../../../../../contexts/send/types';
+import type { OutputEntry, TransactionType, WalletAddress } from '../../../../../contexts/send/types';
 
 interface RecipientsSectionProps {
   outputs: OutputEntry[];
@@ -17,10 +17,8 @@ interface RecipientsSectionProps {
   scanningOutputIndex: number | null;
   payjoinUrl: string | null;
   payjoinStatus: 'idle' | 'attempting' | 'success' | 'failed';
-  walletAddresses: Array<{ address: string; isChange: boolean; used: boolean }>;
+  walletAddresses: WalletAddress[];
   unit: string;
-  videoRef: RefObject<HTMLVideoElement>;
-  canvasRef: RefObject<HTMLCanvasElement>;
   onAddressChange: (index: number, value: string) => void;
   onAmountChange: (index: number, displayValue: string, satsValue: string) => void;
   onAmountBlur: (index: number) => void;
@@ -42,8 +40,6 @@ export const RecipientsSection: React.FC<RecipientsSectionProps> = ({
   payjoinStatus,
   walletAddresses,
   unit,
-  videoRef,
-  canvasRef,
   onAddressChange,
   onAmountChange,
   onAmountBlur,
@@ -83,8 +79,6 @@ export const RecipientsSection: React.FC<RecipientsSectionProps> = ({
           scanningOutputIndex={scanningOutputIndex}
           payjoinUrl={payjoinUrl}
           payjoinStatus={payjoinStatus}
-          videoRef={videoRef}
-          canvasRef={canvasRef}
           unit={unit}
           unitLabel={unit === 'btc' ? 'BTC' : 'sats'}
           displayValue={getDisplayValue(output)}

@@ -2,7 +2,7 @@
  * Tests for utils/urPsbt.ts
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 vi.mock('../../utils/logger', () => ({
   createLogger: () => ({
@@ -104,16 +104,16 @@ vi.mock('@ngraveio/bc-ur', () => ({
   UR: MockUR,
 }));
 
-import {
-  encodePsbtToUrFrames,
-  getPsbtFragmentCount,
-  createPsbtDecoder,
-  feedDecoderPart,
-  getDecodedPsbt,
-  isUrFormat,
-  getUrType,
-} from '../../utils/urPsbt';
 import type { URDecoder } from '@ngraveio/bc-ur';
+import {
+createPsbtDecoder,
+encodePsbtToUrFrames,
+feedDecoderPart,
+getDecodedPsbt,
+getPsbtFragmentCount,
+getUrType,
+isUrFormat,
+} from '../../utils/urPsbt';
 
 /** Testable decoder interface that exposes mock-settable properties for test manipulation */
 interface TestableDecoder {

@@ -1,13 +1,14 @@
-import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { describe,expect,it,vi } from 'vitest';
 import { EncryptionKeyDisplay } from '../../../components/BackupRestore/EncryptionKeyDisplay';
 
 describe('EncryptionKeyDisplay branch coverage', () => {
   const encryptionKeys = {
     encryptionKey: 'test-encryption-key-12345',
     encryptionSalt: 'test-salt-abcdef',
+    hasEncryptionKey: true,
+    hasEncryptionSalt: true,
   };
 
   it('renders revealed salt state with copied salt indicator', () => {

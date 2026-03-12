@@ -2,15 +2,15 @@
  * Tests for SendTransactionWizard component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { SendTransactionWizard } from '../../../components/send/SendTransactionWizard';
-import { WalletType } from '../../../types';
 import * as SendContext from '../../../contexts/send';
-import * as useSendTransactionActionsHook from '../../../hooks/useSendTransactionActions';
 import * as useHardwareWalletHook from '../../../hooks/useHardwareWallet';
+import * as useSendTransactionActionsHook from '../../../hooks/useSendTransactionActions';
+import { WalletType } from '../../../types';
 
 // Mock logger
 vi.mock('../../../utils/logger', () => ({

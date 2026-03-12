@@ -9,7 +9,6 @@
 import type {
   Transaction, UTXO, Device, User, Address, Wallet,
 } from '../../../types';
-import { WalletType } from '../../../types';
 import * as walletsApi from '../../../src/api/wallets';
 import * as transactionsApi from '../../../src/api/transactions';
 import * as devicesApi from '../../../src/api/devices';
@@ -19,7 +18,7 @@ import * as privacyApi from '../../../src/api/transactions';
 import * as authApi from '../../../src/api/auth';
 import * as adminApi from '../../../src/api/admin';
 import { formatApiTransaction, formatApiUtxo } from '../mappers';
-import { formatWalletFromApi, formatDevicesForWallet } from './walletDataFormatters';
+import { formatDevicesForWallet } from './walletDataFormatters';
 import { createLogger } from '../../../utils/logger';
 import { logError } from '../../../utils/errorHandler';
 

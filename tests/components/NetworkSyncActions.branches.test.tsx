@@ -1,6 +1,6 @@
+import { act,fireEvent,render,screen } from '@testing-library/react';
 import React from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { NetworkSyncActions } from '../../components/NetworkSyncActions';
 import type { TabNetwork } from '../../components/NetworkTabs';
 import * as syncApi from '../../src/api/sync';
@@ -38,10 +38,17 @@ const renderActions = (
 describe('NetworkSyncActions branch coverage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(syncApi.syncNetworkWallets).mockResolvedValue({ queued: 2 });
-    vi.mocked(syncApi.resyncNetworkWallets).mockResolvedValue({
+    vi.mocked(syncApi.syncNetworkWallets).mockResolvedValue({
+      success: true,
       queued: 2,
+      walletIds: ['w1', 'w2'],
+    });
+    vi.mocked(syncApi.resyncNetworkWallets).mockResolvedValue({
+      success: true,
+      queued: 2,
+      walletIds: ['w1', 'w2'],
       deletedTransactions: 25,
+      skipped: 0,
     });
   });
 
@@ -52,7 +59,11 @@ describe('NetworkSyncActions branch coverage', () => {
   it('renders singular sync message and clears it after timeout', async () => {
     vi.useFakeTimers();
     const { onSyncStarted } = renderActions({ walletCount: 1, network: 'testnet' });
-    vi.mocked(syncApi.syncNetworkWallets).mockResolvedValueOnce({ queued: 1 });
+    vi.mocked(syncApi.syncNetworkWallets).mockResolvedValueOnce({
+      success: true,
+      queued: 1,
+      walletIds: ['w1'],
+    });
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Sync All Testnet' }));
@@ -83,8 +94,11 @@ describe('NetworkSyncActions branch coverage', () => {
     vi.useFakeTimers();
     const { onSyncStarted } = renderActions({ walletCount: 1 });
     vi.mocked(syncApi.resyncNetworkWallets).mockResolvedValueOnce({
+      success: true,
       deletedTransactions: 2,
       queued: 1,
+      walletIds: ['w1'],
+      skipped: 0,
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Full Resync All Mainnet' }));

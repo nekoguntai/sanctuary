@@ -4,18 +4,18 @@
  * Tests validation rules for each wizard step.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  validateTypeStep,
-  validateOutputsStep,
-  validateReviewStep,
-  isStepValid,
-  canProceedToNextStep,
-  getStepErrors,
-  isReadyToSign,
-  stepValidators,
+canProceedToNextStep,
+getStepErrors,
+isReadyToSign,
+isStepValid,
+stepValidators,
+validateOutputsStep,
+validateReviewStep,
+validateTypeStep,
 } from '../../contexts/send/stepValidation';
-import type { TransactionState, WizardStep } from '../../contexts/send/types';
+import type { TransactionState,WizardStep } from '../../contexts/send/types';
 
 describe('stepValidation', () => {
   // Helper to create a minimal transaction state

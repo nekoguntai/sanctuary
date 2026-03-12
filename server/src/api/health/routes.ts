@@ -47,7 +47,7 @@ function determineOverallStatus(components: Record<string, ComponentHealth>): He
  * GET /api/v1/health
  * Comprehensive health check
  */
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
   const components = {
     database: await checkDatabase(),
     redis: await checkRedis(),
@@ -81,7 +81,7 @@ router.get('/', async (req: Request, res: Response) => {
  * GET /api/v1/health/live
  * Kubernetes liveness probe - just checks if server is responding
  */
-router.get('/live', (req: Request, res: Response) => {
+router.get('/live', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'alive' });
 });
 
@@ -89,7 +89,7 @@ router.get('/live', (req: Request, res: Response) => {
  * GET /api/v1/health/ready
  * Kubernetes readiness probe - checks if ready to accept traffic
  */
-router.get('/ready', async (req: Request, res: Response) => {
+router.get('/ready', async (_req: Request, res: Response) => {
   const dbHealth = await checkDatabase();
 
   if (dbHealth.status === 'unhealthy') {
@@ -106,7 +106,7 @@ router.get('/ready', async (req: Request, res: Response) => {
  * GET /api/v1/health/circuits
  * Detailed circuit breaker status
  */
-router.get('/circuits', (req: Request, res: Response) => {
+router.get('/circuits', (_req: Request, res: Response) => {
   const breakers = circuitBreakerRegistry.getAllHealth();
   res.json({
     overall: circuitBreakerRegistry.getOverallStatus(),

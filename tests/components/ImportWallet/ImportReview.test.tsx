@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import type { ImportValidationResult } from '../../../src/api/wallets';
+import { render,screen } from '@testing-library/react';
+import { describe,expect,it } from 'vitest';
 import { ImportReview } from '../../../components/ImportWallet/ImportReview';
+import type { ImportValidationResult } from '../../../src/api/wallets';
 
 const createValidationResult = (
   overrides: Partial<ImportValidationResult> = {},

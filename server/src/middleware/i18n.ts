@@ -35,7 +35,7 @@ declare global {
  * a request-scoped translate function.
  */
 export function i18nMiddleware() {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return (req: Request, _res: Response, next: NextFunction): void => {
     // Priority 1: Explicit X-Locale header
     const explicitLocale = req.headers['x-locale'] as string | undefined;
     if (explicitLocale && i18nService.isSupported(explicitLocale)) {

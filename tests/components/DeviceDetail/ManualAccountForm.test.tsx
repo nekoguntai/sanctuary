@@ -4,10 +4,9 @@
  * Tests for the manual device account entry form.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
@@ -17,8 +16,8 @@ vi.mock('lucide-react', () => ({
 
 // Import after mocks
 import {
-  ManualAccountForm,
-  type ManualAccountData,
+ManualAccountForm,
+type ManualAccountData,
 } from '../../../components/DeviceDetail/ManualAccountForm';
 
 describe('ManualAccountForm', () => {

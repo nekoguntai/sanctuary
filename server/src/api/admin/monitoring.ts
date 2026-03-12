@@ -167,7 +167,7 @@ router.put('/services/:serviceId', authenticate, requireAdmin, async (req: Reque
  * GET /api/v1/admin/monitoring/grafana
  * Get Grafana configuration including credentials hint and anonymous access setting
  */
-router.get('/grafana', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.get('/grafana', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
     const anonymousAccess = await systemSettingRepository.getBoolean(
       SystemSettingKeys.GRAFANA_ANONYMOUS_ACCESS,

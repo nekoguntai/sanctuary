@@ -11,13 +11,13 @@
 import { db as prisma } from '../../repositories/db';
 import { setCachedBlockHeight } from '../bitcoin/blockchain';
 import { getNodeClient, getElectrumClientIfActive } from '../bitcoin/nodeClient';
-import { getNotificationService, walletLog } from '../../websocket/notifications';
+import { getNotificationService } from '../../websocket/notifications';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { getConfig } from '../../config';
 import { eventService } from '../eventService';
 import { acquireLock, extendLock, releaseLock } from '../../infrastructure';
-import type { SyncState, SyncResult } from './types';
+import type { SyncState } from './types';
 import {
   ELECTRUM_SUBSCRIPTION_LOCK_KEY,
   ELECTRUM_SUBSCRIPTION_LOCK_TTL_MS,
@@ -60,7 +60,7 @@ export async function setupRealTimeSubscriptions(
     log.info('[SYNC] Acquired Electrum subscription ownership');
 
     // Get the node client to ensure it's connected
-    const client = await getNodeClient();
+    await getNodeClient();
 
     // Only Electrum supports real-time subscriptions
     const electrumClient = await getElectrumClientIfActive();
@@ -117,7 +117,7 @@ export async function setupRealTimeSubscriptions(
  */
 export function startSubscriptionLockRefresh(
   state: SyncState,
-  updateAllConfirmations: () => Promise<void>,
+  _updateAllConfirmations: () => Promise<void>,
   teardown?: () => Promise<void>,
 ): void {
   if (state.subscriptionLockRefresh) return;
@@ -202,7 +202,7 @@ export async function subscribeAllWalletAddresses(state: SyncState): Promise<voi
 
     // Update our address to wallet mapping for successfully subscribed addresses
     let subscribed = 0;
-    for (const [address, status] of results) {
+    for (const [address] of results) {
       const walletId = addressToWallet.get(address);
       if (walletId) {
         state.addressToWalletMap.set(address, walletId);
@@ -383,7 +383,7 @@ export async function subscribeWalletAddresses(walletId: string): Promise<void> 
  * Handle new block notification - immediately update confirmations.
  */
 export async function handleNewBlock(
-  state: SyncState,
+  _state: SyncState,
   block: { height: number; hex: string },
   updateAllConfirmations: () => Promise<void>,
 ): Promise<void> {

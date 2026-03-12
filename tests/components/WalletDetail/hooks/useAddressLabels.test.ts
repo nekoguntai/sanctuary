@@ -1,5 +1,5 @@
-import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act,renderHook } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { useAddressLabels } from '../../../../components/WalletDetail/hooks/useAddressLabels';
 import * as labelsApi from '../../../../src/api/labels';
 import { logError } from '../../../../utils/errorHandler';

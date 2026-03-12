@@ -2,13 +2,13 @@
  * Tests for PrivacyBadge components
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent,render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { describe,expect,it,vi } from 'vitest';
 import {
-  PrivacyBadge,
-  PrivacyScoreCard,
-  WalletPrivacySummary,
+PrivacyBadge,
+PrivacyScoreCard,
+WalletPrivacySummary,
 } from '../../components/PrivacyBadge';
 
 describe('PrivacyBadge', () => {

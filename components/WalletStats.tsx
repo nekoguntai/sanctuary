@@ -18,7 +18,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
   const chartReady = useDelayedRender();
 
   // Calculate Fiat Balance
-  const fiatBalance = getFiatValue(balance);
+  const fiatBalance = getFiatValue(balance) ?? 0;
 
   // Age distribution
   const now = Date.now();
@@ -67,7 +67,10 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
 
     // Sort transactions oldest to newest, filter to those with balanceAfter
     const sortedTxs = [...transactions]
-      .filter(tx => tx.balanceAfter != null)
+      .filter(
+        (tx): tx is Transaction & { balanceAfter: number; timestamp: number } =>
+          tx.balanceAfter != null && tx.timestamp != null
+      )
       .sort((a, b) => a.timestamp - b.timestamp);
 
     if (sortedTxs.length === 0) {
@@ -116,7 +119,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
     }
 
     // Add current point
-    const lastBalance = sortedTxs[sortedTxs.length - 1].balanceAfter!;
+    const lastBalance = sortedTxs[sortedTxs.length - 1].balanceAfter;
     dataPoints.push({
       name: dateFormat(nowDate),
       amount: lastBalance,
@@ -137,8 +140,11 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
   const accumulationData = buildAccumulationHistory();
 
   // Calculate oldest transaction date for display
-  const oldestTxDate = transactions.length > 0
-    ? new Date(Math.min(...transactions.map(t => t.timestamp)))
+  const oldestTxTimestamp = transactions
+    .map(t => t.timestamp)
+    .filter((timestamp): timestamp is number => typeof timestamp === 'number');
+  const oldestTxDate = oldestTxTimestamp.length > 0
+    ? new Date(Math.min(...oldestTxTimestamp))
     : null;
 
   return (
@@ -245,7 +251,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
                       formatter={(value: number) => [format(value), 'Amount']}
                    />
                    <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
-                      {ageData.map((entry, index) => (
+                      {ageData.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={['#d4b483', '#84a98c', '#57534e', '#a8a29e'][index % 4]} />
                       ))}
                    </Bar>

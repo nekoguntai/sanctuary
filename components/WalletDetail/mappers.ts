@@ -21,7 +21,6 @@ export function formatApiTransaction(tx: Transaction, walletId: string): Transac
     balanceAfter: tx.balanceAfter != null ? Number(tx.balanceAfter) : undefined,
     timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
     confirmations: tx.confirmations,
-    confirmed: tx.confirmations >= 1,
     fee: tx.fee ? Number(tx.fee) : 0,
     walletId,
     label: tx.label || tx.memo || '',

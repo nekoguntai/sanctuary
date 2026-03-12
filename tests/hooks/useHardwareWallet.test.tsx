@@ -8,8 +8,8 @@
  * - Loading states
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { act,renderHook,waitFor } from '@testing-library/react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock types
 interface MockDevice {

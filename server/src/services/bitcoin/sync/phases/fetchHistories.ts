@@ -7,7 +7,7 @@
 
 import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
-import type { SyncContext, TxHistoryEntry } from '../types';
+import type { SyncContext } from '../types';
 
 const log = createLogger('SYNC-HISTORIES');
 
@@ -63,7 +63,7 @@ export async function fetchHistoriesPhase(ctx: SyncContext): Promise<SyncContext
 
   // Collect all unique txids and build height map
   let addressesWithActivity = 0;
-  for (const [addr, history] of ctx.historyResults.entries()) {
+  for (const [, history] of ctx.historyResults.entries()) {
     if (history.length > 0) {
       addressesWithActivity++;
     }

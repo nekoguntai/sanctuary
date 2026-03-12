@@ -2,14 +2,14 @@
  * Tests for DraftList component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { DraftList } from '../../components/DraftList';
-import { WalletType } from '../../types';
 import * as CurrencyContext from '../../contexts/CurrencyContext';
 import * as draftsApi from '../../src/api/drafts';
+import { WalletType } from '../../types';
 import * as downloadUtils from '../../utils/download';
 
 // Mock navigate
@@ -348,12 +348,12 @@ describe('DraftList', () => {
       const realMatch = String.prototype.match;
       const matchSpy = vi.spyOn(String.prototype, 'match').mockImplementation(function (
         this: string,
-        pattern: string | RegExp
+        pattern: any
       ) {
         if (this.toString() === '70736274ff0102' && pattern instanceof RegExp && pattern.source === '^[A-Za-z0-9+/=\\s]+$') {
           return null as any;
         }
-        return realMatch.call(this.toString(), pattern as any);
+        return realMatch.call(this.toString(), pattern);
       });
 
       const file = {

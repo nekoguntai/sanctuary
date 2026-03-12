@@ -2,8 +2,8 @@
  * BitBox02 adapter coverage tests
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as bitcoin from 'bitcoinjs-lib';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 
 const {
   mockGetDevicePath,
@@ -26,7 +26,7 @@ const {
       .split('/')
       .map((part: string) => parseInt(part.replace(/['h]$/, ''), 10) || 0)
   );
-  const mockIsErrorAbort = vi.fn(() => false);
+  const mockIsErrorAbort = vi.fn((_err?: unknown) => false);
 
   const mockApiConnect = vi.fn();
   const mockApiClose = vi.fn();
@@ -98,11 +98,11 @@ const {
 
 vi.mock('bitbox02-api', () => ({
   BitBox02API: MockBitBox02API,
-  getDevicePath: (...args: unknown[]) => mockGetDevicePath(...args),
-  getKeypathFromString: (...args: unknown[]) => mockGetKeypathFromString(...args),
+  getDevicePath: mockGetDevicePath,
+  getKeypathFromString: mockGetKeypathFromString,
   constants,
   HARDENED: 0x80000000,
-  isErrorAbort: (...args: unknown[]) => mockIsErrorAbort(...args),
+  isErrorAbort: mockIsErrorAbort,
 }));
 
 vi.mock('bitcoinjs-lib', () => ({
@@ -306,7 +306,7 @@ describe('BitBoxAdapter', () => {
   });
 
   it('connects successfully, sets device state, and handles close callback', async () => {
-    let onCloseHandler: (() => void) | null = null;
+    let onCloseHandler!: () => void;
 
     mockApiConnect.mockImplementationOnce(async (pairing, userVerify, attestation, onClose, statusCb) => {
       pairing('1234-5678');
@@ -325,7 +325,7 @@ describe('BitBoxAdapter', () => {
     expect(adapter.getDevice()?.id).toBe('bitbox-1003-9219');
     expect(MockBitBox02API).toHaveBeenCalledWith('WEBHID');
 
-    onCloseHandler?.();
+    onCloseHandler();
     expect(adapter.getDevice()?.connected).toBe(false);
   });
 
@@ -396,7 +396,6 @@ describe('BitBoxAdapter', () => {
 
     await expect(adapter.disconnect()).resolves.toBeUndefined();
     expect(adapter.getDevice()).toBeNull();
-    expect((adapter as any).pairingCode).toBeNull();
     expect((adapter as any).pairingResolve).toBeNull();
   });
 
@@ -637,7 +636,7 @@ describe('BitBoxAdapter', () => {
     );
 
     mockPsbtFromBase64.mockReturnValueOnce(makeEmptyPsbt());
-    await adapter.signPSBT({ psbt: 'd', inputPaths: [], accountPath: "m/84'/0'/0'", scriptType: 'unknown' });
+    await adapter.signPSBT({ psbt: 'd', inputPaths: [], accountPath: "m/84'/0'/0'", scriptType: 'unknown' as any });
     expect(mockBtcSignSimple).toHaveBeenLastCalledWith(
       expect.any(Number),
       10,

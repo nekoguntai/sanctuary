@@ -5,9 +5,8 @@
  * form inputs, validation, and saving.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import React from 'react';
+import { act,fireEvent,render,screen,waitFor } from '@testing-library/react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { Variables } from '../../components/Variables';
 import * as adminApi from '../../src/api/admin';
 
@@ -19,6 +18,7 @@ vi.mock('../../src/api/admin', () => ({
 
 describe('Variables', () => {
   const mockSettings = {
+    registrationEnabled: true,
     confirmationThreshold: 2,
     deepConfirmationThreshold: 6,
     dustThreshold: 546,
@@ -28,7 +28,7 @@ describe('Variables', () => {
     vi.clearAllMocks();
     vi.useRealTimers(); // Ensure real timers at start of each test
     vi.mocked(adminApi.getSystemSettings).mockResolvedValue(mockSettings);
-    vi.mocked(adminApi.updateSystemSettings).mockResolvedValue(undefined);
+    vi.mocked(adminApi.updateSystemSettings).mockResolvedValue(mockSettings);
   });
 
   afterEach(() => {
@@ -129,6 +129,7 @@ describe('Variables', () => {
 
     it('uses default values when settings are null', async () => {
       vi.mocked(adminApi.getSystemSettings).mockResolvedValue({
+        registrationEnabled: true,
         confirmationThreshold: null,
         deepConfirmationThreshold: null,
         dustThreshold: null,
@@ -258,7 +259,7 @@ describe('Variables', () => {
     });
 
     it('shows Saving... during save', async () => {
-      let resolvePromise: () => void;
+      let resolvePromise: ((value: typeof mockSettings) => void) | undefined;
       vi.mocked(adminApi.updateSystemSettings).mockImplementation(
         () => new Promise((resolve) => { resolvePromise = resolve; })
       );
@@ -275,7 +276,7 @@ describe('Variables', () => {
 
       // Cleanup
       await act(async () => {
-        resolvePromise!();
+        resolvePromise?.(mockSettings);
       });
     });
 
@@ -373,7 +374,7 @@ describe('Variables', () => {
     it('disables button while saving', async () => {
       // Reset to ensure no fake timer interference
       vi.useRealTimers();
-      let resolvePromise: () => void;
+      let resolvePromise: ((value: typeof mockSettings) => void) | undefined;
       vi.mocked(adminApi.updateSystemSettings).mockImplementation(
         () => new Promise((resolve) => { resolvePromise = resolve; })
       );
@@ -390,7 +391,7 @@ describe('Variables', () => {
 
       // Cleanup
       await act(async () => {
-        resolvePromise!();
+        resolvePromise?.(mockSettings);
       });
     });
   });

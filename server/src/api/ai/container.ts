@@ -22,7 +22,7 @@ export function createContainerRouter(): Router {
    * GET /api/v1/ai/ollama-container/status
    * Get the status of the bundled Ollama container
    */
-  router.get('/ollama-container/status', authenticate, async (req: Request, res: Response) => {
+  router.get('/ollama-container/status', authenticate, async (_req: Request, res: Response) => {
     try {
       const proxyAvailable = await docker.isDockerProxyAvailable();
 
@@ -54,7 +54,7 @@ export function createContainerRouter(): Router {
    * POST /api/v1/ai/ollama-container/start
    * Start the bundled Ollama container
    */
-  router.post('/ollama-container/start', authenticate, async (req: Request, res: Response) => {
+  router.post('/ollama-container/start', authenticate, async (_req: Request, res: Response) => {
     try {
       const result = await docker.startOllama();
 
@@ -79,7 +79,7 @@ export function createContainerRouter(): Router {
    * POST /api/v1/ai/ollama-container/stop
    * Stop the bundled Ollama container
    */
-  router.post('/ollama-container/stop', authenticate, async (req: Request, res: Response) => {
+  router.post('/ollama-container/stop', authenticate, async (_req: Request, res: Response) => {
     try {
       const result = await docker.stopOllama();
 

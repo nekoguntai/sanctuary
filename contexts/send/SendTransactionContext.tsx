@@ -15,7 +15,6 @@ import type {
   WizardStep,
   TransactionType,
   SerializableTransactionState,
-  OutputEntry,
   WalletAddress,
 } from './types';
 import type { Wallet, UTXO, FeeEstimate, Device } from '../../types';

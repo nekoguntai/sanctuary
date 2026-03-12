@@ -9,13 +9,11 @@ import { AlertTriangle } from 'lucide-react';
 import { Button } from '../../ui/Button';
 
 interface DeleteModalProps {
-  walletName: string;
   onConfirm: () => Promise<void>;
   onClose: () => void;
 }
 
 export const DeleteModal: React.FC<DeleteModalProps> = ({
-  walletName,
   onConfirm,
   onClose,
 }) => {

@@ -20,7 +20,7 @@ import {
   buildMultisigBip32Derivations,
   buildMultisigWitnessScript,
 } from '../psbtBuilder';
-import { isLegacyScriptType, getRawTransactionHex } from './helpers';
+import { getRawTransactionHex } from './helpers';
 import type { WalletSigningInfo } from './types';
 
 const log = createLogger('PSBT-CONSTRUCTION');

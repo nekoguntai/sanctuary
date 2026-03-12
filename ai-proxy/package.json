@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "dev": "tsc --watch"
   },
   "dependencies": {
     "express": "^4.21.0"

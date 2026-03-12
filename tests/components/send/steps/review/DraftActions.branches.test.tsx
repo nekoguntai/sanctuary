@@ -1,6 +1,5 @@
-import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 import { DraftActions } from '../../../../../components/send/steps/review/DraftActions';
 
 describe('DraftActions branch coverage', () => {

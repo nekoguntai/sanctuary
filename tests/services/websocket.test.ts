@@ -5,7 +5,7 @@
  * event dispatching, reconnection, and resource cleanup.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock logger
 vi.mock('../../utils/logger', () => ({
@@ -17,8 +17,8 @@ vi.mock('../../utils/logger', () => ({
   }),
 }));
 
+import type { EventCallback,WebSocketEvent } from '../../services/websocket';
 import { WebSocketClient } from '../../services/websocket';
-import type { WebSocketEvent, EventCallback } from '../../services/websocket';
 
 // Mock WebSocket
 class MockWebSocket {

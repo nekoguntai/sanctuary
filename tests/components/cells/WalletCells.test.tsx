@@ -1,7 +1,6 @@
-import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { createWalletCellRenderers, type WalletWithPending } from '../../../components/cells/WalletCells';
+import { render,screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
+import { createWalletCellRenderers,type WalletWithPending } from '../../../components/cells/WalletCells';
 import type { TableColumnConfig } from '../../../types';
 
 vi.mock('lucide-react', () => ({

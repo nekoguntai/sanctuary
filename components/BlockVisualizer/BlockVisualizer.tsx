@@ -12,8 +12,7 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
   pendingTxs = [],
   onBlockClick,
   compact = false,
-  explorerUrl = 'https://mempool.space',
-  onRefresh
+  explorerUrl = 'https://mempool.space'
 }) => {
   const [displayBlocks, setDisplayBlocks] = useState<BlockData[]>([]);
   const [isAnimating, setIsAnimating] = useState(false);

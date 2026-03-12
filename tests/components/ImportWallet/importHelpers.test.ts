@@ -1,14 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
+import {
+MAX_INPUT_SIZE,
+buildDescriptorFromXpub,
+getDerivationPath,
+scriptTypeOptions,
+validateImportData,
+validateInputData,
+} from '../../../components/ImportWallet/importHelpers';
 import { ApiError } from '../../../src/api/client';
 import * as walletsApi from '../../../src/api/wallets';
-import {
-  MAX_INPUT_SIZE,
-  buildDescriptorFromXpub,
-  getDerivationPath,
-  scriptTypeOptions,
-  validateImportData,
-  validateInputData,
-} from '../../../components/ImportWallet/importHelpers';
 
 vi.mock('../../../src/api/wallets', () => ({
   validateImport: vi.fn(),

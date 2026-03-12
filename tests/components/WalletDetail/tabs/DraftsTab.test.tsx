@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { render,screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 import { DraftsTab } from '../../../../components/WalletDetail/tabs/DraftsTab';
+import { WalletType } from '../../../../types';
 
 const mockRefs = vi.hoisted(() => ({
   draftListProps: null as any,
@@ -20,7 +21,7 @@ describe('DraftsTab', () => {
     render(
       <DraftsTab
         walletId="wallet-1"
-        walletType="multi_sig" as any
+        walletType={WalletType.MULTI_SIG}
         quorum={2}
         totalSigners={3}
         userRole="owner"
@@ -43,7 +44,7 @@ describe('DraftsTab', () => {
     render(
       <DraftsTab
         walletId="wallet-2"
-        walletType="single_sig" as any
+        walletType={WalletType.SINGLE_SIG}
         userRole="viewer"
         addresses={[]}
         walletName="Watch-Only"

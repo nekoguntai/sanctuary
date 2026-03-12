@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {
-  HardwareImport,
-} from '../../../components/ImportWallet/steps/HardwareImport';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import type { XpubData } from '../../../components/ImportWallet/hooks/useImportState';
+import {
+HardwareImport,
+} from '../../../components/ImportWallet/steps/HardwareImport';
 
 const mockConnect = vi.fn();
 const mockGetXpub = vi.fn();

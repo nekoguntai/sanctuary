@@ -5,7 +5,7 @@
  * All transaction composition happens here so max calculations are accurate.
  */
 
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { WizardNavigation } from '../../WizardNavigation';
 import { useSendTransaction } from '../../../../contexts/send';
 import { useCurrency } from '../../../../contexts/CurrencyContext';
@@ -55,10 +55,6 @@ export function OutputsStep() {
   const [feeExpanded, setFeeExpanded] = useState(false);
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
 
-  // Video ref for QR scanning
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
   const isConsolidation = state.transactionType === 'consolidation';
   const isSweep = state.transactionType === 'sweep';
 
@@ -85,7 +81,10 @@ export function OutputsStep() {
     totalOutputAmount,
     feeRate: state.feeRate,
     fees,
-    outputs: state.outputs,
+    outputs: state.outputs.map((output) => ({
+      amount: output.amount,
+      sendMax: output.sendMax ?? false,
+    })),
   });
 
   // Auto-set consolidation address to first unused receive address if empty
@@ -272,8 +271,6 @@ export function OutputsStep() {
         payjoinStatus={state.payjoinStatus}
         walletAddresses={walletAddresses}
         unit={unit}
-        videoRef={videoRef}
-        canvasRef={canvasRef}
         onAddressChange={handleAddressChange}
         onAmountChange={handleAmountChange}
         onAmountBlur={handleAmountBlur}

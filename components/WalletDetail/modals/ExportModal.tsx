@@ -125,7 +125,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       setLoadingFormats(true);
       walletsApi
         .getExportFormats(walletId)
-        .then((formats) => setExportFormats(formats))
+        .then((response) => setExportFormats(response.formats))
         .catch((err) => {
           log.error('Failed to fetch export formats', { error: err });
           setExportFormats([]);
@@ -136,7 +136,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   const downloadJson = async () => {
     try {
-      await walletsApi.exportWallet(walletId, walletName);
+      await walletsApi.exportWallet(walletId);
     } catch (err) {
       log.error('Failed to export wallet', { error: err });
       onError(err, 'Export Failed');

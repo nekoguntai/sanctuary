@@ -4,20 +4,20 @@
  * Tests currency formatting, fiat price fetching, and user preferences.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { act,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import {
-  CurrencyProvider,
-  useCurrency,
-  useCurrencyFormatter,
-  useBtcPrice,
-  useCurrencySettings,
+CurrencyProvider,
+useBtcPrice,
+useCurrency,
+useCurrencyFormatter,
+useCurrencySettings,
 } from '../../contexts/CurrencyContext';
 import { UserProvider } from '../../contexts/UserContext';
-import * as priceApi from '../../src/api/price';
 import * as authApi from '../../src/api/auth';
+import * as priceApi from '../../src/api/price';
 
 vi.mock('../../utils/logger', () => ({
   createLogger: () => ({
@@ -47,6 +47,7 @@ const authenticatedUser = {
   username: 'testuser',
   email: 'test@example.com',
   isAdmin: false,
+  createdAt: '2025-01-01T00:00:00.000Z',
   preferences: {
     darkMode: true,
     unit: 'sats' as const,
@@ -57,6 +58,26 @@ const authenticatedUser = {
     priceProvider: 'auto',
   },
 };
+
+const makeAggregatedPrice = (overrides: Partial<Awaited<ReturnType<typeof priceApi.getPrice>>> = {}) => ({
+  price: 50000,
+  currency: 'USD',
+  sources: [
+    {
+      provider: 'coingecko',
+      price: 50000,
+      currency: 'USD',
+      timestamp: new Date().toISOString(),
+      change24h: 2.5,
+    },
+  ],
+  median: 50000,
+  average: 50000,
+  timestamp: new Date().toISOString(),
+  cached: false,
+  change24h: 2.5,
+  ...overrides,
+});
 
 // Test component that exposes context values
 function TestConsumer() {
@@ -109,11 +130,7 @@ describe('CurrencyContext', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
 
     // Default mock responses
-    vi.mocked(priceApi.getPrice).mockResolvedValue({
-      price: 50000,
-      change24h: 2.5,
-      timestamp: new Date().toISOString(),
-    });
+    vi.mocked(priceApi.getPrice).mockResolvedValue(makeAggregatedPrice());
   });
 
   afterEach(() => {
@@ -146,11 +163,7 @@ describe('CurrencyContext', () => {
     it('sets price loading state', async () => {
       // Delay price response
       vi.mocked(priceApi.getPrice).mockImplementation(
-        () => new Promise(resolve => setTimeout(() => resolve({
-          price: 50000,
-          change24h: 2.5,
-          timestamp: new Date().toISOString(),
-        }), 100))
+        () => new Promise(resolve => setTimeout(() => resolve(makeAggregatedPrice()), 100))
       );
 
       renderWithProviders(<TestConsumer />);
@@ -179,11 +192,9 @@ describe('CurrencyContext', () => {
     });
 
     it('normalizes missing 24h change to null', async () => {
-      vi.mocked(priceApi.getPrice).mockResolvedValue({
-        price: 50000,
-        change24h: undefined as unknown as number,
-        timestamp: new Date().toISOString(),
-      });
+      vi.mocked(priceApi.getPrice).mockResolvedValue(
+        makeAggregatedPrice({ change24h: undefined as unknown as number })
+      );
 
       renderWithProviders(<TestConsumer />);
 
@@ -472,7 +483,7 @@ describe('CurrencyContext', () => {
   describe('Specialized hooks', () => {
     it('useCurrencyFormatter returns formatting functions', async () => {
       const TestFormatter = () => {
-        const { format, formatFiat, currencySymbol, unit, showFiat } = useCurrencyFormatter();
+        const { format, currencySymbol, unit } = useCurrencyFormatter();
         return (
           <div>
             <span data-testid="format">{format(50000)}</span>
@@ -495,7 +506,7 @@ describe('CurrencyContext', () => {
 
     it('useBtcPrice returns price data', async () => {
       const TestPriceHook = () => {
-        const { btcPrice, priceChange24h, priceLoading, priceError } = useBtcPrice();
+        const { btcPrice, priceChange24h, priceLoading } = useBtcPrice();
         return (
           <div>
             <span data-testid="price">{btcPrice ?? 'null'}</span>

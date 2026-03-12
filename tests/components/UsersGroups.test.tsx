@@ -2,9 +2,9 @@
  * Tests for UsersGroups component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { UsersGroups } from '../../components/UsersGroups';
 import * as adminApi from '../../src/api/admin';
 
@@ -75,10 +75,10 @@ describe('UsersGroups', () => {
     vi.mocked(adminApi.getGroups).mockResolvedValue(mockGroups as any);
     vi.mocked(adminApi.createUser).mockResolvedValue({ id: 'new-user' } as any);
     vi.mocked(adminApi.updateUser).mockResolvedValue({} as any);
-    vi.mocked(adminApi.deleteUser).mockResolvedValue(undefined);
+    vi.mocked(adminApi.deleteUser).mockResolvedValue({ message: 'Deleted' } as any);
     vi.mocked(adminApi.createGroup).mockResolvedValue({ id: 'new-group' } as any);
     vi.mocked(adminApi.updateGroup).mockResolvedValue({} as any);
-    vi.mocked(adminApi.deleteGroup).mockResolvedValue(undefined);
+    vi.mocked(adminApi.deleteGroup).mockResolvedValue({ message: 'Deleted' } as any);
 
     // Mock window.confirm
     vi.spyOn(window, 'confirm').mockReturnValue(true);

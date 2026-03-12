@@ -296,7 +296,6 @@ router.post('/wallets/:walletId/psbt/create', requireWalletAccess('edit'), async
       recipients, // Array of { address, amount }
       feeRate,
       utxoIds, // Optional: specific UTXOs to use
-      changeAddress, // Optional: custom change address
     } = req.body;
 
     // Validation

@@ -1,7 +1,7 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { Settings } from '../../components/Settings';
 import * as authApi from '../../src/api/auth';
 

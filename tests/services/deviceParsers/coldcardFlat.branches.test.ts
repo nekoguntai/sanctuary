@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import { coldcardFlatParser } from '../../../services/deviceParsers/parsers/coldcardFlat';
 
 describe('coldcardFlatParser branch coverage', () => {

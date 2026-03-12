@@ -20,7 +20,6 @@ const log = createLogger('ReceiveModal');
 interface ReceiveModalProps {
   walletId: string;
   addresses: Address[];
-  network: string;
   onClose: () => void;
   onNavigateToSettings: () => void;
 }
@@ -28,7 +27,6 @@ interface ReceiveModalProps {
 export const ReceiveModal: React.FC<ReceiveModalProps> = ({
   walletId,
   addresses,
-  network,
   onClose,
   onNavigateToSettings,
 }) => {
@@ -78,7 +76,7 @@ export const ReceiveModal: React.FC<ReceiveModalProps> = ({
             ? Math.round(parsedAmount * 100_000_000)
             : undefined;
         const response = await payjoinApi.getPayjoinUri(
-          selectedReceiveAddress.id,
+          selectedReceiveAddress.id ?? selectedReceiveAddress.address,
           amountSats ? { amount: amountSats } : undefined
         );
         setPayjoinUri(response.uri);

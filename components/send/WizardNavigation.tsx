@@ -40,7 +40,6 @@ export function WizardNavigation({
     goToStep,
     nextStep,
     prevStep,
-    isStepComplete,
     state,
   } = useSendTransaction();
 
@@ -71,7 +70,6 @@ export function WizardNavigation({
         {WIZARD_STEPS.map((step, index) => {
           const status = getStepStatus(step, index);
           const isClickable = canJumpTo(step);
-          const isComplete = isStepComplete(step);
 
           return (
             <React.Fragment key={step}>

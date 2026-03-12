@@ -5,12 +5,12 @@
  * label CRUD operations, and the LabelBadges component.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
 import React from 'react';
-import { LabelSelector, LabelBadges } from '../../components/LabelSelector';
-import * as labelsApi from '../../src/api/labels';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
+import { LabelBadges,LabelSelector } from '../../components/LabelSelector';
 import type { Label } from '../../src/api/labels';
+import * as labelsApi from '../../src/api/labels';
 
 // Mock the labels API
 vi.mock('../../src/api/labels', () => ({

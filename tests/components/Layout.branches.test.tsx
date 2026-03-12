@@ -1,15 +1,14 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { Layout } from '../../components/Layout/Layout';
-import * as UserContext from '../../contexts/UserContext';
 import * as AppNotificationContext from '../../contexts/AppNotificationContext';
-import * as useWalletsHooks from '../../hooks/queries/useWallets';
+import * as UserContext from '../../contexts/UserContext';
 import * as useDevicesHooks from '../../hooks/queries/useDevices';
-import * as bitcoinApi from '../../src/api/bitcoin';
+import * as useWalletsHooks from '../../hooks/queries/useWallets';
 import * as adminApi from '../../src/api/admin';
+import * as bitcoinApi from '../../src/api/bitcoin';
 import * as draftsApi from '../../src/api/drafts';
 
 vi.mock('../../contexts/UserContext', () => ({
@@ -109,7 +108,7 @@ describe('Layout branch coverage', () => {
   const renderLayout = (path = '/') =>
     render(
       <MemoryRouter initialEntries={[path]}>
-        <Layout darkMode={false} toggleTheme={toggleTheme}>
+        <Layout darkMode={false} toggleTheme={toggleTheme} onLogout={logout}>
           <div>content</div>
         </Layout>
       </MemoryRouter>

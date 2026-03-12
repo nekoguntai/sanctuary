@@ -2,9 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Check, AlertCircle, AlertTriangle, Variable, Info } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import { useLoadingState } from '../hooks/useLoadingState';
-import { createLogger } from '../utils/logger';
-
-const log = createLogger('Variables');
 
 export const Variables: React.FC = () => {
   const [confirmationThreshold, setConfirmationThreshold] = useState(1);

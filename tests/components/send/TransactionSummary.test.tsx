@@ -1,6 +1,5 @@
-import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent,render,screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 import { TransactionSummary } from '../../../components/send/steps/review/TransactionSummary';
 
 vi.mock('../../../components/TransactionFlowPreview', () => ({
@@ -31,8 +30,8 @@ function buildProps(overrides: Record<string, unknown> = {}) {
       selectedUTXOs: new Set(['u1', 'u2']),
     } as any,
     flowData: {
-      inputs: [{ label: 'in-1', amount: 2400 }],
-      outputs: [{ label: 'out-1', amount: 2000 }],
+      inputs: [{ txid: 'tx-1', vout: 0, address: 'bc1qin1', label: 'in-1', amount: 2400 }],
+      outputs: [{ address: 'bc1qout1', label: 'out-1', amount: 2000 }],
       totalInput: 2400,
       totalOutput: 2000,
       fee: 400,

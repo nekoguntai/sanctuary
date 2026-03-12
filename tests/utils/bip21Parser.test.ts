@@ -5,8 +5,8 @@
  * This is security-critical as it handles payment requests.
  */
 
-import { describe, it, expect } from 'vitest';
-import { parseBip21Uri, isBip21Uri } from '../../utils/bip21Parser';
+import { describe,expect,it } from 'vitest';
+import { isBip21Uri,parseBip21Uri } from '../../utils/bip21Parser';
 
 describe('BIP21 Parser', () => {
   describe('parseBip21Uri', () => {

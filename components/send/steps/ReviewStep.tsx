@@ -32,12 +32,10 @@ export interface ReviewStepProps {
   broadcasting?: boolean;
   savingDraft?: boolean;
   // Additional props for signing UI
-  error?: string | null;
   txData?: TransactionData | null;
   unsignedPsbt?: string | null;
   signedDevices?: Set<string>;
   payjoinStatus?: 'idle' | 'attempting' | 'success' | 'failed';
-  onCreateTransaction?: () => Promise<TransactionData | null>;
   onDownloadPsbt?: () => void;
   onUploadSignedPsbt?: (file: File, deviceId?: string, deviceFingerprint?: string) => Promise<void>;
   onSignWithDevice?: (device: Device) => Promise<boolean>;
@@ -56,12 +54,10 @@ export function ReviewStep({
   signing = false,
   broadcasting = false,
   savingDraft = false,
-  error,
   txData,
   unsignedPsbt,
   signedDevices = new Set(),
   payjoinStatus = 'idle',
-  onCreateTransaction,
   onDownloadPsbt,
   onUploadSignedPsbt,
   onSignWithDevice,
@@ -86,7 +82,7 @@ export function ReviewStep({
     isReadyToSign,
   } = useSendTransaction();
 
-  const { format, formatFiat } = useCurrency();
+  const { format } = useCurrency();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const deviceFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [signingDeviceId, setSigningDeviceId] = useState<string | null>(null);

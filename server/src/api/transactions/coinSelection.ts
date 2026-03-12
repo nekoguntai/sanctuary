@@ -7,11 +7,9 @@
 import { Router, Request, Response } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
 import { db as prisma } from '../../repositories/db';
-import { createLogger } from '../../utils/logger';
 import { handleApiError } from '../../utils/errors';
 
 const router = Router();
-const log = createLogger('TX:COINSELECT');
 
 /**
  * POST /api/v1/wallets/:walletId/utxos/select

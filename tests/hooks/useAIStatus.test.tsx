@@ -5,9 +5,8 @@
  * Covers loading states, successful fetches, error handling, and cache behavior.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
-import React from 'react';
+import { renderHook,waitFor } from '@testing-library/react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock the AI API
 const mockGetAIStatus = vi.fn();
@@ -17,7 +16,7 @@ vi.mock('../../src/api/ai', () => ({
 }));
 
 // Import hook after mocks
-import { useAIStatus, invalidateAIStatusCache } from '../../hooks/useAIStatus';
+import { invalidateAIStatusCache,useAIStatus } from '../../hooks/useAIStatus';
 
 describe('useAIStatus', () => {
   beforeEach(() => {
@@ -211,7 +210,7 @@ describe('useAIStatus', () => {
     });
 
     it('should not make duplicate requests when multiple hooks mount simultaneously', async () => {
-      let resolvePromise: ((value: any) => void) | null = null;
+      let resolvePromise!: (value: any) => void;
       mockGetAIStatus.mockImplementation(
         () => new Promise(resolve => { resolvePromise = resolve; })
       );
@@ -230,9 +229,7 @@ describe('useAIStatus', () => {
       expect(mockGetAIStatus).toHaveBeenCalledTimes(1);
 
       // Resolve the promise
-      if (resolvePromise) {
-        resolvePromise({ available: true, containerAvailable: true });
-      }
+      resolvePromise({ available: true, containerAvailable: true });
 
       // All hooks should update with the same result
       await waitFor(() => {

@@ -295,13 +295,6 @@ export class SanctauryWebSocketServer {
   }
 
   /**
-   * Extract JWT token from request (delegates to auth module)
-   */
-  private extractToken(request: IncomingMessage): string | null {
-    return extractToken(request);
-  }
-
-  /**
    * Handle authentication via message (delegates to auth module)
    */
   private async handleAuth(client: AuthenticatedWebSocket, data: { token: string }): Promise<void> {
@@ -354,16 +347,23 @@ export class SanctauryWebSocketServer {
   }
 
   /**
-   * Get channels that should receive an event (delegates to channels module)
+   * Extract JWT token from request (test hook + auth delegation).
    */
-  private getChannelsForEvent(event: WebSocketEvent): string[] {
+  public extractToken(request: IncomingMessage): string | null {
+    return extractToken(request);
+  }
+
+  /**
+   * Get channels for event fanout (test hook + channels delegation).
+   */
+  public getChannelsForEvent(event: WebSocketEvent): string[] {
     return getChannelsForEvent(event);
   }
 
   /**
-   * Process queued messages for a client (delegates to messageQueue module)
+   * Process queued messages for a client (test hook + queue delegation).
    */
-  private processClientQueue(client: AuthenticatedWebSocket): void {
+  public processClientQueue(client: AuthenticatedWebSocket): void {
     return processClientQueue(client);
   }
 

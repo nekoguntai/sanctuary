@@ -9,7 +9,6 @@
  * Extracted from SendTransaction.tsx for maintainability.
  */
 
-import React from 'react';
 import { Sliders, ChevronDown } from 'lucide-react';
 
 export interface AdvancedOptionsProps {

@@ -7,7 +7,6 @@
  */
 
 import { createLogger } from '../../../../../utils/logger';
-import { walletLog } from '../../../../../websocket/notifications';
 import { getBlockTimestamp } from '../../../utils/blockHeight';
 import type { SyncContext, TransactionCreateData } from '../../types';
 

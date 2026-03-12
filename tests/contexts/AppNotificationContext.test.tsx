@@ -5,14 +5,14 @@
  * localStorage persistence, and CRUD operations.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
-import React, { ReactNode } from 'react';
+import { act,renderHook } from '@testing-library/react';
+import { ReactNode } from 'react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import {
-  AppNotificationProvider,
-  useAppNotifications,
-  useWalletNotifications,
-  useDeviceNotifications,
+AppNotificationProvider,
+useAppNotifications,
+useDeviceNotifications,
+useWalletNotifications,
 } from '../../contexts/AppNotificationContext';
 
 // Mock the logger

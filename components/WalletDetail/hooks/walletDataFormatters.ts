@@ -6,7 +6,7 @@
  * data.
  */
 
-import type { Wallet, Device, User } from '../../../types';
+import type { Wallet, Device } from '../../../types';
 import { WalletType } from '../../../types';
 
 // ---------------------------------------------------------------------------

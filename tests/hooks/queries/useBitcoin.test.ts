@@ -4,15 +4,15 @@
  * Tests React Query hooks for Bitcoin data fetching.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient,QueryClientProvider } from '@tanstack/react-query';
+import { renderHook,waitFor } from '@testing-library/react';
 import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import {
-  useBitcoinStatus,
-  useFeeEstimates,
-  useMempoolData,
-  bitcoinKeys,
+bitcoinKeys,
+useBitcoinStatus,
+useFeeEstimates,
+useMempoolData,
 } from '../../../hooks/queries/useBitcoin';
 import * as bitcoinApi from '../../../src/api/bitcoin';
 

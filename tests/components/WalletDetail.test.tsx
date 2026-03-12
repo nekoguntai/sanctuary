@@ -2,21 +2,23 @@
  * Tests for WalletDetail component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter,Route,Routes } from 'react-router-dom';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { WalletDetail } from '../../components/WalletDetail';
-import * as UserContext from '../../contexts/UserContext';
+import * as AppNotificationContext from '../../contexts/AppNotificationContext';
 import * as CurrencyContext from '../../contexts/CurrencyContext';
 import * as NotificationContext from '../../contexts/NotificationContext';
-import * as AppNotificationContext from '../../contexts/AppNotificationContext';
+import * as UserContext from '../../contexts/UserContext';
 import * as useBitcoinHooks from '../../hooks/queries/useBitcoin';
-import * as useWebSocketHooks from '../../hooks/useWebSocket';
 import * as useAIStatusHook from '../../hooks/useAIStatus';
-import * as walletsApi from '../../src/api/wallets';
-import * as transactionsApi from '../../src/api/transactions';
+import * as useWebSocketHooks from '../../hooks/useWebSocket';
 import * as bitcoinApi from '../../src/api/bitcoin';
+import * as devicesApi from '../../src/api/devices';
+import * as draftsApi from '../../src/api/drafts';
+import * as transactionsApi from '../../src/api/transactions';
+import * as walletsApi from '../../src/api/wallets';
 
 vi.mock('../../utils/logger', () => ({
   createLogger: () => ({
@@ -26,8 +28,6 @@ vi.mock('../../utils/logger', () => ({
     error: vi.fn(),
   }),
 }));
-import * as devicesApi from '../../src/api/devices';
-import * as draftsApi from '../../src/api/drafts';
 
 // Mock all context hooks
 vi.mock('../../contexts/UserContext', () => ({
@@ -79,7 +79,6 @@ vi.mock('../../src/api/wallets', async (importOriginal) => {
   return {
     ...actual,
     getWallet: vi.fn(),
-    getWalletDevices: vi.fn(),
     getWalletTelegramSettings: vi.fn(),
     updateWalletTelegramSettings: vi.fn(),
     getExportFormats: vi.fn(),
@@ -127,7 +126,6 @@ vi.mock('../../src/api/devices', () => ({
 }));
 
 vi.mock('../../src/api/drafts', () => ({
-  getWalletDrafts: vi.fn(),
   getDrafts: vi.fn(),
 }));
 
@@ -197,10 +195,6 @@ describe('WalletDetail', () => {
     { id: 'addr-1', address: 'bc1qtest...', index: 0, derivationPath: 'm/84h/0h/0h/0/0', used: false, balance: 0 },
   ];
 
-  const mockDevices = [
-    { id: 'device-1', type: 'ledger', label: 'My Ledger', fingerprint: 'ABC123' },
-  ];
-
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -244,7 +238,6 @@ describe('WalletDetail', () => {
 
     // Setup API mocks
     vi.mocked(walletsApi.getWallet).mockResolvedValue(mockWallet as any);
-    vi.mocked(walletsApi.getWalletDevices).mockResolvedValue(mockDevices as any);
     vi.mocked(walletsApi.getWalletTelegramSettings).mockResolvedValue({
       enabled: false,
       notifyReceived: true,
@@ -290,7 +283,6 @@ describe('WalletDetail', () => {
     ] as any);
 
     // Mock drafts API
-    vi.mocked(draftsApi.getWalletDrafts).mockResolvedValue([]);
     vi.mocked(draftsApi.getDrafts).mockResolvedValue([]);
   });
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 const makeMockAdapterClass = (type: 'ledger' | 'trezor' | 'bitbox' | 'jade') => {
   return class {
@@ -75,7 +75,7 @@ vi.mock('../../services/hardwareWallet/adapters/jade', () => ({
   JadeAdapter: makeMockAdapterClass('jade'),
 }));
 
-import { hardwareWalletService, getConnectedDevices } from '../../services/hardwareWallet/runtime';
+import { getConnectedDevices,hardwareWalletService } from '../../services/hardwareWallet/runtime';
 
 describe('hardwareWallet runtime', () => {
   beforeEach(async () => {

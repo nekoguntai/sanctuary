@@ -12,7 +12,6 @@ import type { NetworkConnectionCardProps, NewServerState, PresetServer } from '.
 import { NETWORK_COLORS, PRESET_SERVERS } from './constants';
 import {
   getDefaultPort,
-  getNetworkEnabled,
   getNetworkMode,
   getNetworkSingletonHost,
   getNetworkSingletonPort,
@@ -52,7 +51,6 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
   const presets = PRESET_SERVERS[network];
 
   // Get network-specific config values
-  const isEnabled = network === 'mainnet' ? true : getNetworkEnabled(network, config);
   const mode = getNetworkMode(network, config);
   const singletonHost = getNetworkSingletonHost(network, config);
   const singletonPort = getNetworkSingletonPort(network, config);

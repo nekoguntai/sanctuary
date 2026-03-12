@@ -1,10 +1,10 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  getDeviceTypeFromDeviceModel,
-  useAddAccountFlow,
-} from '../../../../../components/DeviceDetail/accounts/hooks/useAddAccountFlow';
+import { act,renderHook,waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import * as accountImportUtils from '../../../../../components/DeviceDetail/accounts/accountImportUtils';
+import {
+getDeviceTypeFromDeviceModel,
+useAddAccountFlow,
+} from '../../../../../components/DeviceDetail/accounts/hooks/useAddAccountFlow';
 
 const parseDeviceJsonMock = vi.hoisted(() => vi.fn());
 const connectMock = vi.hoisted(() => vi.fn());
@@ -119,26 +119,26 @@ vi.mock('@keystonehq/bc-ur-registry', () => {
 });
 
 vi.mock('../../../../../services/deviceParsers', () => ({
-  parseDeviceJson: (...args: unknown[]) => parseDeviceJsonMock(...args),
+  parseDeviceJson: parseDeviceJsonMock,
 }));
 
 vi.mock('../../../../../services/hardwareWallet/runtime', () => ({
   hardwareWalletService: {
-    connect: (...args: unknown[]) => connectMock(...args),
-    getAllXpubs: (...args: unknown[]) => getAllXpubsMock(...args),
-    disconnect: (...args: unknown[]) => disconnectMock(...args),
+    connect: connectMock,
+    getAllXpubs: getAllXpubsMock,
+    disconnect: disconnectMock,
   },
   DeviceType: {},
 }));
 
 vi.mock('../../../../../src/api/devices', () => ({
-  getDevice: (...args: unknown[]) => getDeviceMock(...args),
-  addDeviceAccount: (...args: unknown[]) => addDeviceAccountMock(...args),
+  getDevice: getDeviceMock,
+  addDeviceAccount: addDeviceAccountMock,
 }));
 
 vi.mock('../../../../../components/DeviceDetail/accounts/urHelpers', () => ({
-  extractFromUrResult: (...args: unknown[]) => extractFromUrResultMock(...args),
-  normalizeDerivationPath: (...args: unknown[]) => normalizeDerivationPathMock(...args),
+  extractFromUrResult: extractFromUrResultMock,
+  normalizeDerivationPath: normalizeDerivationPathMock,
 }));
 
 vi.mock('../../../../../utils/logger', () => ({
@@ -288,7 +288,7 @@ describe('useAddAccountFlow branch coverage', () => {
       xpub: 'xpub-ur',
       path: "m/48'/0'/0'/2'",
     });
-    normalizeDerivationPathMock.mockReturnValueOnce(undefined);
+    normalizeDerivationPathMock.mockReturnValueOnce(undefined as any);
 
     const { result } = renderFlowHook();
 

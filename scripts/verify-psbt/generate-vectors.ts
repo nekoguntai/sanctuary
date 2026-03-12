@@ -15,7 +15,6 @@
  *   tsx generate-vectors.ts
  */
 
-import * as bitcoin from 'bitcoinjs-lib';
 import { BitcoinCoreImplementation, createRpcBitcoinCore } from './implementations/bitcoincore';
 import { SanctuaryImplementation } from './implementations/sanctuary';
 import type { ExtendedPsbtTestVector } from '../../server/tests/fixtures/bip174-test-vectors';
@@ -52,7 +51,7 @@ interface GeneratedVector {
  * 3. Create transactions using Bitcoin Core's walletcreatefundedpsbt
  */
 async function generateP2wpkhPsbts(
-  bitcoinCore: BitcoinCoreImplementation
+  _bitcoinCore: BitcoinCoreImplementation
 ): Promise<GeneratedVector[]> {
   const vectors: GeneratedVector[] = [];
 
@@ -85,7 +84,7 @@ async function generateP2wpkhPsbts(
  * Generate P2WSH multisig test PSBTs
  */
 async function generateP2wshMultisigPsbts(
-  bitcoinCore: BitcoinCoreImplementation
+  _bitcoinCore: BitcoinCoreImplementation
 ): Promise<GeneratedVector[]> {
   const vectors: GeneratedVector[] = [];
 

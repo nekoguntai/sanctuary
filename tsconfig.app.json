@@ -1,0 +1,30 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "App.tsx",
+    "global.d.ts",
+    "types.ts",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "contexts/**/*.ts",
+    "contexts/**/*.tsx",
+    "hooks/**/*.ts",
+    "hooks/**/*.tsx",
+    "services/**/*.ts",
+    "services/**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "themes/**/*.ts",
+    "utils/**/*.ts",
+    "utils/**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "server",
+    "gateway",
+    "ai-proxy",
+    "tests",
+    "scripts",
+    "e2e"
+  ]
+}

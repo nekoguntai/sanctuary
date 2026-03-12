@@ -7,11 +7,8 @@
  */
 
 import { db as prisma } from '../../../../repositories/db';
-import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext } from '../types';
-
-const log = createLogger('SYNC-RBF');
 
 interface TxWithInputs {
   id: string;

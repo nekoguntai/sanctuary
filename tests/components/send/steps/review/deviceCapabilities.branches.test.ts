@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import { getDeviceCapabilities } from '../../../../../components/send/steps/review/deviceCapabilities';
 
 describe('deviceCapabilities branch coverage', () => {

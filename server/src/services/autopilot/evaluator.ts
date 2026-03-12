@@ -93,7 +93,7 @@ export async function evaluateWallet(
  */
 async function checkStabilityAndCooldown(
   walletId: string,
-  cooldownHours: number
+  _cooldownHours: number
 ): Promise<boolean> {
   const redis = getRedisClient();
   if (!redis || !isRedisConnected()) return false;
@@ -204,7 +204,7 @@ async function sendConsolidationNotification(
   suggestion: ConsolidationSuggestion,
   settings: WalletAutopilotSettings
 ): Promise<void> {
-  const { walletId, walletName, feeRate, utxoHealth, reason } = suggestion;
+  const { walletId, walletName: _walletName, feeRate, utxoHealth, reason } = suggestion;
 
   // Log to wallet system log
   walletLog(walletId, 'info', 'AUTOPILOT', reason, {

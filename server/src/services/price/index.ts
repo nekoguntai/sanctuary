@@ -18,7 +18,6 @@ import {
   initializePriceProviders,
   getAllSupportedCurrencies,
   getProvidersForCurrency,
-  CoinGeckoPriceProvider,
 } from './providers';
 import type {
   IPriceProvider,

@@ -1,11 +1,11 @@
-import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act,renderHook } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { useWalletSharing } from '../../../../components/WalletDetail/hooks/useWalletSharing';
-import * as walletsApi from '../../../../src/api/wallets';
-import * as devicesApi from '../../../../src/api/devices';
-import * as authApi from '../../../../src/api/auth';
-import { useErrorHandler } from '../../../../hooks/useErrorHandler';
 import { useAppNotifications } from '../../../../contexts/AppNotificationContext';
+import { useErrorHandler } from '../../../../hooks/useErrorHandler';
+import * as authApi from '../../../../src/api/auth';
+import * as devicesApi from '../../../../src/api/devices';
+import * as walletsApi from '../../../../src/api/wallets';
 
 vi.mock('../../../../utils/logger', () => ({
   createLogger: () => ({

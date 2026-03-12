@@ -1,8 +1,8 @@
+import { fireEvent,render,screen } from '@testing-library/react';
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 import { TransactionRow } from '../../../components/TransactionList/TransactionRow';
-import type { Transaction, Wallet } from '../../../types';
+import type { Transaction,Wallet } from '../../../types';
 
 vi.mock('../../../components/Amount', () => ({
   Amount: ({
@@ -39,7 +39,7 @@ const baseTx: Transaction = {
   confirmations: 1,
   timestamp: Date.now(),
   labels: [],
-  rbfStatus: null,
+  rbfStatus: undefined,
 };
 
 const singleSigWallet: Wallet = {

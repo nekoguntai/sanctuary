@@ -5,8 +5,8 @@
  * hardware device models from the API.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { act,renderHook,waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import type { HardwareDeviceModel } from '../../types';
 
 // Mock getDeviceModels API
@@ -47,6 +47,8 @@ const mockModels: HardwareDeviceModel[] = [
     scriptTypes: ['native_segwit', 'nested_segwit', 'taproot'],
     hasScreen: true,
     screenType: 'OLED',
+    integrationTested: true,
+    discontinued: false,
   },
   {
     id: '2',
@@ -64,6 +66,8 @@ const mockModels: HardwareDeviceModel[] = [
     scriptTypes: ['native_segwit', 'nested_segwit', 'taproot', 'legacy'],
     hasScreen: true,
     screenType: 'LCD',
+    integrationTested: true,
+    discontinued: false,
   },
   {
     id: '3',
@@ -81,6 +85,8 @@ const mockModels: HardwareDeviceModel[] = [
     scriptTypes: ['native_segwit', 'nested_segwit', 'taproot', 'legacy'],
     hasScreen: true,
     screenType: 'Touchscreen',
+    integrationTested: true,
+    discontinued: false,
   },
   {
     id: '4',
@@ -98,6 +104,8 @@ const mockModels: HardwareDeviceModel[] = [
     scriptTypes: ['native_segwit', 'nested_segwit', 'taproot'],
     hasScreen: true,
     screenType: 'LCD',
+    integrationTested: true,
+    discontinued: false,
   },
 ];
 

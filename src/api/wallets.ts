@@ -5,7 +5,7 @@
  */
 
 import apiClient from './client';
-import type { Wallet, WalletRole } from '../types';
+import type { Wallet } from '../types';
 
 // Re-export types for backward compatibility
 export type { Wallet, WalletRole } from '../types';

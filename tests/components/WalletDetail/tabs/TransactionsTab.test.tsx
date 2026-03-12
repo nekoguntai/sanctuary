@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent,render,screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 import { TransactionsTab } from '../../../../components/WalletDetail/tabs/TransactionsTab';
 
 const mockRefs = vi.hoisted(() => ({

@@ -196,6 +196,8 @@ export const NodeConfig: React.FC = () => {
   };
 
   const handleProxyPreset = (preset: 'tor' | 'tor-browser' | 'tor-container') => {
+    if (!nodeConfig) return;
+
     if (preset === 'tor-container') {
       setNodeConfig({
         ...nodeConfig,
@@ -235,7 +237,11 @@ export const NodeConfig: React.FC = () => {
           setTorContainerStatus({ ...torContainerStatus, running: false, status: 'exited' });
           // If we were using bundled Tor, disable proxy
           if (nodeConfig?.proxyHost === 'tor') {
-            setNodeConfig({ ...nodeConfig, proxyEnabled: false, proxyHost: undefined, proxyPort: undefined });
+            setNodeConfig((prev) =>
+              prev
+                ? { ...prev, proxyEnabled: false, proxyHost: undefined, proxyPort: undefined }
+                : prev
+            );
           }
         } else {
           setTorContainerMessage(result.message);
@@ -280,8 +286,8 @@ export const NodeConfig: React.FC = () => {
 
   // Generate summaries for collapsed sections
   const getExternalServicesSummary = () => {
-    const explorer = nodeConfig.explorerUrl?.replace('https://', '') || 'mempool.space';
-    const feeSource = nodeConfig.feeEstimatorUrl ? 'Mempool API' : 'Electrum';
+    const explorer = nodeConfig?.explorerUrl?.replace('https://', '') || 'mempool.space';
+    const feeSource = nodeConfig?.feeEstimatorUrl ? 'Mempool API' : 'Electrum';
     return `${explorer} • ${feeSource}`;
   };
 

@@ -34,7 +34,7 @@ const log = createLogger('ADMIN:SETTINGS');
  * GET /api/v1/admin/settings
  * Get all system settings (admin only)
  */
-router.get('/', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.get('/', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
     const settings = await prisma.systemSetting.findMany();
 

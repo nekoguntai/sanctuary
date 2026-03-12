@@ -59,7 +59,7 @@ const RELEASE_CACHE_TTL = 60 * 60 * 1000; // 1 hour
  * Get current version and check for updates
  * Does not require authentication - version info is not sensitive
  */
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
   try {
     const now = Date.now();
 

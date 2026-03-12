@@ -15,7 +15,7 @@ import { createLogger } from '../../../utils/logger';
 import { createConnection, wrapSocketInTls, applySocketOptimizations } from './connection';
 import { createRequestMessage, createBatchMessage, rejectAllPendingRequests } from './protocol';
 import { getDefaultTimeouts } from './clientConfig';
-import { handleIncomingData, handleNotification as handleNotificationFn } from './dataHandler';
+import { handleIncomingData } from './dataHandler';
 import * as publicApi from './publicApi';
 import * as methods from './methods';
 import type {
@@ -274,20 +274,6 @@ class ElectrumClient extends EventEmitter {
   // ===========================================================================
 
   /**
-   * Get the bitcoinjs-lib network object for the current network
-   */
-  private getNetworkLib() {
-    return methods.getNetworkLib(this.network);
-  }
-
-  /**
-   * Convert Bitcoin address to Electrum scripthash
-   */
-  private addressToScriptHash(address: string): string {
-    return methods.addressToScriptHash(address, this.network);
-  }
-
-  /**
    * Decode raw transaction hex to structured format
    */
   private decodeRawTransaction(rawTx: string): TransactionDetails {
@@ -305,13 +291,6 @@ class ElectrumClient extends EventEmitter {
     this.buffer = handleIncomingData(
       this.buffer, data, this.pendingRequests, this, this.scriptHashToAddress
     );
-  }
-
-  /**
-   * Handle a subscription notification - delegates to standalone handleNotification
-   */
-  private handleNotification(notification: import('./types').ElectrumResponse): void {
-    handleNotificationFn(notification, this, this.scriptHashToAddress);
   }
 
   // REQUEST/RESPONSE PRIMITIVES

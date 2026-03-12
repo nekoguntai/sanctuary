@@ -1,9 +1,8 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import * as adminApi from '../../src/api/admin';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { Monitoring } from '../../components/Monitoring';
+import * as adminApi from '../../src/api/admin';
 
 const state = vi.hoisted(() => ({
   loadExecute: vi.fn(),
@@ -113,8 +112,8 @@ describe('Monitoring branch coverage', () => {
 
     vi.mocked(adminApi.getMonitoringServices).mockResolvedValue(services as any);
     vi.mocked(adminApi.getGrafanaConfig).mockResolvedValue(grafanaConfig as any);
-    vi.mocked(adminApi.updateGrafanaConfig).mockResolvedValue(undefined);
-    vi.mocked(adminApi.updateMonitoringServiceUrl).mockResolvedValue(undefined);
+    vi.mocked(adminApi.updateGrafanaConfig).mockResolvedValue({ success: true, message: 'Updated' });
+    vi.mocked(adminApi.updateMonitoringServiceUrl).mockResolvedValue({ success: true });
 
     state.loadExecute.mockImplementation(executeWithCatch);
     state.toggleExecute.mockImplementation(executeWithCatch);
@@ -166,4 +165,3 @@ describe('Monitoring branch coverage', () => {
     });
   });
 });
-

@@ -5,7 +5,7 @@
  * without requiring real hardware or browser USB APIs.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 const mockPost = vi.fn();
 
@@ -24,8 +24,8 @@ vi.mock('../../src/api/client', () => ({
   },
 }));
 
-import { HardwareWalletService, createHardwareWalletService } from '../../services/hardwareWallet/service';
-import type { DeviceAdapter, DeviceType, HardwareWalletDevice } from '../../services/hardwareWallet/types';
+import { HardwareWalletService,createHardwareWalletService } from '../../services/hardwareWallet/service';
+import type { DeviceAdapter,DeviceType,HardwareWalletDevice } from '../../services/hardwareWallet/types';
 
 function createMockAdapter(
   type: DeviceType,

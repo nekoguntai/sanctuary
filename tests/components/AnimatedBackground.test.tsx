@@ -75,10 +75,10 @@ vi.mock('../../components/animations', () => {
 });
 
 import {
-  ANIMATED_PATTERNS,
-  isAnimatedPattern,
-  AnimatedPatternId,
-  AnimatedBackground,
+ANIMATED_PATTERNS,
+AnimatedBackground,
+AnimatedPatternId,
+isAnimatedPattern,
 } from '../../components/AnimatedBackground';
 import * as animations from '../../components/animations';
 import { globalPatterns } from '../../themes/patterns';

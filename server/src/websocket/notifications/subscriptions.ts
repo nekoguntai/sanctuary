@@ -5,7 +5,7 @@
  * blockchain events (address updates, new transactions, confirmation changes).
  */
 
-import { getWebSocketServer, WebSocketEvent } from '../server';
+import { getWebSocketServer } from '../server';
 import { getElectrumClient } from '../../services/bitcoin/electrum';
 import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
@@ -44,7 +44,7 @@ export async function subscribeToBlocks(maxRetries = 3, delayMs = 2000): Promise
  */
 export async function subscribeToAddress(
   address: string,
-  walletId: string,
+  _walletId: string,
   subscribedAddresses: Set<string>,
 ): Promise<void> {
   if (subscribedAddresses.has(address)) {

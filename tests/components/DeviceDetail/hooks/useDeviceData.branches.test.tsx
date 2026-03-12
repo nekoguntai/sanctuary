@@ -1,10 +1,10 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { WalletType } from '../../../../types';
+import { act,renderHook,waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { useDeviceData } from '../../../../components/DeviceDetail/hooks/useDeviceData';
-import * as devicesApi from '../../../../src/api/devices';
-import * as authApi from '../../../../src/api/auth';
 import * as adminApi from '../../../../src/api/admin';
+import * as authApi from '../../../../src/api/auth';
+import * as devicesApi from '../../../../src/api/devices';
+import { WalletType } from '../../../../types';
 
 const useUserMock = vi.hoisted(() => vi.fn());
 const loggerSpies = vi.hoisted(() => ({

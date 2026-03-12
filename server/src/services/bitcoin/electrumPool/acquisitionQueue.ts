@@ -22,7 +22,7 @@ import type {
  */
 export function activateConnection(
   conn: PooledConnection,
-  purpose: string | undefined,
+  _purpose: string | undefined,
   startTime: number,
   network: NetworkType,
   stats: { totalAcquisitions: number; totalAcquisitionTimeMs: number },

@@ -6,12 +6,9 @@
  * derived after the initial classification).
  */
 
-import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import { correctMisclassifiedConsolidations, recalculateWalletBalances } from '../../utils/balanceCalculation';
 import type { SyncContext } from '../types';
-
-const log = createLogger('SYNC-CONSOLIDATIONS');
 
 /**
  * Execute fix consolidations phase

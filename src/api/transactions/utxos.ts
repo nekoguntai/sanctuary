@@ -26,7 +26,10 @@ export async function getUTXOs(
   walletId: string,
   params?: GetUTXOsParams
 ): Promise<GetUTXOsResponse> {
-  return apiClient.get<GetUTXOsResponse>(`/wallets/${walletId}/utxos`, params);
+  return apiClient.get<GetUTXOsResponse>(
+    `/wallets/${walletId}/utxos`,
+    params as Record<string, string | number | boolean | string[] | undefined | null> | undefined
+  );
 }
 
 /**

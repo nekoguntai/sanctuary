@@ -2,9 +2,9 @@
  * Trezor adapter and helper coverage tests
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import bs58check from 'bs58check';
 import * as bitcoin from 'bitcoinjs-lib';
+import bs58check from 'bs58check';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 
 const mockInit = vi.fn();
 const mockGetFeatures = vi.fn();
@@ -37,13 +37,13 @@ vi.mock('../../utils/logger', () => ({
 }));
 
 import {
-  TrezorAdapter,
-  buildTrezorMultisig,
-  convertToStandardXpub,
-  getAccountPathPrefix,
-  getTrezorScriptType,
-  isBip48MultisigPath,
-  validateSatoshiAmount,
+TrezorAdapter,
+buildTrezorMultisig,
+convertToStandardXpub,
+getAccountPathPrefix,
+getTrezorScriptType,
+isBip48MultisigPath,
+validateSatoshiAmount,
 } from '../../services/hardwareWallet/adapters/trezor';
 
 const originalWindow = globalThis.window;

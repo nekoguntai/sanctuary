@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient,QueryClientProvider } from '@tanstack/react-query';
+import { renderHook,waitFor } from '@testing-library/react';
 import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import {
-  useRecentTransactions,
-  usePendingTransactions,
-  useBalanceHistory,
+useBalanceHistory,
+usePendingTransactions,
+useRecentTransactions,
 } from '../../hooks/queries/useWallets';
 
 // Mock the API modules
@@ -352,8 +352,6 @@ describe('Hook reference stability for React re-renders', () => {
       },
       { wrapper }
     );
-
-    const initialRenderCount = renderCount;
 
     // Rerender multiple times
     rerender();

@@ -116,7 +116,7 @@ const getTimestamp = (): string => {
  */
 const safeStringify = (obj: any): string => {
   const seen = new WeakSet();
-  return JSON.stringify(obj, (key, value) => {
+  return JSON.stringify(obj, (_key, value) => {
     if (typeof value === 'object' && value !== null) {
       if (seen.has(value)) {
         return '[Circular]';
@@ -351,7 +351,6 @@ export interface Timer {
  */
 export function createTimer(operationName?: string, timerLogger?: Logger): Timer {
   const startTime = Date.now();
-  const hrStart = process.hrtime.bigint();
 
   const elapsed = (): number => {
     return Date.now() - startTime;

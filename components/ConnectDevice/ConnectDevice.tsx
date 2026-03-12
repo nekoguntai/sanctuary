@@ -125,9 +125,6 @@ export const ConnectDevice: React.FC = () => {
     ? getAvailableMethods(selectedModel.connectivity, isSecureContext())
     : [];
 
-  // Combined scanning state
-  const scanning = usbScanning || qrScanning || fileScanning;
-
   // Combined error
   const error = saveError || qrError || usbError || modelsError;
 

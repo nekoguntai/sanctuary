@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { X, UserPlus, AlertTriangle, Search, Send, Users } from 'lucide-react';
+import { X, UserPlus, AlertTriangle, Search, Send } from 'lucide-react';
 import { Button } from './ui/Button';
 import * as authApi from '../src/api/auth';
 import * as transfersApi from '../src/api/transfers';

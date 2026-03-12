@@ -4,7 +4,7 @@
  * Type definitions for the price provider registry architecture.
  */
 
-import type { IProvider, IProviderLifecycle } from '../../providers/types';
+import type { IProvider } from '../../providers/types';
 
 /**
  * Price data returned by providers

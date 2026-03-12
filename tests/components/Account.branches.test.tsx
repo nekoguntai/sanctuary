@@ -1,9 +1,8 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ApiError } from '../../src/api/client';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { Account } from '../../components/Account';
+import { ApiError } from '../../src/api/client';
 
 const mockState = vi.hoisted(() => ({
   user: {

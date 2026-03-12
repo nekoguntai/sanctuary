@@ -5,12 +5,12 @@
  */
 
 import {
-  CATEGORIES,
-  BACKGROUND_CATEGORIES,
-  BackgroundCategory,
-  getBackgroundsByCategory,
-  getCategoriesForBackground,
-  searchBackgrounds,
+BACKGROUND_CATEGORIES,
+BackgroundCategory,
+CATEGORIES,
+getBackgroundsByCategory,
+getCategoriesForBackground,
+searchBackgrounds,
 } from '../../themes/backgroundCategories';
 import type { BackgroundOption } from '../../types';
 
@@ -52,14 +52,14 @@ describe('Background Categories', () => {
 
   describe('BACKGROUND_CATEGORIES mapping', () => {
     it('should have categories for all backgrounds', () => {
-      Object.entries(BACKGROUND_CATEGORIES).forEach(([bgId, categories]) => {
+      Object.entries(BACKGROUND_CATEGORIES).forEach(([, categories]) => {
         expect(categories.length).toBeGreaterThan(0);
       });
     });
 
     it('should have valid category values', () => {
       const validCategories = CATEGORIES.map(c => c.id);
-      Object.entries(BACKGROUND_CATEGORIES).forEach(([bgId, categories]) => {
+      Object.entries(BACKGROUND_CATEGORIES).forEach(([, categories]) => {
         categories.forEach(cat => {
           expect(validCategories).toContain(cat);
         });
@@ -197,7 +197,7 @@ describe('Background Categories', () => {
 
   describe('Category Coverage', () => {
     it('should have no orphaned backgrounds (all should have at least one category)', () => {
-      Object.entries(BACKGROUND_CATEGORIES).forEach(([bgId, categories]) => {
+      Object.entries(BACKGROUND_CATEGORIES).forEach(([, categories]) => {
         expect(categories.length).toBeGreaterThan(0);
       });
     });

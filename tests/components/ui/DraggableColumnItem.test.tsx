@@ -1,7 +1,6 @@
-import React from 'react';
-import { afterEach, describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { afterEach,describe,expect,it,vi } from 'vitest';
 import { DraggableColumnItem } from '../../../components/ui/DraggableColumnItem';
 import type { TableColumnConfig } from '../../../types';
 

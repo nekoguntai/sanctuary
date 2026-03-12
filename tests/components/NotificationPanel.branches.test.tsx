@@ -1,8 +1,8 @@
+import { fireEvent,render,screen,waitFor,within } from '@testing-library/react';
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { NotificationPanel } from '../../components/NotificationPanel';
-import { AppNotificationProvider, useAppNotifications } from '../../contexts/AppNotificationContext';
+import { AppNotificationProvider,useAppNotifications } from '../../contexts/AppNotificationContext';
 
 const mockNavigate = vi.fn();
 

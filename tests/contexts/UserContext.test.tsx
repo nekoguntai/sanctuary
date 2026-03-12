@@ -4,21 +4,20 @@
  * Tests authentication, user management, and preference handling.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import {
-  UserProvider,
-  useUser,
-  useAuth,
-  useCurrentUser,
-  useUserPreferences,
-  useTwoFactor,
+useAuth,
+useCurrentUser,
+UserProvider,
+useTwoFactor,
+useUser,
+useUserPreferences,
 } from '../../contexts/UserContext';
 import * as authApi from '../../src/api/auth';
-import * as twoFactorApi from '../../src/api/twoFactor';
 import { ApiError } from '../../src/api/client';
+import * as twoFactorApi from '../../src/api/twoFactor';
 
 vi.mock('../../utils/logger', () => ({
   createLogger: () => ({
@@ -58,6 +57,7 @@ const mockUser = {
   username: 'testuser',
   email: 'test@example.com',
   isAdmin: false,
+  createdAt: '2024-01-01T00:00:00.000Z',
   preferences: {
     darkMode: true,
     unit: 'sats' as const,
@@ -66,6 +66,11 @@ const mockUser = {
     theme: 'sanctuary' as const,
     background: 'minimal' as const,
   },
+};
+
+const mockTwoFactorResponse = {
+  requires2FA: true as const,
+  tempToken: 'temp-token-123',
 };
 
 // Test component that exposes context values
@@ -169,7 +174,7 @@ describe('UserContext', () => {
   describe('Login', () => {
     it('logs in successfully', async () => {
       const user = userEvent.setup();
-      vi.mocked(authApi.login).mockResolvedValue({ user: mockUser });
+      vi.mocked(authApi.login).mockResolvedValue({ token: 'token-123', user: mockUser });
       vi.mocked(authApi.requires2FA).mockReturnValue(false);
 
       render(<UserProvider><TestConsumer /></UserProvider>);
@@ -224,7 +229,7 @@ describe('UserContext', () => {
 
     it('triggers 2FA flow when required', async () => {
       const user = userEvent.setup();
-      vi.mocked(authApi.login).mockResolvedValue({ tempToken: 'temp-token-123' });
+      vi.mocked(authApi.login).mockResolvedValue(mockTwoFactorResponse);
       vi.mocked(authApi.requires2FA).mockReturnValue(true);
 
       render(<UserProvider><TestConsumer /></UserProvider>);
@@ -247,7 +252,7 @@ describe('UserContext', () => {
       const user = userEvent.setup();
 
       // First trigger 2FA
-      vi.mocked(authApi.login).mockResolvedValue({ tempToken: 'temp-token-123' });
+      vi.mocked(authApi.login).mockResolvedValue(mockTwoFactorResponse);
       vi.mocked(authApi.requires2FA).mockReturnValue(true);
 
       render(<UserProvider><TestConsumer /></UserProvider>);
@@ -263,7 +268,7 @@ describe('UserContext', () => {
       });
 
       // Now verify 2FA
-      vi.mocked(twoFactorApi.verify2FA).mockResolvedValue({ user: mockUser });
+      vi.mocked(twoFactorApi.verify2FA).mockResolvedValue({ token: 'token-123', user: mockUser });
 
       await user.click(screen.getByTestId('verify-2fa'));
 
@@ -277,7 +282,7 @@ describe('UserContext', () => {
     it('handles 2FA verification failure', async () => {
       const user = userEvent.setup();
 
-      vi.mocked(authApi.login).mockResolvedValue({ tempToken: 'temp-token-123' });
+      vi.mocked(authApi.login).mockResolvedValue(mockTwoFactorResponse);
       vi.mocked(authApi.requires2FA).mockReturnValue(true);
 
       render(<UserProvider><TestConsumer /></UserProvider>);
@@ -305,7 +310,7 @@ describe('UserContext', () => {
     it('uses fallback message when 2FA verification throws non-ApiError', async () => {
       const user = userEvent.setup();
 
-      vi.mocked(authApi.login).mockResolvedValue({ tempToken: 'temp-token-123' });
+      vi.mocked(authApi.login).mockResolvedValue(mockTwoFactorResponse);
       vi.mocked(authApi.requires2FA).mockReturnValue(true);
 
       render(<UserProvider><TestConsumer /></UserProvider>);
@@ -331,7 +336,7 @@ describe('UserContext', () => {
     it('cancels 2FA flow', async () => {
       const user = userEvent.setup();
 
-      vi.mocked(authApi.login).mockResolvedValue({ tempToken: 'temp-token-123' });
+      vi.mocked(authApi.login).mockResolvedValue(mockTwoFactorResponse);
       vi.mocked(authApi.requires2FA).mockReturnValue(true);
 
       render(<UserProvider><TestConsumer /></UserProvider>);
@@ -371,7 +376,7 @@ describe('UserContext', () => {
   describe('Registration', () => {
     it('registers successfully', async () => {
       const user = userEvent.setup();
-      vi.mocked(authApi.register).mockResolvedValue({ user: mockUser });
+      vi.mocked(authApi.register).mockResolvedValue({ token: 'token-123', user: mockUser });
 
       render(<UserProvider><TestConsumer /></UserProvider>);
 
@@ -425,7 +430,7 @@ describe('UserContext', () => {
   describe('Logout', () => {
     it('logs out user', async () => {
       const user = userEvent.setup();
-      vi.mocked(authApi.login).mockResolvedValue({ user: mockUser });
+      vi.mocked(authApi.login).mockResolvedValue({ token: 'token-123', user: mockUser });
       vi.mocked(authApi.requires2FA).mockReturnValue(false);
 
       render(<UserProvider><TestConsumer /></UserProvider>);
@@ -453,7 +458,7 @@ describe('UserContext', () => {
   describe('Preferences', () => {
     it('updates preferences optimistically', async () => {
       const user = userEvent.setup();
-      vi.mocked(authApi.login).mockResolvedValue({ user: mockUser });
+      vi.mocked(authApi.login).mockResolvedValue({ token: 'token-123', user: mockUser });
       vi.mocked(authApi.requires2FA).mockReturnValue(false);
       vi.mocked(authApi.updatePreferences).mockResolvedValue({
         ...mockUser,
@@ -499,7 +504,7 @@ describe('UserContext', () => {
 
     it('reverts optimistic preference update and uses ApiError message on failure', async () => {
       const user = userEvent.setup();
-      vi.mocked(authApi.login).mockResolvedValue({ user: mockUser });
+      vi.mocked(authApi.login).mockResolvedValue({ token: 'token-123', user: mockUser });
       vi.mocked(authApi.requires2FA).mockReturnValue(false);
       vi.mocked(authApi.updatePreferences).mockRejectedValue(new ApiError('Preference save failed', 500));
 
@@ -524,7 +529,7 @@ describe('UserContext', () => {
 
     it('uses fallback preference update error for non-ApiError failures', async () => {
       const user = userEvent.setup();
-      vi.mocked(authApi.login).mockResolvedValue({ user: mockUser });
+      vi.mocked(authApi.login).mockResolvedValue({ token: 'token-123', user: mockUser });
       vi.mocked(authApi.requires2FA).mockReturnValue(false);
       vi.mocked(authApi.updatePreferences).mockRejectedValue(new Error('network down'));
 
@@ -592,7 +597,7 @@ describe('UserContext', () => {
       const user = userEvent.setup();
 
       const TestAuth = () => {
-        const { isAuthenticated, isLoading, error, login, logout, register, clearError } = useAuth();
+        const { isAuthenticated, isLoading, login } = useAuth();
         return (
           <div>
             <span data-testid="auth">{isAuthenticated.toString()}</span>
@@ -602,7 +607,7 @@ describe('UserContext', () => {
         );
       };
 
-      vi.mocked(authApi.login).mockResolvedValue({ user: mockUser });
+      vi.mocked(authApi.login).mockResolvedValue({ token: 'token-123', user: mockUser });
       vi.mocked(authApi.requires2FA).mockReturnValue(false);
 
       render(<UserProvider><TestAuth /></UserProvider>);
@@ -660,10 +665,8 @@ describe('UserContext', () => {
     });
 
     it('useTwoFactor returns 2FA state', async () => {
-      const user = userEvent.setup();
-
       const Test2FA = () => {
-        const { twoFactorPending, verify2FA, cancel2FA } = useTwoFactor();
+        const { twoFactorPending, cancel2FA } = useTwoFactor();
         return (
           <div>
             <span data-testid="pending">{twoFactorPending ? 'yes' : 'no'}</span>

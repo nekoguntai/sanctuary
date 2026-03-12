@@ -8,7 +8,7 @@
 import { getConfig } from '../../config';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
-import type { SyncJob, SyncState, SyncResult } from './types';
+import type { SyncState, SyncResult } from './types';
 import { MAX_QUEUE_SIZE } from './types';
 
 const log = createLogger('SYNC:QUEUE');

@@ -5,7 +5,7 @@
  * 2FA handling, token management, and user profile functions.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock the API client
 const mockGet = vi.fn();
@@ -24,22 +24,22 @@ vi.mock('../../src/api/client', () => ({
   },
 }));
 
+import type { AuthResponse,TwoFactorRequiredResponse } from '../../src/api/auth';
 import {
-  register,
-  login,
-  logout,
-  getCurrentUser,
-  updatePreferences,
-  isAuthenticated,
-  changePassword,
-  getUserGroups,
-  searchUsers,
-  getRegistrationStatus,
-  fetchTelegramChatId,
-  testTelegramConfig,
-  requires2FA,
+changePassword,
+fetchTelegramChatId,
+getCurrentUser,
+getRegistrationStatus,
+getUserGroups,
+isAuthenticated,
+login,
+logout,
+register,
+requires2FA,
+searchUsers,
+testTelegramConfig,
+updatePreferences,
 } from '../../src/api/auth';
-import type { LoginResponse, AuthResponse, TwoFactorRequiredResponse } from '../../src/api/auth';
 
 describe('Auth API', () => {
   beforeEach(() => {

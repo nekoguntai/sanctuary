@@ -4,7 +4,7 @@
  * Tests for the Quorum helper functions and other type utilities.
  */
 
-import { getQuorumM, getQuorumN, Quorum } from '../types';
+import { getQuorumM,getQuorumN,Quorum } from '../types';
 
 describe('Quorum Helper Functions', () => {
   describe('getQuorumM', () => {
@@ -106,7 +106,7 @@ describe('Quorum Helper Functions', () => {
         { m: 5, n: 7, name: '5-of-7 multisig' },
       ];
 
-      configs.forEach(({ m, n, name }) => {
+      configs.forEach(({ m, n }) => {
         const quorum: Quorum = { m, n };
         expect(getQuorumM(quorum)).toBe(m);
         expect(getQuorumN(quorum)).toBe(n);

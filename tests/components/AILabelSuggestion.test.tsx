@@ -5,10 +5,8 @@
  * Covers rendering states, user interactions, and error handling.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import React from 'react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock the AI API
 const mockSuggestLabel = vi.fn();
@@ -396,7 +394,7 @@ describe('AILabelSuggestion', () => {
 
   describe('Multiple Requests', () => {
     it('should handle rapid clicks gracefully', async () => {
-      let resolvePromise: ((value: { suggestion: string }) => void) | null = null;
+      let resolvePromise!: (value: { suggestion: string }) => void;
       mockSuggestLabel.mockImplementation(
         () => new Promise(resolve => { resolvePromise = resolve; })
       );
@@ -414,9 +412,7 @@ describe('AILabelSuggestion', () => {
       expect(mockSuggestLabel).toHaveBeenCalledTimes(1);
 
       // Resolve the promise
-      if (resolvePromise) {
-        resolvePromise({ suggestion: 'Test' });
-      }
+      resolvePromise({ suggestion: 'Test' });
 
       await waitFor(() => {
         expect(screen.getByText('Test')).toBeInTheDocument();

@@ -22,7 +22,7 @@ const log = createLogger('ADMIN:NODECONFIG');
  * GET /api/v1/admin/node-config
  * Get the global node configuration (admin only)
  */
-router.get('/node-config', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.get('/node-config', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
     // Get the default node config with servers
     const nodeConfig = await prisma.nodeConfig.findFirst({

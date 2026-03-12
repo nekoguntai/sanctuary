@@ -1,7 +1,6 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { UsersGroups } from '../../components/UsersGroups';
 import * as adminApi from '../../src/api/admin';
 
@@ -203,10 +202,10 @@ describe('UsersGroups branch coverage', () => {
     vi.mocked(adminApi.getGroups).mockResolvedValue(groups as any);
     vi.mocked(adminApi.createUser).mockResolvedValue({ id: 'created-user' } as any);
     vi.mocked(adminApi.updateUser).mockResolvedValue({} as any);
-    vi.mocked(adminApi.deleteUser).mockResolvedValue(undefined);
+    vi.mocked(adminApi.deleteUser).mockResolvedValue({ message: 'Deleted' } as any);
     vi.mocked(adminApi.createGroup).mockResolvedValue({ id: 'created-group' } as any);
     vi.mocked(adminApi.updateGroup).mockResolvedValue({} as any);
-    vi.mocked(adminApi.deleteGroup).mockResolvedValue(undefined);
+    vi.mocked(adminApi.deleteGroup).mockResolvedValue({ message: 'Deleted' } as any);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 

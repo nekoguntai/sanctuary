@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe,expect,it } from 'vitest';
+import { getPatternIds,getThemeIds,initializeThemes,themeRegistry } from '../../themes';
 import type { ThemeDefinition } from '../../themes/types';
-import { getPatternIds, getThemeIds, initializeThemes, themeRegistry } from '../../themes';
 
 function ensureSeedTheme(): void {
   if (themeRegistry.getAll().length > 0) return;

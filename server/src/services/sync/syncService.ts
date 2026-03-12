@@ -411,11 +411,11 @@ class SyncService {
     return doReleaseSubscriptionLock(this.state);
   }
 
-  private async acquireSyncLock(walletId: string): Promise<boolean> {
+  public async acquireSyncLock(walletId: string): Promise<boolean> {
     return doAcquireSyncLock(this.state, walletId);
   }
 
-  private async subscribeAllWalletAddresses(): Promise<void> {
+  public async subscribeAllWalletAddresses(): Promise<void> {
     return doSubscribeAllWalletAddresses(this.state);
   }
 
@@ -423,11 +423,11 @@ class SyncService {
     return doReconcileAddressToWalletMap(this.state);
   }
 
-  private async handleNewBlock(block: { height: number; hex: string }): Promise<void> {
+  public async handleNewBlock(block: { height: number; hex: string }): Promise<void> {
     return doHandleNewBlock(this.state, block, () => this.updateAllConfirmations());
   }
 
-  private async handleAddressActivity(activity: { scriptHash: string; address?: string; status: string }): Promise<void> {
+  public async handleAddressActivity(activity: { scriptHash: string; address?: string; status: string }): Promise<void> {
     return doHandleAddressActivity(
       this.state,
       activity,
@@ -435,7 +435,7 @@ class SyncService {
     );
   }
 
-  private startSubscriptionLockRefresh(): void {
+  public startSubscriptionLockRefresh(): void {
     doStartSubscriptionLockRefresh(
       this.state,
       () => this.updateAllConfirmations(),
@@ -443,7 +443,7 @@ class SyncService {
     );
   }
 
-  private stopSubscriptionLockRefresh(): void {
+  public stopSubscriptionLockRefresh(): void {
     doStopSubscriptionLockRefresh(this.state);
   }
 

@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
-import React from 'react';
+import { act,fireEvent,render,screen } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
-import { OutputRow, OutputRowProps } from '../../../components/send/OutputRow';
-import type { OutputEntry, WalletAddress } from '../../../contexts/send/types';
+import { OutputRow,OutputRowProps } from '../../../components/send/OutputRow';
+import type { OutputEntry,WalletAddress } from '../../../contexts/send/types';
 
 // Mock the CurrencyContext for FiatDisplaySubtle
 vi.mock('../../../contexts/CurrencyContext', () => ({

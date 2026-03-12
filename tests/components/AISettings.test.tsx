@@ -5,10 +5,9 @@
  * Covers toggle, detection, model selection, model pull, and configuration.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock admin API
 const mockGetSystemSettings = vi.fn();
@@ -74,15 +73,22 @@ const mockPopularModels = {
 // Mock global fetch for popular models
 const originalFetch = global.fetch;
 beforeEach(() => {
-  global.fetch = vi.fn((url: string) => {
+  global.fetch = vi.fn((input: RequestInfo | URL) => {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
     if (url.includes('popular-models.json')) {
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve(mockPopularModels),
       } as Response);
     }
-    return originalFetch(url);
-  });
+    return originalFetch(input as any);
+  }) as typeof fetch;
 });
 
 afterEach(() => {

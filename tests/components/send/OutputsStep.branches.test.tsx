@@ -1,12 +1,11 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act,render,screen,waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { OutputsStep } from '../../../components/send/steps/OutputsStep';
-import * as SendContext from '../../../contexts/send';
 import * as CurrencyContext from '../../../contexts/CurrencyContext';
+import * as SendContext from '../../../contexts/send';
+import * as txApi from '../../../src/api/transactions';
 import * as bip21 from '../../../utils/bip21Parser';
 import * as validate from '../../../utils/validateAddress';
-import * as txApi from '../../../src/api/transactions';
 
 const capture = vi.hoisted(() => ({
   outputRows: [] as any[],

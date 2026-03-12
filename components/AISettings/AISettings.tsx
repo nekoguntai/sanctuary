@@ -47,9 +47,7 @@ export default function AISettings() {
   const container = useContainerLifecycle({
     aiEnabled: settings.aiEnabled,
     setAiEnabled: settings.setAiEnabled,
-    aiEndpoint: settings.aiEndpoint,
     setAiEndpoint: settings.setAiEndpoint,
-    aiModel: settings.aiModel,
     setAiModel: settings.setAiModel,
     containerStatus: settings.containerStatus,
     setContainerStatus: settings.setContainerStatus,

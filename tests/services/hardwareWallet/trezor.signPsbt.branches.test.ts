@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as bitcoin from 'bitcoinjs-lib';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { signPsbtWithTrezor } from '../../../services/hardwareWallet/adapters/trezor/signPsbt';
 
 const {
@@ -310,6 +310,7 @@ describe('signPsbtWithTrezor branch coverage', () => {
       {
         psbt: psbt.toBase64(),
         accountPath: 'm/84h/0h/0h',
+        inputPaths: [],
       },
       { fingerprint: undefined } as any
     );
@@ -328,6 +329,7 @@ describe('signPsbtWithTrezor branch coverage', () => {
       {
         psbt: psbt.toBase64(),
         accountPath: "m/84'/2'/0'",
+        inputPaths: [],
       },
       { fingerprint: undefined } as any
     );
@@ -345,6 +347,7 @@ describe('signPsbtWithTrezor branch coverage', () => {
     await signPsbtWithTrezor(
       {
         psbt: mainnet.psbt.toBase64(),
+        inputPaths: [],
       },
       { fingerprint: 'deadbeef' } as any
     );
@@ -360,6 +363,7 @@ describe('signPsbtWithTrezor branch coverage', () => {
     await signPsbtWithTrezor(
       {
         psbt: testnet.psbt.toBase64(),
+        inputPaths: [],
       },
       { fingerprint: 'deadbeef' } as any
     );
@@ -452,7 +456,8 @@ describe('signPsbtWithTrezor branch coverage', () => {
     await signPsbtWithTrezor(
       {
         psbt: psbt.toBase64(),
-      },
+        inputPaths: [],
+},
       { fingerprint: 'deadbeef' } as any
     );
 
@@ -610,6 +615,7 @@ describe('signPsbtWithTrezor branch coverage', () => {
       {
         psbt: psbt.toBase64(),
         accountPath: "m/86'/0'/0'",
+        inputPaths: [],
       },
       { fingerprint: 'deadbeef' } as any
     );
@@ -635,7 +641,8 @@ describe('signPsbtWithTrezor branch coverage', () => {
     await signPsbtWithTrezor(
       {
         psbt: psbt.toBase64(),
-      },
+        inputPaths: [],
+},
       { fingerprint: 'deadbeef' } as any
     );
 
@@ -662,7 +669,8 @@ describe('signPsbtWithTrezor branch coverage', () => {
     await signPsbtWithTrezor(
       {
         psbt: psbt.toBase64(),
-      },
+        inputPaths: [],
+},
       { fingerprint: 'deadbeef' } as any
     );
 
@@ -767,7 +775,8 @@ describe('signPsbtWithTrezor branch coverage', () => {
     await signPsbtWithTrezor(
       {
         psbt: psbt.toBase64(),
-      },
+        inputPaths: [],
+},
       { fingerprint: 'deadbeef' } as any
     );
 
@@ -802,7 +811,8 @@ describe('signPsbtWithTrezor branch coverage', () => {
     const response = await signPsbtWithTrezor(
       {
         psbt: psbt.toBase64(),
-      },
+        inputPaths: [],
+},
       { fingerprint: 'deadbeef' } as any
     );
 
@@ -824,7 +834,8 @@ describe('signPsbtWithTrezor branch coverage', () => {
     const response = await signPsbtWithTrezor(
       {
         psbt: psbt.toBase64(),
-      },
+        inputPaths: [],
+},
       { fingerprint: 'deadbeef' } as any
     );
 
@@ -895,7 +906,8 @@ describe('signPsbtWithTrezor branch coverage', () => {
     await signPsbtWithTrezor(
       {
         psbt: psbt.toBase64(),
-      },
+        inputPaths: [],
+},
       { fingerprint: undefined } as any
     );
 

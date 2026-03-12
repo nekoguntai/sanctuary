@@ -4,12 +4,9 @@
  * Health check and availability functions for the AI service.
  */
 
-import { createLogger } from '../../utils/logger';
 import { getAIConfig, syncConfigToContainer, getContainerUrl } from './config';
 import { validateResponse } from './validation';
 import type { AIHealthResponse } from './types';
-
-const log = createLogger('AI');
 
 const AI_CONTAINER_URL = getContainerUrl();
 

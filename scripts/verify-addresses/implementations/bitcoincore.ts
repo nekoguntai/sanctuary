@@ -132,7 +132,7 @@ export const bitcoinCore: AddressDeriver = {
     index: number,
     scriptType: ScriptType,
     change: boolean,
-    network: Network
+    _network: Network
   ): Promise<string> {
     // Build descriptor
     const rawDescriptor = buildSingleSigDescriptor(xpub, index, scriptType, change);

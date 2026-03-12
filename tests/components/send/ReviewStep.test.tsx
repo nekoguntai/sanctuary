@@ -2,12 +2,12 @@
  * Tests for ReviewStep component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { ReviewStep } from '../../../components/send/steps/ReviewStep';
-import * as SendContext from '../../../contexts/send';
 import * as CurrencyContext from '../../../contexts/CurrencyContext';
+import * as SendContext from '../../../contexts/send';
 
 vi.mock('../../../utils/logger', () => ({
   createLogger: () => ({
@@ -601,8 +601,8 @@ describe('ReviewStep', () => {
   });
 
   describe('Error handling', () => {
-    it('can render with error prop', () => {
-      render(<ReviewStep error="Something went wrong" />);
+    it('can render without optional callbacks', () => {
+      render(<ReviewStep />);
 
       // Component should still render
       expect(screen.getByText('Review Transaction')).toBeInTheDocument();

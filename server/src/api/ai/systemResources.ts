@@ -95,7 +95,7 @@ export function createSystemResourcesRouter(): Router {
    * Returns RAM, disk space, and GPU availability with sufficiency indicators.
    * Used by the frontend to show a confirmation dialog before enabling AI.
    */
-  router.get('/system-resources', authenticate, async (req: Request, res: Response) => {
+  router.get('/system-resources', authenticate, async (_req: Request, res: Response) => {
     try {
       // Get RAM info
       const totalRamMB = Math.round(os.totalmem() / (1024 * 1024));

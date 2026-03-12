@@ -41,7 +41,6 @@ export const DraftList: React.FC<DraftListProps> = ({
 
   const [drafts, setDrafts] = useState<DraftTransaction[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
 
   // Loading states using hook
@@ -205,7 +204,6 @@ export const DraftList: React.FC<DraftListProps> = ({
     if (result !== null) {
       // Reload drafts to get updated data
       await loadDrafts();
-      setUploadingFor(null);
     }
   };
 

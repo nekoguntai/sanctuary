@@ -1,6 +1,6 @@
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import App from '../App';
 
 const {
@@ -231,10 +231,7 @@ describe('App branch coverage', () => {
     render(<App />);
 
     expect(await screen.findByText('Dashboard Page')).toBeInTheDocument();
-    const bg = await screen.findByTestId('animated-background');
-    expect(bg.getAttribute('data-pattern')).toBe('minimal');
-    expect(bg.getAttribute('data-opacity')).toBe('50');
-    expect(bg.getAttribute('data-dark-mode')).toBe('false');
+    expect(screen.queryByTestId('animated-background')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('toggle-theme'));
     expect(updatePreferences).toHaveBeenCalledWith({ darkMode: true });

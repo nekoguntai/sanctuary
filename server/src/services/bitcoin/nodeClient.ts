@@ -7,7 +7,6 @@
 
 import { ElectrumClient, getElectrumClientForNetwork, resetElectrumClient } from './electrum';
 import {
-  initializeElectrumPool,
   resetElectrumPool,
   getElectrumPool,
   getElectrumPoolForNetwork,

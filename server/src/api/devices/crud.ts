@@ -10,7 +10,6 @@ import { db as prisma } from '../../repositories/db';
 import { getUserAccessibleDevices } from '../../services/deviceAccess';
 import { createLogger } from '../../utils/logger';
 import {
-  type DeviceAccountInput,
   compareAccounts,
   normalizeIncomingAccounts,
 } from './accountConflicts';

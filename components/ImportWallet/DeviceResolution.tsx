@@ -139,7 +139,7 @@ export const DeviceResolutionStep: React.FC<DeviceResolutionProps> = ({
                 <RefreshCw className="w-3 h-3" />
                 Will reuse existing devices:
               </p>
-              {devicesToReuse.map((device, i) => (
+              {devicesToReuse.map((device) => (
                 <DeviceCard
                   key={device.fingerprint}
                   device={device}
@@ -155,7 +155,7 @@ export const DeviceResolutionStep: React.FC<DeviceResolutionProps> = ({
                 <PlusCircle className="w-3 h-3" />
                 Will create new devices:
               </p>
-              {devicesToCreate.map((device, i) => (
+              {devicesToCreate.map((device) => (
                 <DeviceCard
                   key={device.fingerprint}
                   device={device}

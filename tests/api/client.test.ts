@@ -5,7 +5,7 @@
  * retry with exponential backoff, auth token management, and error handling.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock logger before importing
 vi.mock('../../utils/logger', () => ({
@@ -28,7 +28,7 @@ vi.stubGlobal('import', { meta: { env: {} } });
 
 // We need to test the module's internals, so we import after mocks
 // but the module uses import.meta.env at top level. We'll test via the default export.
-import apiClient, { ApiError } from '../../src/api/client';
+import apiClient,{ ApiError } from '../../src/api/client';
 
 describe('API Client', () => {
   const mockFetch = vi.fn();

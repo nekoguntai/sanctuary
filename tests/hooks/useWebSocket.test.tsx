@@ -5,8 +5,8 @@
  * Covers connection lifecycle, authentication, subscription management, and event handling.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { act,renderHook,waitFor } from '@testing-library/react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Store connection change callbacks for testing
 let connectionChangeCallbacks: Set<(connected: boolean) => void> = new Set();
@@ -85,12 +85,12 @@ const flushPromises = () => new Promise<void>(resolve => queueMicrotask(resolve)
 
 // Import hooks after mocks
 import {
-  useWebSocket,
-  useWebSocketEvent,
-  useWalletEvents,
-  useWalletLogs,
-  useModelDownloadProgress,
-  useWebSocketQueryInvalidation,
+useModelDownloadProgress,
+useWalletEvents,
+useWalletLogs,
+useWebSocket,
+useWebSocketEvent,
+useWebSocketQueryInvalidation,
 } from '../../hooks/useWebSocket';
 
 describe('useWebSocket', () => {

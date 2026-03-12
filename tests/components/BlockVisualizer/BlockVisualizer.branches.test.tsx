@@ -1,7 +1,6 @@
-import React from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act,render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import type { BlockData } from '../../../components/BlockVisualizer/types';
 import type { PendingTransaction } from '../../../src/types';
 
@@ -11,8 +10,8 @@ const {
   getStuckTxsMock,
 } = vi.hoisted(() => ({
   parseFeeRangeMock: vi.fn(() => [10, 20]),
-  getTxsForBlockMock: vi.fn(() => []),
-  getStuckTxsMock: vi.fn(() => []),
+  getTxsForBlockMock: vi.fn<() => PendingTransaction[]>(() => []),
+  getStuckTxsMock: vi.fn<() => PendingTransaction[]>(() => []),
 }));
 
 vi.mock('../../../components/BlockVisualizer/blockUtils', () => ({

@@ -4,7 +4,7 @@
  * Shared types for the ConnectDevice component and its subcomponents.
  */
 
-import { HardwareDeviceModel, DeviceAccountInput, DeviceConflictResponse } from '../../src/api/devices';
+import { HardwareDeviceModel, DeviceConflictResponse } from '../../src/api/devices';
 import { DeviceAccount } from '../../services/deviceParsers';
 
 export type ConnectionMethod = 'usb' | 'sd_card' | 'qr_code' | 'manual';

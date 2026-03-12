@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { formatApiTransaction, formatApiUtxo } from '../../../components/WalletDetail/mappers';
+import { describe,expect,it,vi } from 'vitest';
+import { formatApiTransaction,formatApiUtxo } from '../../../components/WalletDetail/mappers';
 
 describe('WalletDetail mappers', () => {
   describe('formatApiTransaction', () => {
@@ -28,7 +28,7 @@ describe('WalletDetail mappers', () => {
       expect(tx.amount).toBe(15000);
       expect(tx.balanceAfter).toBe(25000);
       expect(tx.timestamp).toBe(new Date('2025-01-01T00:00:00.000Z').getTime());
-      expect(tx.confirmed).toBe(true);
+      expect(tx.confirmations).toBe(3);
       expect(tx.fee).toBe(120);
       expect(tx.label).toBe('Salary');
       expect(tx.labels).toEqual(['income']);
@@ -64,7 +64,7 @@ describe('WalletDetail mappers', () => {
 
       expect(tx.balanceAfter).toBeUndefined();
       expect(tx.timestamp).toBe(1700000000000);
-      expect(tx.confirmed).toBe(false);
+      expect(tx.confirmations).toBe(0);
       expect(tx.fee).toBe(0);
       expect(tx.label).toBe('Memo fallback');
       expect(tx.labels).toEqual([]);

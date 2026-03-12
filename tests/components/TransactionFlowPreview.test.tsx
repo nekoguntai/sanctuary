@@ -1,9 +1,8 @@
-import React from 'react';
-import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { TransactionFlowPreview } from '../../components/TransactionFlowPreview';
 
-const mockFormatFiat = vi.hoisted(() => vi.fn((sats: number) => `$${(sats / 100000).toFixed(2)}`));
+const mockFormatFiat = vi.hoisted(() => vi.fn((sats: number): string | null => `$${(sats / 100000).toFixed(2)}`));
 
 vi.mock('../../contexts/CurrencyContext', () => ({
   useCurrency: () => ({

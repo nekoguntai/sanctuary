@@ -1,18 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, renderHook, waitFor } from '@testing-library/react';
-import React, { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient,QueryClientProvider } from '@tanstack/react-query';
+import { act,renderHook,waitFor } from '@testing-library/react';
+import { ReactNode } from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import {
-  useWallets,
-  useCreateWallet,
-  useImportWallet,
-  useUpdateWallet,
-  useRecentTransactions,
-  usePendingTransactions,
-  useInvalidateAllWallets,
-  useUpdateWalletSyncStatus,
-  useBalanceHistory,
-  walletKeys,
+useBalanceHistory,
+useCreateWallet,
+useImportWallet,
+useInvalidateAllWallets,
+usePendingTransactions,
+useRecentTransactions,
+useUpdateWallet,
+useUpdateWalletSyncStatus,
+useWallets,
+walletKeys,
 } from '../../../hooks/queries/useWallets';
 
 vi.mock('../../../src/api/wallets', () => ({
@@ -28,8 +28,8 @@ vi.mock('../../../src/api/transactions', () => ({
   getBalanceHistory: vi.fn(),
 }));
 
-import * as walletsApi from '../../../src/api/wallets';
 import * as transactionsApi from '../../../src/api/transactions';
+import * as walletsApi from '../../../src/api/wallets';
 
 const mockGetWallets = vi.mocked(walletsApi.getWallets);
 const mockCreateWallet = vi.mocked(walletsApi.createWallet);

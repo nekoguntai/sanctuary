@@ -1,12 +1,12 @@
-import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act,render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
+import { describe,expect,it,vi } from 'vitest';
+import { ContainerControls } from '../../components/AISettings/components/ContainerControls';
 import { EnableModal } from '../../components/AISettings/components/EnableModal';
 import { ModelsTab } from '../../components/AISettings/tabs/ModelsTab';
 import { SettingsTab } from '../../components/AISettings/tabs/SettingsTab';
 import { StatusTab } from '../../components/AISettings/tabs/StatusTab';
-import { ContainerControls } from '../../components/AISettings/components/ContainerControls';
 
 describe('EnableModal', () => {
   const baseProps = {

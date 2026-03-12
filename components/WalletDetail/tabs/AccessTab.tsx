@@ -9,7 +9,6 @@
 
 import React from 'react';
 import { Users, Send, X } from 'lucide-react';
-import { Button } from '../../ui/Button';
 import { PendingTransfersPanel } from '../../PendingTransfersPanel';
 import type { User } from '../../../types';
 import type { WalletShareInfo } from '../../../src/api/wallets';

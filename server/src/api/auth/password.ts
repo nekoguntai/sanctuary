@@ -18,7 +18,7 @@ const log = createLogger('AUTH:PASSWORD');
  * Check if user is still using the initial generated password
  * by comparing against the marker stored during first setup
  */
-export async function isUsingInitialPassword(userId: string, password: string): Promise<boolean> {
+export async function isUsingInitialPassword(userId: string): Promise<boolean> {
   try {
     // Check if the user's password matches the initial generated password hash
     // stored in system settings during first setup

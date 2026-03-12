@@ -1,9 +1,8 @@
-import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent,render,screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 import { Block } from '../../../components/BlockVisualizer/Block';
-import type { PendingTransaction } from '../../../src/types';
 import type { BlockData } from '../../../components/BlockVisualizer/types';
+import type { PendingTransaction } from '../../../src/types';
 
 vi.mock('lucide-react', () => ({
   Clock: () => <span data-testid="clock-icon" />,

@@ -5,9 +5,8 @@
  * network connections, and proxy/Tor settings.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import React from 'react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { NodeConfig } from '../../components/NodeConfig';
 import * as adminApi from '../../src/api/admin';
 import * as bitcoinApi from '../../src/api/bitcoin';
@@ -395,7 +394,7 @@ describe('NodeConfig', () => {
 
   describe('saving configuration', () => {
     it('calls updateNodeConfig when Save clicked', async () => {
-      vi.mocked(adminApi.updateNodeConfig).mockResolvedValue(undefined);
+      vi.mocked(adminApi.updateNodeConfig).mockResolvedValue(mockNodeConfig as any);
 
       render(<NodeConfig />);
 
@@ -411,7 +410,7 @@ describe('NodeConfig', () => {
     });
 
     it('shows success message after save', async () => {
-      vi.mocked(adminApi.updateNodeConfig).mockResolvedValue(undefined);
+      vi.mocked(adminApi.updateNodeConfig).mockResolvedValue(mockNodeConfig as any);
 
       render(<NodeConfig />);
 

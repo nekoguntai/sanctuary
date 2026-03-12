@@ -1,7 +1,6 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { QRSigningModal } from '../../../components/qr/QRSigningModal';
 
 vi.mock('lucide-react', () => ({
@@ -51,19 +50,31 @@ vi.mock('../../../utils/logger', () => ({
   }),
 }));
 
-const mockCreateDecoder = vi.fn(() => ({
-  isComplete: () => true,
-  isSuccess: () => true,
+const {
+  mockCreateDecoder,
+  mockFeedDecoderPart,
+  mockGetDecodedPsbt,
+  mockIsUrFormat,
+} = vi.hoisted(() => ({
+  mockCreateDecoder: vi.fn(() => ({
+    isComplete: () => true,
+    isSuccess: () => true,
+  })),
+  mockFeedDecoderPart: vi.fn(
+    (_decoder?: unknown, _part?: string): { complete: boolean; progress: number; error?: string } => ({
+      complete: true,
+      progress: 100,
+    })
+  ),
+  mockGetDecodedPsbt: vi.fn((_decoder?: unknown) => 'signed-psbt'),
+  mockIsUrFormat: vi.fn((_content: string) => true),
 }));
-const mockFeedDecoderPart = vi.fn(() => ({ complete: true, progress: 100 }));
-const mockGetDecodedPsbt = vi.fn(() => 'signed-psbt');
-const mockIsUrFormat = vi.fn(() => true);
 
 vi.mock('../../../utils/urPsbt', () => ({
-  createPsbtDecoder: () => mockCreateDecoder(),
-  feedDecoderPart: (...args: unknown[]) => mockFeedDecoderPart(...args),
-  getDecodedPsbt: () => mockGetDecodedPsbt(),
-  isUrFormat: (content: string) => mockIsUrFormat(content),
+  createPsbtDecoder: mockCreateDecoder,
+  feedDecoderPart: mockFeedDecoderPart,
+  getDecodedPsbt: mockGetDecodedPsbt,
+  isUrFormat: mockIsUrFormat,
 }));
 
 function renderModal(onClose = vi.fn(), onSignedPsbt = vi.fn()) {

@@ -9,7 +9,6 @@
  * Extracted from SendTransaction.tsx for maintainability.
  */
 
-import React from 'react';
 import { BlockVisualizer } from '../BlockVisualizer';
 import type { FeeEstimate } from '../../types';
 import type { BlockData, QueuedBlocksSummary } from '../../src/api/bitcoin';

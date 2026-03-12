@@ -1,6 +1,5 @@
-import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent,render,screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 import { UtxoRow } from '../../../components/send/steps/OutputsStep/UtxoRow';
 
 vi.mock('../../../utils/utxoAge', () => ({

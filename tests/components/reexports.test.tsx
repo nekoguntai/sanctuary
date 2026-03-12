@@ -1,6 +1,5 @@
-import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { render,screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 
 vi.mock('../../components/ConnectDevice/index', () => ({
   ConnectDevice: () => <div>Mock ConnectDevice</div>,
@@ -20,7 +19,7 @@ describe('wrapper re-exports', () => {
   });
 
   it('re-exports TransactionList', () => {
-    render(<TransactionList />);
+    render(<TransactionList transactions={[]} />);
     expect(screen.getByText('Mock TransactionList')).toBeInTheDocument();
   });
 });

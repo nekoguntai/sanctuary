@@ -37,7 +37,6 @@ export class BitBoxAdapter implements DeviceAdapter {
 
   private connection: BitBoxConnection | null = null;
   private connectedDevice: HardwareWalletDevice | null = null;
-  private pairingCode: string | null = null;
   private pairingResolve: (() => void) | null = null;
 
   /**
@@ -121,7 +120,6 @@ export class BitBoxAdapter implements DeviceAdapter {
         // Show pairing code callback
         (pairingCode: string) => {
           log.info('Pairing code received', { pairingCode });
-          this.pairingCode = pairingCode;
         },
         // User verify callback - resolve when user confirms pairing
         async () => {
@@ -211,7 +209,6 @@ export class BitBoxAdapter implements DeviceAdapter {
       this.connection = null;
     }
     this.connectedDevice = null;
-    this.pairingCode = null;
     this.pairingResolve = null;
   }
 

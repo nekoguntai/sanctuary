@@ -1,7 +1,6 @@
-import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { describe,expect,it,vi } from 'vitest';
 import { DeviceSharePromptModal } from '../../../../components/WalletDetail/modals/DeviceSharePromptModal';
 
 function createPrompt(overrides: Record<string, unknown> = {}) {

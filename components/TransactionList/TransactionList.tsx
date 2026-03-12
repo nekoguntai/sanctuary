@@ -169,7 +169,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
             <tbody {...props} ref={ref} style={style} className="divide-y divide-sanctuary-200 dark:divide-sanctuary-800" />
           )),
         }}
-        itemContent={(index, tx) => {
+        itemContent={(_index, tx) => {
           const { isReceive, isConsolidation } = getTxTypeInfo(tx);
           const isHighlighted = highlightedTxId === tx.id;
           const txWallet = getWallet(tx.walletId);

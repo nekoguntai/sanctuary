@@ -1,12 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import React from 'react';
+import { render,screen } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 import {
-  FiatDisplay,
-  FiatDisplayBlock,
-  FiatDisplayInline,
-  FiatDisplaySubtle,
+FiatDisplay,
+FiatDisplayBlock,
+FiatDisplayInline,
+FiatDisplaySubtle,
 } from '../../components/FiatDisplay';
 
 // Mock the CurrencyContext

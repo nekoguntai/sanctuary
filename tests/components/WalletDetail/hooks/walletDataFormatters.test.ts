@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { WalletType } from '../../../../types';
+import { describe,expect,it } from 'vitest';
 import {
-  formatDevicesForWallet,
-  formatWalletFromApi,
+formatDevicesForWallet,
+formatWalletFromApi,
 } from '../../../../components/WalletDetail/hooks/walletDataFormatters';
+import { WalletType } from '../../../../types';
 
 describe('walletDataFormatters', () => {
   it('formats API wallet with multisig quorum mapping when quorum and totalSigners exist', () => {

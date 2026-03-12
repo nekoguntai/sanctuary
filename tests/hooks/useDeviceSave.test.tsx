@@ -5,8 +5,8 @@
  * and merging accounts into existing devices with conflict detection.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { act,renderHook } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock navigate
 const mockNavigate = vi.fn();

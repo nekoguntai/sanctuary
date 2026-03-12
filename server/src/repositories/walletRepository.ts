@@ -10,8 +10,6 @@ import type { Wallet, Prisma } from '@prisma/client';
 import type {
   NetworkType,
   WalletWithAddresses,
-  WalletAccessFilter,
-  WalletNetworkFilter,
   WalletSyncState,
   CursorPaginationOptions,
   CursorPaginatedResult,

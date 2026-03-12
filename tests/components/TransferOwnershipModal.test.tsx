@@ -2,13 +2,13 @@
  * Tests for TransferOwnershipModal component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { TransferOwnershipModal } from '../../components/TransferOwnershipModal';
 import * as authApi from '../../src/api/auth';
-import * as transfersApi from '../../src/api/transfers';
 import { ApiError } from '../../src/api/client';
+import * as transfersApi from '../../src/api/transfers';
 
 vi.mock('../../utils/logger', () => ({
   createLogger: () => ({

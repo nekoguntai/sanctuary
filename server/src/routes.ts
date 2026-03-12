@@ -34,7 +34,7 @@ type RouteDefinition = {
   handler: RequestHandler;
 };
 
-function healthHandler(req: Request, res: Response): void {
+function healthHandler(_req: Request, res: Response): void {
   const worker = getWorkerHealthStatus();
   const workerReady = worker.healthy;
 

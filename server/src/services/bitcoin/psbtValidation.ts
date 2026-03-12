@@ -8,10 +8,7 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
-
-const log = createLogger('PSBT-VALIDATION');
 
 export interface ValidationResult {
   valid: boolean;

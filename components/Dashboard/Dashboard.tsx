@@ -14,7 +14,6 @@ export const Dashboard: React.FC = () => {
     currencySymbol,
     lastPriceUpdate,
     priceChangePositive,
-    navigate,
     selectedNetwork,
     handleNetworkChange,
     versionInfo,

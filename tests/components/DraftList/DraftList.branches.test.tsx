@@ -1,11 +1,10 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { DraftList } from '../../../components/DraftList/DraftList';
-import { WalletType } from '../../../types';
 import * as draftsApi from '../../../src/api/drafts';
+import { WalletType } from '../../../types';
 import * as downloadUtils from '../../../utils/download';
 
 const mockNavigate = vi.fn();

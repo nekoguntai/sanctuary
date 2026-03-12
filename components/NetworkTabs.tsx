@@ -1,6 +1,3 @@
-import React from 'react';
-import { WalletNetwork } from '../types';
-
 // Networks we support tabs for (excluding regtest which is dev-only)
 export type TabNetwork = 'mainnet' | 'testnet' | 'signet';
 
@@ -13,8 +10,6 @@ interface NetworkTabsProps {
 
 interface NetworkConfig {
   label: string;
-  color: string;
-  bgColor: string;
   borderColor: string;
   activeColor: string;
   activeBg: string;
@@ -23,36 +18,30 @@ interface NetworkConfig {
 const networkConfigs: Record<TabNetwork, NetworkConfig> = {
   mainnet: {
     label: 'Mainnet',
-    color: 'text-sanctuary-500 dark:text-sanctuary-400',
-    bgColor: 'bg-mainnet-50 dark:bg-mainnet-900/30',
     borderColor: 'border-mainnet-600 dark:border-mainnet-300',
     activeColor: 'text-mainnet-200 dark:text-mainnet-800',
     activeBg: 'bg-mainnet-800 dark:bg-mainnet-100',
   },
   testnet: {
     label: 'Testnet',
-    color: 'text-sanctuary-500 dark:text-sanctuary-400',
-    bgColor: 'bg-testnet-50 dark:bg-testnet-900/30',
     borderColor: 'border-testnet-600 dark:border-testnet-300',
     activeColor: 'text-testnet-200 dark:text-testnet-800',
     activeBg: 'bg-testnet-800 dark:bg-testnet-100',
   },
   signet: {
     label: 'Signet',
-    color: 'text-sanctuary-500 dark:text-sanctuary-400',
-    bgColor: 'bg-signet-50 dark:bg-signet-900/30',
     borderColor: 'border-signet-600 dark:border-signet-300',
     activeColor: 'text-signet-200 dark:text-signet-800',
     activeBg: 'bg-signet-800 dark:bg-signet-100',
   },
 };
 
-export const NetworkTabs: React.FC<NetworkTabsProps> = ({
+export const NetworkTabs = ({
   selectedNetwork,
   onNetworkChange,
   walletCounts,
   className = '',
-}) => {
+}: NetworkTabsProps) => {
   const networks: TabNetwork[] = ['mainnet', 'testnet', 'signet'];
 
   return (
@@ -61,7 +50,6 @@ export const NetworkTabs: React.FC<NetworkTabsProps> = ({
         const config = networkConfigs[network];
         const count = walletCounts[network] || 0;
         const isSelected = selectedNetwork === network;
-        const isEmpty = count === 0;
 
         return (
           <button

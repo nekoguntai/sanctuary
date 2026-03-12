@@ -1,13 +1,12 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { act,render,screen,waitFor } from '@testing-library/react';
+import { MemoryRouter,Route,Routes } from 'react-router-dom';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { SendTransactionPage } from '../../../components/send/SendTransactionPage';
 import * as UserContext from '../../../contexts/UserContext';
-import * as walletsApi from '../../../src/api/wallets';
-import * as transactionsApi from '../../../src/api/transactions';
 import * as bitcoinApi from '../../../src/api/bitcoin';
 import * as devicesApi from '../../../src/api/devices';
+import * as transactionsApi from '../../../src/api/transactions';
+import * as walletsApi from '../../../src/api/wallets';
 
 const mockNavigate = vi.fn();
 const showInfoMock = vi.fn();

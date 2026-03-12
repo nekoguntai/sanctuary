@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe,expect,it,vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   useSendTransactionActions: vi.fn(),
@@ -13,8 +13,8 @@ vi.mock('../../hooks/qr/useQrScanner', () => ({
   useQrScanner: mocks.useQrScanner,
 }));
 
-import { useSendTransactionActions } from '../../hooks/useSendTransactionActions';
 import { useQrScanner } from '../../hooks/useQrScanner';
+import { useSendTransactionActions } from '../../hooks/useSendTransactionActions';
 
 describe('hooks re-export shims', () => {
   it('re-exports useSendTransactionActions', () => {

@@ -8,7 +8,7 @@
 import React from 'react';
 import { PenTool, AlertCircle } from 'lucide-react';
 import { getDeviceIcon } from '../ui/CustomIcons';
-import { connectivityConfig, ConnectionMethod } from '../../utils/deviceConnection';
+import { connectivityConfig } from '../../utils/deviceConnection';
 import { ConnectionMethodSelectorProps } from './types';
 import { renderCapabilities } from './DeviceModelSelector';
 

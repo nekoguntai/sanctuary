@@ -1,16 +1,16 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act,renderHook,waitFor } from '@testing-library/react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { useWalletData } from '../../../../components/WalletDetail/hooks/useWalletData';
-import { ApiError } from '../../../../src/api/client';
-import * as walletsApi from '../../../../src/api/wallets';
-import * as transactionsApi from '../../../../src/api/transactions';
-import * as devicesApi from '../../../../src/api/devices';
-import * as bitcoinApi from '../../../../src/api/bitcoin';
-import * as draftsApi from '../../../../src/api/drafts';
-import * as authApi from '../../../../src/api/auth';
-import * as adminApi from '../../../../src/api/admin';
-import { useErrorHandler } from '../../../../hooks/useErrorHandler';
 import { useAppNotifications } from '../../../../contexts/AppNotificationContext';
+import { useErrorHandler } from '../../../../hooks/useErrorHandler';
+import * as adminApi from '../../../../src/api/admin';
+import * as authApi from '../../../../src/api/auth';
+import * as bitcoinApi from '../../../../src/api/bitcoin';
+import { ApiError } from '../../../../src/api/client';
+import * as devicesApi from '../../../../src/api/devices';
+import * as draftsApi from '../../../../src/api/drafts';
+import * as transactionsApi from '../../../../src/api/transactions';
+import * as walletsApi from '../../../../src/api/wallets';
 
 const mockNavigate = vi.fn();
 const mockHandleError = vi.fn();

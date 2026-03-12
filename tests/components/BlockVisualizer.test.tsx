@@ -1,7 +1,6 @@
-import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { describe,expect,it,vi } from 'vitest';
 import { BlockVisualizer } from '../../components/BlockVisualizer';
 import type { PendingTransaction } from '../../src/types';
 
@@ -84,11 +83,9 @@ describe('BlockVisualizer', () => {
         fee: 50,
         feeRate: 2,
         type: 'sent',
-        status: 'pending',
-        confirmed: false,
-        confirmations: 0,
-        timestamp: Date.now(),
-        address: 'bc1qtest',
+        timeInQueue: 120,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        recipient: 'bc1qtest',
       },
     ];
 

@@ -1,8 +1,8 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { SendTransactionWizard } from '../../../components/send/SendTransactionWizard';
 import { WalletType } from '../../../types';
 

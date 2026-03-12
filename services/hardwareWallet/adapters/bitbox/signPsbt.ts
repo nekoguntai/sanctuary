@@ -5,7 +5,7 @@
  * Receives the connection and request as parameters.
  */
 
-import { getKeypathFromString, isErrorAbort } from 'bitbox02-api';
+import { getKeypathFromString } from 'bitbox02-api';
 import * as bitcoin from 'bitcoinjs-lib';
 import { createLogger } from '../../../../utils/logger';
 import { getSimpleType, getCoin, getOutputType, extractAccountPath } from './pathUtils';
@@ -89,7 +89,7 @@ export async function signPsbtWithBitBox(
       prevOutHash: new Uint8Array(txInput.hash),
       prevOutIndex: txInput.index,
       prevOutValue: value.toString(),
-      sequence: txInput.sequence,
+      sequence: txInput.sequence ?? 0xffffffff,
       keypath,
     });
   }

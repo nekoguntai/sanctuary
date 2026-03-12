@@ -5,10 +5,9 @@
  * Covers rendering, user interactions, query execution, and error handling.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { act,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock the AI API
 const mockExecuteNaturalQuery = vi.fn();
@@ -28,7 +27,7 @@ vi.mock('../../utils/logger', () => ({
 }));
 
 // Import component after mocks
-import { AIQueryInput, default as AIQueryInputDefault } from '../../components/AIQueryInput';
+import { AIQueryInput,default as AIQueryInputDefault } from '../../components/AIQueryInput';
 
 // Test data
 const testWalletId = 'wallet-test-001';

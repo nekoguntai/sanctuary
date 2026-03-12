@@ -4,15 +4,12 @@
  * Tests for the centralized error handling hook.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
-import React, { ReactNode } from 'react';
+import { act,renderHook } from '@testing-library/react';
+import { ReactNode } from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
+import { NotificationProvider,useNotifications } from '../../contexts/NotificationContext';
 import { useErrorHandler } from '../../hooks/useErrorHandler';
-import { NotificationProvider, useNotifications } from '../../contexts/NotificationContext';
 import { ApiError } from '../../src/api/client';
-
-// We need a way to capture notifications
-let capturedNotifications: Array<{ type: string; title: string; message?: string; duration?: number }> = [];
 
 // Create a wrapper that provides the notification context
 const createWrapper = () => {
@@ -23,7 +20,6 @@ const createWrapper = () => {
 
 describe('useErrorHandler', () => {
   beforeEach(() => {
-    capturedNotifications = [];
     vi.useFakeTimers();
   });
 

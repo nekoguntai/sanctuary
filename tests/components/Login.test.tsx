@@ -4,10 +4,10 @@
  * Tests user authentication, registration, and 2FA flows.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { getRegistrationStatus } from '../../src/api/auth';
 
 // Mock the UserContext
@@ -297,7 +297,7 @@ describe('Login Component', () => {
   });
 
   it('updates theme when system color-scheme change event fires', async () => {
-    let changeHandler: ((e: MediaQueryListEvent) => void) | null = null;
+    let changeHandler!: (e: MediaQueryListEvent) => void;
 
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -321,10 +321,10 @@ describe('Login Component', () => {
     await renderLogin(Login);
 
     expect(document.documentElement.classList.contains('dark')).toBe(false);
-    changeHandler?.({ matches: true } as MediaQueryListEvent);
+    changeHandler({ matches: true } as MediaQueryListEvent);
     expect(document.documentElement.classList.contains('dark')).toBe(true);
 
-    changeHandler?.({ matches: false } as MediaQueryListEvent);
+    changeHandler({ matches: false } as MediaQueryListEvent);
     expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 });

@@ -2,9 +2,9 @@
  * Tests for NetworkConnectionCard component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor,within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { NetworkConnectionCard } from '../../components/NetworkConnectionCard';
 import * as adminApi from '../../src/api/admin';
 
@@ -18,13 +18,14 @@ vi.mock('../../src/api/admin', () => ({
 
 describe('NetworkConnectionCard', () => {
   const mockConfig = {
+    type: 'electrum' as const,
     mainnetMode: 'pool' as const,
     mainnetSingletonHost: 'electrum.blockstream.info',
     mainnetSingletonPort: 50002,
     mainnetSingletonSsl: true,
     mainnetPoolMin: 1,
     mainnetPoolMax: 5,
-    mainnetPoolLoadBalancing: 'round_robin',
+    mainnetPoolLoadBalancing: 'round_robin' as const,
     testnetEnabled: true,
     testnetMode: 'singleton' as const,
     testnetSingletonHost: 'electrum.blockstream.info',
@@ -114,8 +115,11 @@ describe('NetworkConnectionCard', () => {
     } as any);
 
     vi.mocked(adminApi.updateElectrumServer).mockResolvedValue({} as any);
-    vi.mocked(adminApi.deleteElectrumServer).mockResolvedValue(undefined);
-    vi.mocked(adminApi.reorderElectrumServers).mockResolvedValue(undefined);
+    vi.mocked(adminApi.deleteElectrumServer).mockResolvedValue({
+      success: true,
+      message: 'Deleted',
+    });
+    vi.mocked(adminApi.reorderElectrumServers).mockResolvedValue(mockServers as any);
 
     defaultProps.onTestConnection.mockResolvedValue({
       success: true,

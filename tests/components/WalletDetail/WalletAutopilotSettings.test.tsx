@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { WalletAutopilotSettings } from '../../../components/WalletDetail/WalletAutopilotSettings';
+import { useUser } from '../../../contexts/UserContext';
 import { ApiError } from '../../../src/api/client';
 import * as walletsApi from '../../../src/api/wallets';
-import { useUser } from '../../../contexts/UserContext';
 
 vi.mock('../../../utils/logger', () => ({
   createLogger: () => ({

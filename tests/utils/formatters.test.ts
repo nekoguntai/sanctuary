@@ -4,7 +4,7 @@
  * Tests for UI formatting utilities like address truncation.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import { truncateAddress } from '../../utils/formatters';
 
 describe('Formatters', () => {

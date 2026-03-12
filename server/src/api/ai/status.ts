@@ -15,7 +15,7 @@ const log = createLogger('AI-API');
 export function createStatusRouter(aiRateLimiter: RequestHandler): Router {
   const router = Router();
 
-  router.get('/status', authenticate, aiRateLimiter, async (req: Request, res: Response) => {
+  router.get('/status', authenticate, aiRateLimiter, async (_req: Request, res: Response) => {
     try {
       const enabled = await aiService.isEnabled();
 

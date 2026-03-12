@@ -5,7 +5,7 @@
  */
 
 import apiClient from './client';
-import type { Device, HardwareDeviceModel, DeviceShareInfo, DeviceRole } from '../types';
+import type { Device, HardwareDeviceModel, DeviceShareInfo } from '../types';
 
 // Re-export types for backward compatibility
 export type { Device, HardwareDeviceModel, DeviceShareInfo, DeviceRole } from '../types';

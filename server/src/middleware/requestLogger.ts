@@ -28,11 +28,6 @@ const LOG_REQUEST_BODY = process.env.LOG_REQUEST_BODY === 'true';
 const EXCLUDED_PATHS = ['/health', '/api/v1/health', '/favicon.ico'];
 
 /**
- * Paths with sensitive data that should have reduced logging
- */
-const SENSITIVE_PATHS = ['/api/v1/auth/login', '/api/v1/auth/register', '/api/v1/admin/node-config'];
-
-/**
  * Request logger middleware
  *
  * Wraps each request in a context with a unique request ID.
@@ -60,7 +55,6 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
 
   // Check if this is an excluded path
   const isExcluded = EXCLUDED_PATHS.some((p) => req.path === p || req.path.startsWith(p));
-  const isSensitive = SENSITIVE_PATHS.some((p) => req.path.startsWith(p));
 
   // Run the rest of the request in the context
   requestContext.run(context, () => {

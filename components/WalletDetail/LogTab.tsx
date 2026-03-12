@@ -148,57 +148,70 @@ export const LogTab: React.FC<LogTabProps> = ({
           </div>
         ) : (
           <div className="p-2">
-            {filteredLogs.map((entry) => (
-              <div
-                key={entry.id}
-                className={`flex items-start py-1 px-2 rounded hover:bg-sanctuary-50 dark:hover:bg-sanctuary-900 ${
-                  entry.level === 'error' ? 'bg-rose-50/50 dark:bg-rose-900/10' :
-                  entry.level === 'warn' ? 'bg-warning-50/50 dark:bg-warning-900/10' : ''
-                }`}
-              >
-                {/* Timestamp */}
-                <span className="text-sanctuary-400 flex-shrink-0 w-20">
-                  {new Date(entry.timestamp).toLocaleTimeString('en-US', { hour12: false })}
-                </span>
-                {/* Level */}
-                <span className={`flex-shrink-0 w-12 font-medium ${
-                  entry.level === 'debug' ? 'text-sanctuary-400' :
-                  entry.level === 'info' ? 'text-success-600 dark:text-success-400' :
-                  entry.level === 'warn' ? 'text-warning-600 dark:text-warning-400' :
-                  'text-rose-600 dark:text-rose-400'
-                }`}>
-                  {entry.level.toUpperCase()}
-                </span>
-                {/* Module Badge */}
-                <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium mr-2 ${
-                  entry.module === 'SYNC' ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' :
-                  entry.module === 'BLOCKCHAIN' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' :
-                  entry.module === 'TX' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' :
-                  entry.module === 'UTXO' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
-                  entry.module === 'ELECTRUM' ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300' :
-                  'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400'
-                }`}>
-                  {entry.module}
-                </span>
-                {/* Tor Badge - only shown when viaTor is true */}
-                {entry.details?.viaTor && (
-                  <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium mr-2 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300" title="Connection routed through Tor">
-                    🧅 TOR
+            {filteredLogs.map((entry) => {
+              const logEntry = entry as {
+                id: string;
+                timestamp: string;
+                level: string;
+                module: string;
+                message: string;
+                details?: Record<string, unknown>;
+              };
+              const level = logEntry.level;
+              const moduleName = logEntry.module;
+
+              return (
+                <div
+                  key={logEntry.id}
+                  className={`flex items-start py-1 px-2 rounded hover:bg-sanctuary-50 dark:hover:bg-sanctuary-900 ${
+                    level === 'error' ? 'bg-rose-50/50 dark:bg-rose-900/10' :
+                    level === 'warn' ? 'bg-warning-50/50 dark:bg-warning-900/10' : ''
+                  }`}
+                >
+                  {/* Timestamp */}
+                  <span className="text-sanctuary-400 flex-shrink-0 w-20">
+                    {new Date(logEntry.timestamp).toLocaleTimeString('en-US', { hour12: false })}
                   </span>
-                )}
-                {/* Message */}
-                <span className="text-sanctuary-700 dark:text-sanctuary-300 flex-1 break-words">
-                  {entry.message}
-                  {entry.details && (
-                    <span className="text-sanctuary-400 ml-2">
-                      {Object.entries(entry.details)
-                        .filter(([k]) => k !== 'viaTor') // viaTor shown as badge
-                        .map(([k, v]) => `${k}=${v}`).join(' ')}
+                  {/* Level */}
+                  <span className={`flex-shrink-0 w-12 font-medium ${
+                    level === 'debug' ? 'text-sanctuary-400' :
+                    level === 'info' ? 'text-success-600 dark:text-success-400' :
+                    level === 'warn' ? 'text-warning-600 dark:text-warning-400' :
+                    'text-rose-600 dark:text-rose-400'
+                  }`}>
+                    {level.toUpperCase()}
+                  </span>
+                  {/* Module Badge */}
+                  <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium mr-2 ${
+                    moduleName === 'SYNC' ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' :
+                    moduleName === 'BLOCKCHAIN' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' :
+                    moduleName === 'TX' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' :
+                    moduleName === 'UTXO' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
+                    moduleName === 'ELECTRUM' ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300' :
+                    'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400'
+                  }`}>
+                    {moduleName}
+                  </span>
+                  {/* Tor Badge - only shown when viaTor is true */}
+                  {Boolean(logEntry.details?.viaTor) && (
+                    <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium mr-2 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300" title="Connection routed through Tor">
+                      🧅 TOR
                     </span>
                   )}
-                </span>
-              </div>
-            ))}
+                  {/* Message */}
+                  <span className="text-sanctuary-700 dark:text-sanctuary-300 flex-1 break-words">
+                    {logEntry.message}
+                    {logEntry.details && (
+                      <span className="text-sanctuary-400 ml-2">
+                        {Object.entries(logEntry.details)
+                          .filter(([k]) => k !== 'viaTor') // viaTor shown as badge
+                          .map(([k, v]) => `${k}=${v}`).join(' ')}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

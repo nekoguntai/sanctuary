@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach,describe,expect,it,vi } from 'vitest';
 import {
-  isHardwareWalletSupported,
-  isSecureContext,
-  isWebUSBSupported,
+isHardwareWalletSupported,
+isSecureContext,
+isWebUSBSupported,
 } from '../../services/hardwareWallet/environment';
 
 describe('hardwareWallet environment helpers', () => {

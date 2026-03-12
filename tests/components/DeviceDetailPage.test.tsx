@@ -1,18 +1,26 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor,within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { DeviceDetail } from '../../components/DeviceDetail';
 
-const mockNavigate = vi.fn();
-const mockIsSecureContext = vi.fn(() => false);
-const mockHardwareConnect = vi.fn();
-const mockHardwareGetAllXpubs = vi.fn();
-const mockHardwareDisconnect = vi.fn();
-const mockGetAccountTypeInfo = vi.fn(() => ({
-  title: 'Test',
-  description: '',
-  addressPrefix: '',
+const {
+  mockNavigate,
+  mockIsSecureContext,
+  mockHardwareConnect,
+  mockHardwareGetAllXpubs,
+  mockHardwareDisconnect,
+  mockGetAccountTypeInfo,
+} = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+  mockIsSecureContext: vi.fn(() => false),
+  mockHardwareConnect: vi.fn(),
+  mockHardwareGetAllXpubs: vi.fn(),
+  mockHardwareDisconnect: vi.fn(),
+  mockGetAccountTypeInfo: vi.fn((_account?: any) => ({
+    title: 'Test',
+    description: '',
+    addressPrefix: '',
+  })),
 }));
 
 let scannerScanPayload: { rawValue: string }[] = [{ rawValue: 'invalid' }];
@@ -45,7 +53,7 @@ vi.mock('../../components/DeviceDetail/index', async (importOriginal) => {
     ...actual,
     ManualAccountForm: () => <div data-testid="manual-account-form" />,
     AccountList: () => <div data-testid="account-list" />,
-    getAccountTypeInfo: (...args: unknown[]) => mockGetAccountTypeInfo(...args),
+    getAccountTypeInfo: mockGetAccountTypeInfo,
   };
 });
 
@@ -76,9 +84,9 @@ vi.mock('../../services/hardwareWallet/environment', () => ({
 
 vi.mock('../../services/hardwareWallet/runtime', () => ({
   hardwareWalletService: {
-    connect: (...args: unknown[]) => mockHardwareConnect(...args),
-    getAllXpubs: (...args: unknown[]) => mockHardwareGetAllXpubs(...args),
-    disconnect: (...args: unknown[]) => mockHardwareDisconnect(...args),
+    connect: mockHardwareConnect,
+    getAllXpubs: mockHardwareGetAllXpubs,
+    disconnect: mockHardwareDisconnect,
   },
 }));
 
@@ -144,9 +152,9 @@ vi.mock('../../utils/logger', () => ({
   }),
 }));
 
-import * as devicesApi from '../../src/api/devices';
-import * as authApi from '../../src/api/auth';
 import * as deviceParsers from '../../services/deviceParsers';
+import * as authApi from '../../src/api/auth';
+import * as devicesApi from '../../src/api/devices';
 
 const mockGetDevice = vi.mocked(devicesApi.getDevice);
 const mockGetDeviceModels = vi.mocked(devicesApi.getDeviceModels);

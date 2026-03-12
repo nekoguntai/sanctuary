@@ -4,13 +4,13 @@
  * Tests for column order merging and visibility functions.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  DEVICE_COLUMNS,
-  DEFAULT_DEVICE_COLUMN_ORDER,
-  DEFAULT_DEVICE_VISIBLE_COLUMNS,
-  getDeviceColumnsInOrder,
-  mergeDeviceColumnOrder,
+DEFAULT_DEVICE_COLUMN_ORDER,
+DEFAULT_DEVICE_VISIBLE_COLUMNS,
+DEVICE_COLUMNS,
+getDeviceColumnsInOrder,
+mergeDeviceColumnOrder,
 } from '../../components/columns/deviceColumns';
 
 describe('deviceColumns', () => {
@@ -191,7 +191,7 @@ describe('deviceColumns', () => {
     });
 
     it('sortable columns have sortKey defined', () => {
-      for (const [id, config] of Object.entries(DEVICE_COLUMNS)) {
+      for (const [, config] of Object.entries(DEVICE_COLUMNS)) {
         if (config.sortable) {
           expect(config.sortKey).toBeDefined();
           expect(typeof config.sortKey).toBe('string');

@@ -1,5 +1,5 @@
-import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act,renderHook } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { useUtxoActions } from '../../../../components/WalletDetail/hooks/useUtxoActions';
 import * as transactionsApi from '../../../../src/api/transactions';
 import { logError } from '../../../../utils/errorHandler';
@@ -126,7 +126,7 @@ describe('useUtxoActions', () => {
     expect(setUtxoStats).not.toHaveBeenCalled();
 
     const { result: noIdResult } = renderUtxoActions({
-      utxos: [{ txid: 'tx-1', vout: 0, frozen: false }],
+      utxos: [{ txid: 'tx-1', vout: 0, amount: 1000, address: 'bc1qtest', confirmations: 1, frozen: false }],
     });
 
     await act(async () => {

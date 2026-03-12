@@ -38,6 +38,7 @@ import { QueryProvider } from './providers/QueryProvider';
 import { useWebSocketQueryInvalidation } from './hooks/useWebSocket';
 import * as authApi from './src/api/auth';
 import { createLogger } from './utils/logger';
+import { isAnimatedPattern } from './components/animatedPatterns';
 
 const log = createLogger('App');
 
@@ -88,17 +89,20 @@ const AppRoutes: React.FC = () => {
 
   const backgroundPattern = user?.preferences?.background || 'minimal';
   const patternOpacity = user?.preferences?.patternOpacity ?? 50;
+  const shouldRenderAnimatedBackground = isAnimatedPattern(backgroundPattern);
 
   return (
     <>
       {/* Animated background for special patterns like sakura-petals */}
-      <Suspense fallback={null}>
-        <AnimatedBackground
-          pattern={backgroundPattern}
-          darkMode={isDarkMode}
-          opacity={patternOpacity}
-        />
-      </Suspense>
+      {shouldRenderAnimatedBackground && (
+        <Suspense fallback={null}>
+          <AnimatedBackground
+            pattern={backgroundPattern}
+            darkMode={isDarkMode}
+            opacity={patternOpacity}
+          />
+        </Suspense>
+      )}
       <Layout darkMode={isDarkMode} toggleTheme={toggleTheme} onLogout={logout}>
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>

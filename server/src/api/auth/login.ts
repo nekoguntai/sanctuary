@@ -35,7 +35,7 @@ export function createLoginRouter(
    * GET /api/v1/auth/registration-status
    * Check if public registration is enabled (public endpoint for login page)
    */
-  router.get('/registration-status', async (req: Request, res: Response) => {
+  router.get('/registration-status', async (_req: Request, res: Response) => {
     try {
       const setting = await prisma.systemSetting.findUnique({
         where: { key: 'registrationEnabled' },
@@ -307,7 +307,7 @@ export function createLoginRouter(
       // Check if 2FA is enabled
       if (user.twoFactorEnabled && user.twoFactorSecret) {
         // Check if using initial password before creating temp token
-        const usingDefaultPassword = await isUsingInitialPassword(user.id, password);
+        const usingDefaultPassword = await isUsingInitialPassword(user.id);
 
         // SEC-006: Generate a 2FA temp token with distinct audience claim
         const tempToken = generate2FAToken({
@@ -350,7 +350,7 @@ export function createLoginRouter(
       });
 
       // Check if using initial password (for admin user warning)
-      const usingDefaultPassword = await isUsingInitialPassword(user.id, password);
+      const usingDefaultPassword = await isUsingInitialPassword(user.id);
 
       res.json({
         token,

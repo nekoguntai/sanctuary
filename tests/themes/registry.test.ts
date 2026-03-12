@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import type { ThemeDefinition } from '../../themes/types';
 
 const { mockLogWarn, mockLogError, mockGetCurrentSeason, mockGetSeasonalColors, mockGetSeasonName, mockGetSeasonalBackground } = vi.hoisted(() => ({
@@ -27,16 +27,16 @@ vi.mock('../../utils/logger', () => ({
   createLogger: () => ({
     debug: vi.fn(),
     info: vi.fn(),
-    warn: (...args: unknown[]) => mockLogWarn(...args),
-    error: (...args: unknown[]) => mockLogError(...args),
+    warn: mockLogWarn,
+    error: mockLogError,
   }),
 }));
 
 vi.mock('../../themes/seasonal', () => ({
-  getCurrentSeason: (...args: unknown[]) => mockGetCurrentSeason(...args),
-  getSeasonalColors: (...args: unknown[]) => mockGetSeasonalColors(...args),
-  getSeasonName: (...args: unknown[]) => mockGetSeasonName(...args),
-  getSeasonalBackground: (...args: unknown[]) => mockGetSeasonalBackground(...args),
+  getCurrentSeason: mockGetCurrentSeason,
+  getSeasonalColors: mockGetSeasonalColors,
+  getSeasonName: mockGetSeasonName,
+  getSeasonalBackground: mockGetSeasonalBackground,
 }));
 
 import { themeRegistry } from '../../themes/registry';
@@ -106,7 +106,7 @@ describe('ThemeRegistry', () => {
     expect(registry.getAll().length).toBe(2);
     expect(mockLogWarn).toHaveBeenCalled();
 
-    const metadata = registry.getAllMetadata().find(t => t.id === 'fallback-preview');
+    const metadata = registry.getAllMetadata().find((t: any) => t.id === 'fallback-preview');
     expect(metadata?.preview?.primaryColor).toBe('#123456');
     expect(metadata?.preview?.backgroundColor).toBe('#dddddd');
   });
@@ -119,8 +119,8 @@ describe('ThemeRegistry', () => {
     registry.registerPattern({ id: 'global-none', name: 'None' });
     registry.registerPatterns([{ id: 'global-grid', name: 'Grid' }]);
 
-    expect(registry.getAllPatterns().map(p => p.id)).toEqual(['global-none', 'global-grid']);
-    expect(registry.getAllPatterns('pattern-theme').map(p => p.id)).toEqual([
+    expect(registry.getAllPatterns().map((p: any) => p.id)).toEqual(['global-none', 'global-grid']);
+    expect(registry.getAllPatterns('pattern-theme').map((p: any) => p.id)).toEqual([
       'global-none',
       'global-grid',
       'theme-stars',
@@ -248,7 +248,7 @@ describe('ThemeRegistry', () => {
       } as any,
     }));
 
-    const metadata = registry.getAllMetadata().find(theme => theme.id === 'metadata-defaults');
+    const metadata = registry.getAllMetadata().find((theme: any) => theme.id === 'metadata-defaults');
     expect(metadata?.preview.primaryColor).toBe('#3B82F6');
     expect(metadata?.preview.backgroundColor).toBe('#FFFFFF');
 
@@ -276,7 +276,7 @@ describe('ThemeRegistry', () => {
 
     registry.register(createTheme('no-patterns'));
     registry.registerPattern({ id: 'g-only', name: 'Global Only' });
-    expect(registry.getAllPatterns('no-patterns').map(p => p.id)).toContain('g-only');
+    expect(registry.getAllPatterns('no-patterns').map((p: any) => p.id)).toContain('g-only');
 
     registry.registerPattern({ id: 'dark-only', name: 'Dark only', svgDark: '<svg id=\"dark-only\"></svg>' });
     registry.registerPattern({ id: 'light-only', name: 'Light only', svgLight: '<svg id=\"light-only\"></svg>' });

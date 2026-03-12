@@ -5,10 +5,10 @@
  * QR Code, JSON, Descriptor, Labels, and Device formats.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock QRCodeSVG
 vi.mock('qrcode.react', () => ({
@@ -79,7 +79,7 @@ vi.mock('../../../../src/api/wallets', () => ({
 vi.mock('../../../../types', () => ({
   isMultisigType: (type: string) => type.includes('multisig'),
   getQuorumM: (quorum: number | null) => quorum ?? 2,
-  getQuorumN: (quorum: number | null, total: number | null) => total ?? 3,
+  getQuorumN: (_quorum: number | null, total: number | null) => total ?? 3,
 }));
 
 // Mock logger
@@ -94,8 +94,8 @@ vi.mock('../../../../utils/logger', () => ({
 
 // Import after mocks
 import {
-  ExportModal,
-  generateMultisigConfigText,
+ExportModal,
+generateMultisigConfigText,
 } from '../../../../components/WalletDetail/modals/ExportModal';
 
 describe('ExportModal', () => {
@@ -130,10 +130,12 @@ describe('ExportModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsCopied.mockReturnValue(false);
-    mockGetExportFormats.mockResolvedValue([
-      { id: 'coldcard', name: 'Coldcard', extension: '.txt' },
-      { id: 'passport', name: 'Passport', extension: '.json' },
-    ]);
+    mockGetExportFormats.mockResolvedValue({
+      formats: [
+        { id: 'coldcard', name: 'Coldcard', extension: '.txt' },
+        { id: 'passport', name: 'Passport', extension: '.json' },
+      ],
+    });
   });
 
   describe('Rendering', () => {
@@ -381,7 +383,7 @@ describe('ExportModal', () => {
       await user.click(screen.getByText('JSON File'));
       await user.click(screen.getByRole('button', { name: /download backup/i }));
 
-      expect(mockExportWallet).toHaveBeenCalledWith('wallet-123', 'My Wallet');
+      expect(mockExportWallet).toHaveBeenCalledWith('wallet-123');
     });
 
     it('should call onError when export fails', async () => {
@@ -558,7 +560,7 @@ describe('ExportModal', () => {
     it('should display loading state while fetching formats', async () => {
       const user = userEvent.setup();
       mockGetExportFormats.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve([]), 100))
+        () => new Promise((resolve) => setTimeout(() => resolve({ formats: [] }), 100))
       );
 
       render(<ExportModal {...multisigProps} />);
@@ -630,7 +632,7 @@ describe('ExportModal', () => {
 
     it('should show empty state when no formats available', async () => {
       const user = userEvent.setup();
-      mockGetExportFormats.mockResolvedValue([]);
+      mockGetExportFormats.mockResolvedValue({ formats: [] });
 
       render(<ExportModal {...multisigProps} />);
 

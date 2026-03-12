@@ -4,7 +4,7 @@
  * Tests for the clipboard copy functionality.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { copyToClipboard } from '../../utils/clipboard';
 
 vi.mock('../../utils/logger', () => ({

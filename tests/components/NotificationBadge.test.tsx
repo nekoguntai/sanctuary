@@ -4,10 +4,9 @@
  * Tests for the notification badge and dot components.
  */
 
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import React from 'react';
-import { NotificationBadge, NotificationDot } from '../../components/NotificationBadge';
+import { render,screen } from '@testing-library/react';
+import { describe,expect,it } from 'vitest';
+import { NotificationBadge,NotificationDot } from '../../components/NotificationBadge';
 
 describe('NotificationBadge', () => {
   describe('rendering', () => {

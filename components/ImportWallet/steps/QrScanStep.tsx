@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import {
   AlertCircle,

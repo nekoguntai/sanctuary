@@ -8,7 +8,7 @@
  * - wallets
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();

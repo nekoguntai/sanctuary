@@ -1,16 +1,15 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
+import {
+DEFAULT_WALLET_COLUMN_ORDER,
+DEFAULT_WALLET_VISIBLE_COLUMNS,
+} from '../../components/columns/walletColumns';
 import { WalletList } from '../../components/WalletList/WalletList';
 import * as CurrencyContext from '../../contexts/CurrencyContext';
 import * as UserContext from '../../contexts/UserContext';
 import * as useWalletsHook from '../../hooks/queries/useWallets';
-import {
-  DEFAULT_WALLET_COLUMN_ORDER,
-  DEFAULT_WALLET_VISIBLE_COLUMNS,
-} from '../../components/columns/walletColumns';
 
 const mockNavigate = vi.fn();
 

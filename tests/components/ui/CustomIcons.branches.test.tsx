@@ -1,12 +1,12 @@
-import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
-import { HardwareDevice, WalletType } from '../../../types';
+import { describe,expect,it } from 'vitest';
 import {
-  SatsIcon,
-  SanctuaryLogo,
-  getDeviceIcon,
-  getWalletIcon,
+SanctuaryLogo,
+SatsIcon,
+getDeviceIcon,
+getWalletIcon,
 } from '../../../components/ui/CustomIcons';
+import { HardwareDevice,WalletType } from '../../../types';
 
 function iconTypeName(icon: any): string {
   if (!icon) return 'unknown';

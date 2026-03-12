@@ -2,9 +2,9 @@
  * Tests for UTXOList component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { UTXOList } from '../../components/UTXOList';
 import * as CurrencyContext from '../../contexts/CurrencyContext';
 import * as useBitcoinHooks from '../../hooks/queries/useBitcoin';

@@ -1,12 +1,11 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { WalletType } from '../../types';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { WalletDetail } from '../../components/WalletDetail';
-import * as walletsApi from '../../src/api/wallets';
-import * as transactionsApi from '../../src/api/transactions';
 import * as labelsApi from '../../src/api/labels';
+import * as transactionsApi from '../../src/api/transactions';
+import * as walletsApi from '../../src/api/wallets';
+import { WalletType } from '../../types';
 
 const mocks = vi.hoisted(() => ({
   routeId: 'wallet-1' as string | undefined,
@@ -735,7 +734,7 @@ describe('WalletDetail wrapper behaviors', () => {
     expect(mocks.fetchData).toHaveBeenCalledWith(true);
 
     await user.click(screen.getByRole('button', { name: 'header-receive' }));
-    expect(screen.getByTestId('receive-network')).toHaveTextContent('mainnet');
+    expect(screen.getByTestId('receive-modal')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'receive-close' }));
 
     await user.click(screen.getByRole('button', { name: /utxos/i }));

@@ -323,7 +323,7 @@ export class ElectrumProvider implements INetworkProvider {
     };
   }
 
-  async getBlockHeaderByHash(hash: string): Promise<BlockHeader> {
+  async getBlockHeaderByHash(_hash: string): Promise<BlockHeader> {
     // Electrum doesn't directly support lookup by hash
     // Would need to maintain a cache or use a different approach
     throw new Error('getBlockHeaderByHash not supported by Electrum provider');
@@ -396,13 +396,13 @@ export class ElectrumProvider implements INetworkProvider {
 
   async subscribeToBlocks(callback: BlockCallback): Promise<() => void> {
     // Subscribe to headers
-    const initial = await this.client.subscribeHeaders();
+    await this.client.subscribeHeaders();
 
     // Parse initial header and call callback
     // Note: The full header parsing would need the actual block data
     // For now, we just notify about height changes
 
-    const handler = (height: number, headerHex: string) => {
+    const handler = (height: number, _headerHex: string) => {
       // Minimal header info - full parsing would require decoding the hex
       callback(height, {
         hash: '', // Would need to compute from header

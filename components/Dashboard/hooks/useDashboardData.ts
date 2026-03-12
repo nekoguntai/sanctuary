@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Wallet, Transaction, WalletType, WalletNetwork, isMultisigType, WebSocketTransactionData, WebSocketBalanceData, WebSocketConfirmationData, WebSocketSyncData } from '../../../types';
+import { Wallet, Transaction, WalletType, WalletNetwork, WebSocketTransactionData, WebSocketBalanceData, WebSocketConfirmationData, WebSocketSyncData } from '../../../types';
 import { TabNetwork } from '../../NetworkTabs';
 import { satsToBTC, formatBTC } from '@shared/utils/bitcoin';
 import * as adminApi from '../../../src/api/admin';
@@ -11,7 +11,6 @@ import { createLogger } from '../../../utils/logger';
 import { useWallets, useRecentTransactions, useInvalidateAllWallets, useUpdateWalletSyncStatus, useBalanceHistory, usePendingTransactions } from '../../../hooks/queries/useWallets';
 import { useFeeEstimates, useBitcoinStatus, useMempoolData } from '../../../hooks/queries/useBitcoin';
 import { useCurrency } from '../../../contexts/CurrencyContext';
-import { useUser } from '../../../contexts/UserContext';
 import { useDelayedRender } from '../../../hooks/useDelayedRender';
 
 const log = createLogger('Dashboard');
@@ -31,8 +30,7 @@ interface DashboardFeeEstimate {
 export type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
 
 export function useDashboardData() {
-  const { format, btcPrice, priceChange24h, currencySymbol, priceLoading, lastPriceUpdate, showFiat } = useCurrency();
-  const { user } = useUser();
+  const { btcPrice, priceChange24h, currencySymbol, lastPriceUpdate } = useCurrency();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [timeframe, setTimeframe] = useState<Timeframe>('1W');
@@ -83,9 +81,9 @@ export function useDashboardData() {
 
   // React Query hooks for data fetching
   const { data: apiWallets, isLoading: walletsLoading } = useWallets();
-  const { data: feeEstimates, isLoading: feesLoading } = useFeeEstimates();
+  const { data: feeEstimates } = useFeeEstimates();
   const { data: bitcoinStatus, isLoading: statusLoading } = useBitcoinStatus();
-  const { data: mempoolData, isLoading: mempoolLoading, refetch: refetchMempool, isFetching: mempoolRefreshing } = useMempoolData();
+  const { data: mempoolData, refetch: refetchMempool, isFetching: mempoolRefreshing } = useMempoolData();
 
   // Use stable empty arrays when data is undefined to prevent re-renders
   const safeApiWallets = apiWallets ?? EMPTY_WALLETS;
@@ -122,22 +120,17 @@ export function useDashboardData() {
     signet: wallets.filter(w => w.network === 'signet').length,
   }), [wallets]);
 
-  // All wallet IDs for subscriptions
-  const walletIds = useMemo(() => wallets.map(w => w.id), [wallets]);
-
   // Filtered wallet IDs for network-specific data
   const filteredWalletIds = useMemo(() => filteredWallets.map(w => w.id), [filteredWallets]);
 
   // Fetch recent transactions for selected network only
-  const { data: recentTxRawData, isLoading: txLoading } = useRecentTransactions(filteredWalletIds, 10);
+  const { data: recentTxRawData } = useRecentTransactions(filteredWalletIds, 10);
   const recentTxRaw = recentTxRawData ?? EMPTY_TRANSACTIONS;
 
   // Fetch pending transactions for selected network only
   const { data: pendingTxsData } = usePendingTransactions(filteredWalletIds);
   const pendingTxs = pendingTxsData ?? EMPTY_PENDING;
 
-  // Check if this network has any wallets (to determine if node should be shown)
-  const networkHasWallets = filteredWallets.length > 0;
   const isMainnet = selectedNetwork === 'mainnet';
 
   // Convert API transactions to component format

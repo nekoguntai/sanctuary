@@ -1,6 +1,5 @@
-import React from 'react';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act,fireEvent,render,screen,waitFor } from '@testing-library/react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { AccessControlTab } from '../../../components/SystemSettings/AccessControlTab';
 import * as adminApi from '../../../src/api/admin';
 
@@ -49,15 +48,15 @@ describe('AccessControlTab branch coverage', () => {
 
     vi.mocked(adminApi.getSystemSettings).mockResolvedValue({ registrationEnabled: false } as never);
 
-    let resolveFirstSave: (() => void) | null = null;
+    let resolveFirstSave!: (value: { registrationEnabled: boolean }) => void;
     vi.mocked(adminApi.updateSystemSettings)
       .mockImplementationOnce(
         () =>
-          new Promise<void>((resolve) => {
+          new Promise<{ registrationEnabled: boolean }>((resolve) => {
             resolveFirstSave = resolve;
           }) as never,
       )
-      .mockResolvedValueOnce(undefined as never);
+      .mockResolvedValueOnce({ registrationEnabled: false } as never);
 
     const { unmount } = render(<AccessControlTab />);
 
@@ -73,7 +72,7 @@ describe('AccessControlTab branch coverage', () => {
       expect(toggleButton.className).toContain('opacity-50');
     });
 
-    resolveFirstSave?.();
+    resolveFirstSave({ registrationEnabled: true });
 
     await waitFor(() => {
       expect(adminApi.updateSystemSettings).toHaveBeenNthCalledWith(1, { registrationEnabled: true });

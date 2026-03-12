@@ -6,7 +6,7 @@
  * - admin backup/settings/monitoring/groups/users
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
@@ -30,6 +30,12 @@ vi.mock('../../src/api/client', () => ({
   API_BASE_URL: '/api/v1',
 }));
 
+import * as adminBackupApi from '../../src/api/admin/backup';
+import * as adminFeaturesApi from '../../src/api/admin/features';
+import * as adminGroupsApi from '../../src/api/admin/groups';
+import * as adminMonitoringApi from '../../src/api/admin/monitoring';
+import * as adminSettingsApi from '../../src/api/admin/settings';
+import * as adminUsersApi from '../../src/api/admin/users';
 import * as draftsApi from '../../src/api/drafts';
 import * as labelsApi from '../../src/api/labels';
 import * as payjoinApi from '../../src/api/payjoin';
@@ -37,12 +43,6 @@ import * as priceApi from '../../src/api/price';
 import * as syncApi from '../../src/api/sync';
 import * as transfersApi from '../../src/api/transfers';
 import * as twoFactorApi from '../../src/api/twoFactor';
-import * as adminBackupApi from '../../src/api/admin/backup';
-import * as adminSettingsApi from '../../src/api/admin/settings';
-import * as adminMonitoringApi from '../../src/api/admin/monitoring';
-import * as adminGroupsApi from '../../src/api/admin/groups';
-import * as adminUsersApi from '../../src/api/admin/users';
-import * as adminFeaturesApi from '../../src/api/admin/features';
 
 describe('Remaining API Modules', () => {
   beforeEach(() => {

@@ -4,10 +4,10 @@
  * Tests for user account settings including password change and 2FA management.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act,render,screen,waitFor,within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { ApiError } from '../../src/api/client';
 
 // Mock the UserContext

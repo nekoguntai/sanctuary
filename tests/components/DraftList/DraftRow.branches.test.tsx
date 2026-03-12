@@ -1,7 +1,6 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent,render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { DraftRow } from '../../../components/DraftList/DraftRow';
 import type { DraftRowProps } from '../../../components/DraftList/types';
 import type { DraftTransaction } from '../../../src/api/drafts';

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MutableRefObject } from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 const bytesFns = {
   receivePart: vi.fn(),
@@ -62,7 +62,7 @@ vi.mock('../../../utils/logger', () => ({
   }),
 }));
 
-import { processUrBytes, processUrRegistry } from '../../../hooks/qr/urDecoder';
+import { processUrBytes,processUrRegistry } from '../../../hooks/qr/urDecoder';
 
 function createCallbacks() {
   const createScanResult = vi.fn((xpub: string, fingerprint?: string, path?: string) => ({ xpub, fingerprint, path }));

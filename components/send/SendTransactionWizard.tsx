@@ -40,7 +40,7 @@ function WizardContent({
   draftTxData,
   onCancel,
 }: WizardContentProps) {
-  const { currentStep, wallet, state, devices, isReadyToSign, utxos } = useSendTransaction();
+  const { currentStep, wallet, state, isReadyToSign, utxos } = useSendTransaction();
   const hardwareWallet = useHardwareWallet();
 
   // Debug logging for draft mode
@@ -207,12 +207,10 @@ function WizardContent({
             broadcasting={actions.isBroadcasting || actions.isCreating}
             savingDraft={actions.isSavingDraft}
             // Pass additional props for signing UI
-            error={actions.error}
             txData={effectiveTxData}
             unsignedPsbt={state.isDraftMode ? state.unsignedPsbt : actions.unsignedPsbt}
             signedDevices={actions.signedDevices}
             payjoinStatus={actions.payjoinStatus}
-            onCreateTransaction={state.isDraftMode ? undefined : actions.createTransaction}
             onDownloadPsbt={actions.downloadPsbt}
             onUploadSignedPsbt={actions.uploadSignedPsbt}
             onSignWithDevice={actions.signWithDevice}

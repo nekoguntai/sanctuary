@@ -4,10 +4,9 @@
  * Tests for the address QR code display modal with copy functionality.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 // Mock QRCodeSVG
 vi.mock('qrcode.react', () => ({

@@ -5,9 +5,8 @@
  * outgoing transfers, confirmation modals, and action handlers.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import React from 'react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { PendingTransfersPanel } from '../../components/PendingTransfersPanel';
 import * as transfersApi from '../../src/api/transfers';
 import type { Transfer } from '../../types';
@@ -52,7 +51,12 @@ describe('PendingTransfersPanel', () => {
     message: 'Please accept this transfer',
     createdAt: oneHourAgo.toISOString(),
     updatedAt: oneHourAgo.toISOString(),
+    acceptedAt: null,
+    confirmedAt: null,
+    cancelledAt: null,
     expiresAt: oneDayFromNow.toISOString(),
+    declineReason: null,
+    keepExistingUsers: false,
     fromUser: { id: 'other-user', username: 'otheruser' },
     toUser: { id: 'current-user', username: 'currentuser' },
   };
@@ -67,7 +71,12 @@ describe('PendingTransfersPanel', () => {
     message: 'Transferring to you',
     createdAt: oneHourAgo.toISOString(),
     updatedAt: oneHourAgo.toISOString(),
+    acceptedAt: null,
+    confirmedAt: null,
+    cancelledAt: null,
     expiresAt: oneDayFromNow.toISOString(),
+    declineReason: null,
+    keepExistingUsers: false,
     fromUser: { id: 'current-user', username: 'currentuser' },
     toUser: { id: 'recipient-user', username: 'recipientuser' },
   };
@@ -82,7 +91,12 @@ describe('PendingTransfersPanel', () => {
     createdAt: oneHourAgo.toISOString(),
     updatedAt: oneHourAgo.toISOString(),
     acceptedAt: oneHourAgo.toISOString(),
+    confirmedAt: null,
+    cancelledAt: null,
     expiresAt: oneDayFromNow.toISOString(),
+    message: null,
+    declineReason: null,
+    keepExistingUsers: false,
     fromUser: { id: 'current-user', username: 'currentuser' },
     toUser: { id: 'recipient-user', username: 'recipientuser' },
   };
@@ -255,7 +269,7 @@ describe('PendingTransfersPanel', () => {
         transfers: [mockIncomingTransfer],
         total: 1,
       });
-      vi.mocked(transfersApi.acceptTransfer).mockResolvedValue(undefined);
+      vi.mocked(transfersApi.acceptTransfer).mockResolvedValue(mockAcceptedTransfer);
     });
 
     it('opens accept modal when Accept clicked', async () => {
@@ -295,7 +309,11 @@ describe('PendingTransfersPanel', () => {
         transfers: [mockIncomingTransfer],
         total: 1,
       });
-      vi.mocked(transfersApi.declineTransfer).mockResolvedValue(undefined);
+      vi.mocked(transfersApi.declineTransfer).mockResolvedValue({
+        ...mockIncomingTransfer,
+        status: 'declined',
+        declineReason: 'Not interested',
+      });
     });
 
     it('opens decline modal when Decline clicked', async () => {
@@ -353,7 +371,11 @@ describe('PendingTransfersPanel', () => {
         transfers: [mockOutgoingTransfer],
         total: 1,
       });
-      vi.mocked(transfersApi.cancelTransfer).mockResolvedValue(undefined);
+      vi.mocked(transfersApi.cancelTransfer).mockResolvedValue({
+        ...mockOutgoingTransfer,
+        status: 'cancelled',
+        cancelledAt: new Date().toISOString(),
+      });
     });
 
     it('opens cancel modal when Cancel clicked', async () => {
@@ -392,7 +414,11 @@ describe('PendingTransfersPanel', () => {
         transfers: [mockAcceptedTransfer],
         total: 1,
       });
-      vi.mocked(transfersApi.confirmTransfer).mockResolvedValue(undefined);
+      vi.mocked(transfersApi.confirmTransfer).mockResolvedValue({
+        ...mockAcceptedTransfer,
+        status: 'confirmed',
+        confirmedAt: new Date().toISOString(),
+      });
     });
 
     it('opens confirm modal when Confirm Transfer clicked', async () => {

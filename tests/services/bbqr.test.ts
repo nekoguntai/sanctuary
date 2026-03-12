@@ -2,16 +2,16 @@
  * BBQr decoder tests
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  BBQrDecoder,
-  BBQrEncodings,
-  BBQrFileTypes,
-  decodeBase32,
-  decodeHex,
-  extractBBQrData,
-  isBBQr,
-  parseBBQrHeader,
+BBQrDecoder,
+BBQrEncodings,
+BBQrFileTypes,
+decodeBase32,
+decodeHex,
+extractBBQrData,
+isBBQr,
+parseBBQrHeader,
 } from '../../services/bbqr';
 
 describe('BBQr helpers', () => {

@@ -1,14 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  getDefaultPort,
-  getNetworkEnabled,
-  getNetworkMode,
-  getNetworkPoolLoadBalancing,
-  getNetworkPoolMax,
-  getNetworkPoolMin,
-  getNetworkSingletonHost,
-  getNetworkSingletonPort,
-  getNetworkSingletonSsl,
+getDefaultPort,
+getNetworkEnabled,
+getNetworkMode,
+getNetworkPoolLoadBalancing,
+getNetworkPoolMax,
+getNetworkPoolMin,
+getNetworkSingletonHost,
+getNetworkSingletonPort,
+getNetworkSingletonSsl,
 } from '../../../components/NetworkConnectionCard/networkConfigHelpers';
 
 const cfg = {

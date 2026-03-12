@@ -1,4 +1,3 @@
-import React from 'react';
 import { Check, AlertCircle, Loader2, Search, ChevronDown, RefreshCw } from 'lucide-react';
 import type { SettingsTabProps } from '../types';
 

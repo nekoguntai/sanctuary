@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 const loggerSpies = vi.hoisted(() => ({
   error: vi.fn(),
   warn: vi.fn(),
@@ -66,11 +66,11 @@ vi.mock('@keystonehq/bc-ur-registry', () => {
   return { CryptoOutput, CryptoHDKey, CryptoAccount };
 });
 
-import { CryptoAccount, CryptoHDKey, CryptoOutput } from '@keystonehq/bc-ur-registry';
+import * as urRegistry from '@keystonehq/bc-ur-registry';
 import {
-  extractFingerprintFromHdKey,
-  extractFromUrResult,
-  normalizeDerivationPath,
+extractFingerprintFromHdKey,
+extractFromUrResult,
+normalizeDerivationPath,
 } from '../../../../components/DeviceDetail/accounts/urHelpers';
 
 const makePathComponent = (index: number, hardened: boolean) => ({
@@ -78,7 +78,9 @@ const makePathComponent = (index: number, hardened: boolean) => ({
   isHardened: () => hardened,
 });
 
-const makeOrigin = (fingerprintHex?: string, components: Array<{ getIndex: () => number; isHardened: () => boolean }> = []) => ({
+const { CryptoAccount, CryptoHDKey, CryptoOutput } = urRegistry as any;
+
+const makeOrigin = (fingerprintHex?: string, components: Array<{ getIndex: () => number; isHardened: () => boolean }> = []): any => ({
   getSourceFingerprint: () => (fingerprintHex ? Buffer.from(fingerprintHex, 'hex') : Buffer.alloc(0)),
   getComponents: () => components,
 });

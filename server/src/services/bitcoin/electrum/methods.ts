@@ -438,7 +438,7 @@ export async function getTransactionsBatch(
   batchRequestFn: BatchRequestFn,
   txids: string[],
   network: BitcoinNetwork,
-  batchRequestTimeoutMs: number
+  _batchRequestTimeoutMs: number
 ): Promise<Map<string, TransactionDetails>> {
   if (txids.length === 0) return new Map();
 

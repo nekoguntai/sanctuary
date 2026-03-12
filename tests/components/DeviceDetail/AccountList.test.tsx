@@ -4,9 +4,8 @@
  * Tests for the device account list display component.
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import React from 'react';
+import { render,screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 import type { DeviceAccount } from '../../../types';
 
 // Mock lucide-react icons

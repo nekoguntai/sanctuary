@@ -5,14 +5,14 @@
  * transaction details, and label management.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
-import type { Transaction, Wallet } from '../../types';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import * as bitcoinApi from '../../src/api/bitcoin';
 import * as labelsApi from '../../src/api/labels';
 import * as transactionsApi from '../../src/api/transactions';
+import type { Transaction,Wallet } from '../../types';
 
 // Mock the CurrencyContext
 vi.mock('../../contexts/CurrencyContext', () => ({
@@ -33,17 +33,17 @@ vi.mock('../../hooks/useAIStatus', () => ({
 
 // Mock APIs
 vi.mock('../../src/api/bitcoin', () => ({
-  getStatus: vi.fn().mockResolvedValue({ explorerUrl: 'https://mempool.space' }),
+  getStatus: vi.fn().mockResolvedValue({ explorerUrl: 'https://mempool.space' } as any),
 }));
 
 vi.mock('../../src/api/labels', () => ({
   getLabels: vi.fn().mockResolvedValue([]),
-  setTransactionLabels: vi.fn().mockResolvedValue({}),
+  setTransactionLabels: vi.fn().mockResolvedValue([]),
   createLabel: vi.fn(),
 }));
 
 vi.mock('../../src/api/transactions', () => ({
-  getTransaction: vi.fn().mockResolvedValue({}),
+  getTransaction: vi.fn().mockResolvedValue({} as any),
 }));
 
 // Mock logger
@@ -69,11 +69,10 @@ vi.mock('../../components/Amount', () => ({
 
 // Mock react-virtuoso - render a simpler version that just shows data
 vi.mock('react-virtuoso', () => ({
-  TableVirtuoso: ({ data, fixedHeaderContent, itemContent, components }: {
+  TableVirtuoso: ({ data, fixedHeaderContent, itemContent }: {
     data: unknown[];
     fixedHeaderContent?: () => React.ReactNode;
     itemContent: (index: number, item: unknown) => React.ReactNode;
-    components?: { TableBody?: React.ComponentType<unknown>; Table?: React.ComponentType<unknown> };
   }) => (
     <table data-testid="virtuoso-table">
       <thead>
@@ -137,10 +136,10 @@ const createMockTransaction = (overrides: Partial<Transaction> = {}): Transactio
   amount: 100000,
   fee: 500,
   confirmations: 3,
-  timestamp: new Date('2025-01-01').toISOString(),
+  timestamp: Date.now(),
   address: 'bc1qtest...',
   labels: [],
-  rbfStatus: null,
+  rbfStatus: undefined,
   ...overrides,
 });
 
@@ -152,16 +151,15 @@ const mockWallet: Wallet = {
   type: 'single_sig',
   balance: 1000000,
   createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
 };
 
 describe('TransactionList Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(bitcoinApi.getStatus).mockResolvedValue({ explorerUrl: 'https://mempool.space' });
-    vi.mocked(transactionsApi.getTransaction).mockResolvedValue({});
+    vi.mocked(bitcoinApi.getStatus).mockResolvedValue({ explorerUrl: 'https://mempool.space' } as any);
+    vi.mocked(transactionsApi.getTransaction).mockResolvedValue({} as any);
     vi.mocked(labelsApi.getLabels).mockResolvedValue([]);
-    vi.mocked(labelsApi.setTransactionLabels).mockResolvedValue({});
+    vi.mocked(labelsApi.setTransactionLabels).mockResolvedValue([]);
   });
 
   it('should render empty state when no transactions', async () => {
@@ -189,7 +187,7 @@ describe('TransactionList Component', () => {
   it('should filter out replaced transactions (RBF)', async () => {
     const { TransactionList } = await import('../../components/TransactionList');
     const transactions = [
-      createMockTransaction({ id: 'tx-1', amount: 100000, rbfStatus: null }),
+      createMockTransaction({ id: 'tx-1', amount: 100000, rbfStatus: 'active' }),
       createMockTransaction({ id: 'tx-2', amount: 200000, rbfStatus: 'replaced' }),
     ];
 
@@ -215,7 +213,7 @@ describe('TransactionList Component', () => {
 
   it('should display send icon for outgoing transactions', async () => {
     const { TransactionList } = await import('../../components/TransactionList');
-    const transactions = [createMockTransaction({ type: 'send', amount: -50000 })];
+    const transactions = [createMockTransaction({ type: 'sent', amount: -50000 })];
 
     render(<TransactionList transactions={transactions} />);
 
@@ -332,7 +330,7 @@ describe('TransactionList - Labels', () => {
     const { TransactionList } = await import('../../components/TransactionList');
     const transactions = [
       createMockTransaction({
-        labels: [{ id: 'label-1', name: 'Personal', color: '#ff0000' }],
+        labels: [{ id: 'label-1', walletId: 'wallet-1', name: 'Personal', color: '#ff0000' }],
       }),
     ];
 
@@ -371,10 +369,14 @@ describe('TransactionList - Transaction Stats', () => {
     const { TransactionList } = await import('../../components/TransactionList');
     const transactions = [createMockTransaction()];
     const stats = {
+      totalCount: 10,
+      receivedCount: 7,
+      sentCount: 3,
+      consolidationCount: 0,
       totalReceived: 500000,
       totalSent: 200000,
-      transactionCount: 10,
-      avgTransactionSize: 50000,
+      totalFees: 1000,
+      walletBalance: 300000,
     };
 
     render(
@@ -415,7 +417,6 @@ describe('TransactionList - Additional behaviors', () => {
     feeRate: 1,
     timestamp: Date.now(),
     confirmations: 1,
-    status: 'confirmed',
     type: 'received',
   } as Transaction;
 
@@ -424,7 +425,7 @@ describe('TransactionList - Additional behaviors', () => {
     const { getAllByTestId } = render(
       <TransactionList
         transactions={[
-          { ...baseTx, id: 'tx-keep', rbfStatus: 'pending' },
+          { ...baseTx, id: 'tx-keep', rbfStatus: 'active' },
           { ...baseTx, id: 'tx-drop', rbfStatus: 'replaced' },
         ]}
       />
@@ -460,7 +461,7 @@ describe('TransactionList - Additional behaviors', () => {
     vi.mocked(transactionsApi.getTransaction).mockResolvedValueOnce({
       inputs: [{ txid: 'prev', vout: 0, address: 'bc1qin', amount: 10000 }],
       outputs: [{ address: 'bc1qout', amount: 9000, outputType: 'external' }],
-    } as Transaction);
+    } as any);
 
     render(
       <TransactionList
@@ -595,6 +596,7 @@ describe('TransactionList - Additional behaviors', () => {
           totalReceived: 1_000_000,
           totalSent: 2_000_000,
           totalFees: 10_000,
+          walletBalance: 500_000,
         }}
       />
     );

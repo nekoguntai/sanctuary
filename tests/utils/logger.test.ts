@@ -2,23 +2,22 @@
  * Tests for logger utility
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import {
-  createLogger,
-  setLogLevel,
-  getLogLevel,
-  isLevelEnabled,
-  LogLevel,
+createLogger,
+getLogLevel,
+isLevelEnabled,
+LogLevel,
+setLogLevel,
 } from '../../utils/logger';
 
 describe('logger utility', () => {
-  let consoleLogSpy: ReturnType<typeof vi.spyOn>;
   let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   let consoleDebugSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});

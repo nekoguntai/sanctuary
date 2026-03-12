@@ -45,7 +45,7 @@ export interface TransactionEstimate {
  */
 export async function estimateTransaction(
   walletId: string,
-  recipient: string,
+  _recipient: string,
   amount: number,
   feeRate: number,
   selectedUtxoIds?: string[]

@@ -1,7 +1,7 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render,screen,within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { TransactionList } from '../../../components/TransactionList/TransactionList';
 import type { Transaction } from '../../../types';
 
@@ -128,7 +128,7 @@ describe('TransactionList branch coverage', () => {
     counterpartyAddress: 'bc1q-counterparty',
     address: 'bc1q-own-address' as any,
     labels: [],
-    rbfStatus: null,
+    rbfStatus: undefined,
     blockHeight: 900000 as any,
     type: 'received' as any,
   } as Transaction;

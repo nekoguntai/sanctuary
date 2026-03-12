@@ -290,22 +290,6 @@ export async function signPsbtWithTrezor(
       }
     }
 
-    // Get the derivation path from the first input (after fingerprint matching)
-    let accountPath = request.accountPath || request.inputPaths?.[0];
-
-    // Try to get account path from first input's bip32Derivation (more reliable for multisig)
-    if (firstInput?.bip32Derivation && firstInput.bip32Derivation.length > 0) {
-      let matchingDerivation = firstInput.bip32Derivation[0];
-      if (deviceFingerprintBuffer && firstInput.bip32Derivation.length > 1) {
-        const matching = firstInput.bip32Derivation.find(d =>
-          d.masterFingerprint.equals(deviceFingerprintBuffer)
-        );
-        // Invariant: the earlier multisig cosigner check guarantees a match here.
-        matchingDerivation = matching!;
-      }
-      accountPath = matchingDerivation.path;
-    }
-
     // Get PSBT transaction details for version/locktime to pass to Trezor
     const psbtTx = psbt.data.globalMap.unsignedTx as unknown as { toBuffer(): Buffer };
     const txFromPsbt = bitcoin.Transaction.fromBuffer(psbtTx.toBuffer());

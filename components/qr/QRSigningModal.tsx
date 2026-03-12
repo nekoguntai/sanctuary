@@ -11,7 +11,6 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import {
   X,
   QrCode,
-  Camera,
   ArrowRight,
   ArrowLeft,
   Upload,

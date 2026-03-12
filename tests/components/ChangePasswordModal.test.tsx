@@ -2,12 +2,12 @@
  * Tests for ChangePasswordModal component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { ChangePasswordModal } from '../../components/ChangePasswordModal';
-import { ApiError } from '../../src/api/client';
 import * as authApi from '../../src/api/auth';
+import { ApiError } from '../../src/api/client';
 
 // Mock logger
 vi.mock('../../utils/logger', () => ({

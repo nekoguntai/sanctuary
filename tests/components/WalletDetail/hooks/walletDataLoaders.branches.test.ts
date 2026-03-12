@@ -1,15 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import {
-  fetchAuxiliaryData,
-  loadAddressPage,
-  loadGroups,
+fetchAuxiliaryData,
+loadAddressPage,
+loadGroups,
 } from '../../../../components/WalletDetail/hooks/walletDataLoaders';
-import * as transactionsApi from '../../../../src/api/transactions';
-import * as devicesApi from '../../../../src/api/devices';
-import * as bitcoinApi from '../../../../src/api/bitcoin';
-import * as draftsApi from '../../../../src/api/drafts';
-import * as authApi from '../../../../src/api/auth';
 import * as adminApi from '../../../../src/api/admin';
+import * as authApi from '../../../../src/api/auth';
+import * as bitcoinApi from '../../../../src/api/bitcoin';
+import * as devicesApi from '../../../../src/api/devices';
+import * as draftsApi from '../../../../src/api/drafts';
+import * as transactionsApi from '../../../../src/api/transactions';
 
 vi.mock('../../../../src/api/transactions', () => ({
   getAddressSummary: vi.fn(),

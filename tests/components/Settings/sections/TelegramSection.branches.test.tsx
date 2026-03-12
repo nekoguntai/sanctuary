@@ -1,7 +1,7 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { TelegramSettings } from '../../../../components/Settings/sections/TelegramSection';
 import * as authApi from '../../../../src/api/auth';
 

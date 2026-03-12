@@ -4,13 +4,13 @@
  * Tests for column order merging and visibility functions.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  WALLET_COLUMNS,
-  DEFAULT_WALLET_COLUMN_ORDER,
-  DEFAULT_WALLET_VISIBLE_COLUMNS,
-  getWalletColumnsInOrder,
-  mergeWalletColumnOrder,
+DEFAULT_WALLET_COLUMN_ORDER,
+DEFAULT_WALLET_VISIBLE_COLUMNS,
+getWalletColumnsInOrder,
+mergeWalletColumnOrder,
+WALLET_COLUMNS,
 } from '../../components/columns/walletColumns';
 
 describe('walletColumns', () => {
@@ -194,7 +194,7 @@ describe('walletColumns', () => {
     });
 
     it('sortable columns have sortKey defined', () => {
-      for (const [id, config] of Object.entries(WALLET_COLUMNS)) {
+      for (const [, config] of Object.entries(WALLET_COLUMNS)) {
         if (config.sortable) {
           expect(config.sortKey).toBeDefined();
           expect(typeof config.sortKey).toBe('string');

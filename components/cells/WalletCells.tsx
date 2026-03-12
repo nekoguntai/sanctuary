@@ -53,7 +53,7 @@ export function createWalletCellRenderers(currency: CurrencyFormatter) {
             {wallet.name}
           </div>
           <div className="text-xs text-sanctuary-500 capitalize">
-            {wallet.scriptType.replace('_', ' ')}
+            {(wallet.scriptType ?? 'unknown').replace('_', ' ')}
           </div>
         </div>
       </div>

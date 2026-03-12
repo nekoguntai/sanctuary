@@ -1,7 +1,7 @@
-import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent,render,screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 import { DeviceDetailsForm } from '../../../components/ConnectDevice/DeviceDetailsForm';
+import type { DeviceDetailsFormProps } from '../../../components/ConnectDevice/types';
 
 const selectedModel = {
   id: 'model-1',
@@ -16,7 +16,7 @@ const selectedModel = {
   integrationTested: true,
 } as any;
 
-const createProps = (overrides: Record<string, unknown> = {}) => ({
+const createProps = (overrides: Partial<DeviceDetailsFormProps> = {}): DeviceDetailsFormProps => ({
   selectedModel,
   method: 'manual',
   scanned: false,

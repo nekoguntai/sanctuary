@@ -27,7 +27,7 @@ const MEMPOOL_STALE_TTL = 300000; // 5 minutes for stale fallback
  * GET /api/v1/bitcoin/status
  * Get Bitcoin network status
  */
-router.get('/status', async (req: Request, res: Response) => {
+router.get('/status', async (_req: Request, res: Response) => {
   try {
     // Get the node config first to determine connection strategy
     const nodeConfig = await prisma.nodeConfig.findFirst({
@@ -139,7 +139,7 @@ router.get('/status', async (req: Request, res: Response) => {
  * GET /api/v1/bitcoin/mempool
  * Get mempool and recent blocks data for visualization
  */
-router.get('/mempool', async (req: Request, res: Response) => {
+router.get('/mempool', async (_req: Request, res: Response) => {
   const now = Date.now();
 
   // Return fresh cache if available

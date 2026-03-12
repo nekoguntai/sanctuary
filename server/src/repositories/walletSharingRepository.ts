@@ -7,7 +7,7 @@
 
 import prisma from '../models/prisma';
 import type { WalletUser, GroupMember } from '@prisma/client';
-import { invalidateWalletAccessCache, invalidateUserAccessCache } from '../services/accessControl';
+import { invalidateWalletAccessCache } from '../services/accessControl';
 
 type WalletRole = 'owner' | 'signer' | 'viewer';
 

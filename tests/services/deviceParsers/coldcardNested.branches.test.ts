@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import { coldcardNestedParser } from '../../../services/deviceParsers/parsers/coldcardNested';
 
 describe('coldcardNestedParser branch coverage', () => {

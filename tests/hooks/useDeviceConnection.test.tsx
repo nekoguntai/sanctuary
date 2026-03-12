@@ -5,8 +5,8 @@
  * to hardware wallets including progress tracking and error handling.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { act,renderHook,waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import type { HardwareDeviceModel } from '../../types';
 
 // Mock hardware wallet service
@@ -60,6 +60,8 @@ const mockModel: HardwareDeviceModel = {
   scriptTypes: ['native_segwit', 'nested_segwit', 'taproot'],
   hasScreen: true,
   screenType: 'OLED',
+  integrationTested: true,
+  discontinued: false,
 };
 
 const mockXpubResults = [
@@ -268,12 +270,7 @@ describe('useDeviceConnection', () => {
         }
       );
 
-      const progressValues: Array<{ current: number; total: number; name: string }> = [];
-
       const { result } = renderHook(() => useDeviceConnection());
-
-      // We need to capture the progress values during the connection
-      const originalUseEffect = result.current;
 
       await act(async () => {
         await result.current.connectUsb(mockModel);

@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { processBBQr } from '../../../hooks/qr/bbqrDecoder';
 import * as bbqrService from '../../../services/bbqr';
 import * as deviceParsers from '../../../services/deviceParsers';
+import type { DeviceAccount } from '../../../services/deviceParsers';
 
 const decoderInstance = vi.hoisted(() => ({
   receivePart: vi.fn(),
@@ -44,7 +45,20 @@ describe('processBBQr', () => {
     setScanning: vi.fn(),
     setError: vi.fn(),
     setScanResult: vi.fn(),
-    createScanResult: vi.fn(() => ({ type: 'scan-result' })),
+    createScanResult: vi.fn((xpub: string, fingerprint: string, derivationPath: string, label?: string, accounts?: DeviceAccount[]) => ({
+      xpub,
+      fingerprint,
+      derivationPath,
+      label,
+      accounts,
+      extractedFields: {
+        xpub: true,
+        fingerprint: !!fingerprint,
+        derivationPath: !!derivationPath,
+        label: !!label,
+      },
+      warning: null,
+    })),
   };
 
   beforeEach(() => {
@@ -112,7 +126,14 @@ describe('processBBQr', () => {
       'Coldcard',
       undefined
     );
-    expect(callbacks.setScanResult).toHaveBeenCalledWith({ type: 'scan-result' });
+    expect(callbacks.setScanResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        xpub: 'xpub6example',
+        fingerprint: '',
+        derivationPath: '',
+        label: 'Coldcard',
+      })
+    );
   });
 
   it('throws when JSON content does not include an xpub', () => {

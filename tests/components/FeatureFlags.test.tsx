@@ -2,9 +2,9 @@
  * Tests for FeatureFlags component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { FeatureFlags } from '../../components/FeatureFlags';
 import * as adminApi from '../../src/api/admin';
 
@@ -56,6 +56,7 @@ describe('FeatureFlags', () => {
         previousValue: false,
         newValue: true,
         changedBy: 'admin-1',
+        ipAddress: '127.0.0.1',
         reason: 'Enable for testing',
         createdAt: new Date().toISOString(),
       },
@@ -325,7 +326,7 @@ describe('FeatureFlags', () => {
     });
 
     it('shows loading state while audit log is fetching', async () => {
-      let resolveAuditLog: ((value: typeof mockAuditLog) => void) | null = null;
+      let resolveAuditLog!: (value: typeof mockAuditLog) => void;
       const pendingAuditLog = new Promise<typeof mockAuditLog>((resolve) => {
         resolveAuditLog = resolve;
       });
@@ -342,7 +343,7 @@ describe('FeatureFlags', () => {
 
       expect(screen.getByText('Loading audit log...')).toBeInTheDocument();
 
-      resolveAuditLog?.({
+      resolveAuditLog({
         entries: [],
         total: 0,
         limit: 50,
@@ -385,6 +386,7 @@ describe('FeatureFlags', () => {
             previousValue: true,
             newValue: false,
             changedBy: 'admin-2',
+            ipAddress: '127.0.0.1',
             reason: null,
             createdAt: new Date().toISOString(),
           },
@@ -420,6 +422,7 @@ describe('FeatureFlags', () => {
             previousValue: false,
             newValue: true,
             changedBy: 'admin-2',
+            ipAddress: '127.0.0.1',
             reason: null,
             createdAt: new Date().toISOString(),
           },

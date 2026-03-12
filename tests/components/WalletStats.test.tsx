@@ -5,12 +5,12 @@
  * balance, UTXO stats, age distribution, and accumulation history.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { WalletStats } from '../../components/WalletStats';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import type { UTXO, Transaction } from '../../types';
+import type { Transaction,UTXO } from '../../types';
 
 // Mock the CurrencyContext
 vi.mock('../../contexts/CurrencyContext', () => ({
@@ -59,16 +59,43 @@ vi.mock('recharts', () => ({
 }));
 
 describe('WalletStats', () => {
-  const createCurrencyContext = (overrides: Partial<ReturnType<typeof useCurrency>> = {}) => ({
-    getFiatValue: vi.fn((sats: number) => sats / 100_000),
-    btcPrice: 50000,
-    currencySymbol: '$',
-    fiatCurrency: 'USD',
+  const createCurrencyContext = (
+    overrides: Partial<ReturnType<typeof useCurrency>> = {}
+  ): ReturnType<typeof useCurrency> => ({
     showFiat: true,
+    toggleShowFiat: vi.fn(),
+    fiatCurrency: 'USD',
+    setFiatCurrency: vi.fn(),
+    unit: 'btc',
+    setUnit: vi.fn(),
+    btcPrice: 50000,
+    priceChange24h: null,
+    currencySymbol: '$',
     format: vi.fn((sats: number) => {
       const btc = sats / 100_000_000;
       return `${btc.toFixed(8)} BTC`;
     }),
+    formatFiat: vi.fn((sats: number) => `$${(sats / 100_000).toLocaleString()}`),
+    getFiatValue: vi.fn((sats: number) => sats / 100_000),
+    formatFiatPrice: vi.fn((price: number | null) => (price === null ? '-----' : `$${price.toLocaleString()}`)),
+    priceLoading: false,
+    priceError: null,
+    lastPriceUpdate: new Date(),
+    refreshPrice: vi.fn(async () => {}),
+    priceProvider: 'auto',
+    setPriceProvider: vi.fn(),
+    availableProviders: ['auto'],
+    ...overrides,
+  });
+
+  const makeTransaction = (
+    overrides: Partial<Transaction> & Pick<Transaction, 'txid' | 'amount' | 'confirmations'>
+  ): Transaction => ({
+    id: `tx-${overrides.txid}`,
+    walletId: 'wallet-1',
+    type: 'receive',
+    fee: 0,
+    timestamp: Date.now(),
     ...overrides,
   });
 
@@ -77,7 +104,7 @@ describe('WalletStats', () => {
       txid: 'tx1',
       vout: 0,
       amount: 50000000, // 0.5 BTC
-      date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
+      date: Date.now() - 10 * 24 * 60 * 60 * 1000, // 10 days ago
       address: 'bc1q...',
       scriptPubKey: '',
       confirmations: 100,
@@ -86,7 +113,7 @@ describe('WalletStats', () => {
       txid: 'tx2',
       vout: 1,
       amount: 30000000, // 0.3 BTC
-      date: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000), // 100 days ago
+      date: Date.now() - 100 * 24 * 60 * 60 * 1000, // 100 days ago
       address: 'bc1q...',
       scriptPubKey: '',
       confirmations: 500,
@@ -95,7 +122,7 @@ describe('WalletStats', () => {
       txid: 'tx3',
       vout: 0,
       amount: 20000000, // 0.2 BTC
-      date: new Date(Date.now() - 400 * 24 * 60 * 60 * 1000), // 400 days ago
+      date: Date.now() - 400 * 24 * 60 * 60 * 1000, // 400 days ago
       address: 'bc1q...',
       scriptPubKey: '',
       confirmations: 2000,
@@ -103,24 +130,22 @@ describe('WalletStats', () => {
   ];
 
   const mockTransactions: Transaction[] = [
-    {
+    makeTransaction({
       txid: 'tx1',
-      type: 'receive',
       amount: 50000000,
       fee: 0,
       timestamp: Date.now() - 10 * 24 * 60 * 60 * 1000,
       confirmations: 100,
       balanceAfter: 100000000,
-    },
-    {
+    }),
+    makeTransaction({
       txid: 'tx2',
-      type: 'receive',
       amount: 30000000,
       fee: 0,
       timestamp: Date.now() - 100 * 24 * 60 * 60 * 1000,
       confirmations: 500,
       balanceAfter: 50000000,
-    },
+    }),
   ];
 
   beforeEach(() => {
@@ -221,7 +246,7 @@ describe('WalletStats', () => {
           txid: 'tx1',
           vout: 0,
           amount: 50000000,
-          date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+          date: Date.now() - 5 * 24 * 60 * 60 * 1000, // 5 days ago
           address: 'bc1q...',
           scriptPubKey: '',
           confirmations: 50,
@@ -230,7 +255,7 @@ describe('WalletStats', () => {
           txid: 'tx2',
           vout: 0,
           amount: 50000000,
-          date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000), // 15 days ago
+          date: Date.now() - 15 * 24 * 60 * 60 * 1000, // 15 days ago
           address: 'bc1q...',
           scriptPubKey: '',
           confirmations: 150,
@@ -268,7 +293,7 @@ describe('WalletStats', () => {
           txid: 'tx1',
           vout: 0,
           amount: 50000000,
-          date: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), // 90 days ago
+          date: Date.now() - 90 * 24 * 60 * 60 * 1000, // 90 days ago
           address: 'bc1q...',
           scriptPubKey: '',
           confirmations: 500,
@@ -293,7 +318,7 @@ describe('WalletStats', () => {
           txid: 'tx1',
           vout: 0,
           amount: 50000000,
-          date: new Date(Date.now() - 800 * 24 * 60 * 60 * 1000), // ~2.2 years ago
+          date: Date.now() - 800 * 24 * 60 * 60 * 1000, // ~2.2 years ago
           address: 'bc1q...',
           scriptPubKey: '',
           confirmations: 5000,
@@ -318,7 +343,7 @@ describe('WalletStats', () => {
           txid: 'tx1',
           vout: 0,
           amount: 50000000,
-          date: new Date(Date.now() - 500 * 24 * 60 * 60 * 1000), // ~1.4 years ago
+          date: Date.now() - 500 * 24 * 60 * 60 * 1000, // ~1.4 years ago
           address: 'bc1q...',
           scriptPubKey: '',
           confirmations: 3000,
@@ -342,22 +367,20 @@ describe('WalletStats', () => {
     it('should display first activity date', () => {
       const oldestTimestamp = Date.now() - 100 * 24 * 60 * 60 * 1000;
       const transactions: Transaction[] = [
-        {
+        makeTransaction({
           txid: 'tx1',
-          type: 'receive',
           amount: 50000000,
           fee: 0,
           timestamp: oldestTimestamp,
           confirmations: 500,
-        },
-        {
+        }),
+        makeTransaction({
           txid: 'tx2',
-          type: 'receive',
           amount: 30000000,
           fee: 0,
           timestamp: Date.now() - 10 * 24 * 60 * 60 * 1000,
           confirmations: 100,
-        },
+        }),
       ];
 
       render(
@@ -416,7 +439,7 @@ describe('WalletStats', () => {
           txid: 'recent',
           vout: 0,
           amount: 10000000,
-          date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000), // 15 days (< 1m)
+          date: Date.now() - 15 * 24 * 60 * 60 * 1000, // 15 days (< 1m)
           address: 'bc1q...',
           scriptPubKey: '',
           confirmations: 100,
@@ -425,7 +448,7 @@ describe('WalletStats', () => {
           txid: 'medium1',
           vout: 0,
           amount: 20000000,
-          date: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), // 90 days (1-6m)
+          date: Date.now() - 90 * 24 * 60 * 60 * 1000, // 90 days (1-6m)
           address: 'bc1q...',
           scriptPubKey: '',
           confirmations: 500,
@@ -434,7 +457,7 @@ describe('WalletStats', () => {
           txid: 'medium2',
           vout: 0,
           amount: 30000000,
-          date: new Date(Date.now() - 270 * 24 * 60 * 60 * 1000), // 270 days (6-12m)
+          date: Date.now() - 270 * 24 * 60 * 60 * 1000, // 270 days (6-12m)
           address: 'bc1q...',
           scriptPubKey: '',
           confirmations: 1500,
@@ -443,7 +466,7 @@ describe('WalletStats', () => {
           txid: 'old',
           vout: 0,
           amount: 40000000,
-          date: new Date(Date.now() - 500 * 24 * 60 * 60 * 1000), // 500 days (> 1y)
+          date: Date.now() - 500 * 24 * 60 * 60 * 1000, // 500 days (> 1y)
           address: 'bc1q...',
           scriptPubKey: '',
           confirmations: 3000,
@@ -518,24 +541,22 @@ describe('WalletStats', () => {
 
   describe('fiat and accumulation variants', () => {
     const createTransactions = (oldestDaysAgo: number): Transaction[] => [
-      {
+      makeTransaction({
         txid: 'oldest',
-        type: 'receive',
         amount: 10000000,
         fee: 0,
         timestamp: Date.now() - oldestDaysAgo * 24 * 60 * 60 * 1000,
         confirmations: 100,
         balanceAfter: 10000000,
-      },
-      {
+      }),
+      makeTransaction({
         txid: 'latest',
-        type: 'receive',
         amount: 5000000,
         fee: 0,
         timestamp: Date.now() - 1 * 24 * 60 * 60 * 1000,
         confirmations: 10,
         balanceAfter: 15000000,
-      },
+      }),
     ];
 
     it('should render BTC-only mode when fiat display is disabled', () => {

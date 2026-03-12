@@ -4,16 +4,16 @@
  * Tests the transaction wizard context provider and hooks.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import {
-  SendTransactionProvider,
-  useSendTransaction,
-  useSendTransactionDispatch,
+SendTransactionProvider,
+useSendTransaction,
+useSendTransactionDispatch,
 } from '../../../contexts/send/SendTransactionContext';
-import type { Wallet, Device, UTXO, FeeEstimate } from '../../../types';
+import type { Device,FeeEstimate,UTXO,Wallet } from '../../../types';
 
 // Test fixtures
 const mockWallet: Wallet = {

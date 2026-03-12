@@ -6,12 +6,12 @@
  */
 
 import {
-  getCurrentSeason,
-  getSeasonalBackground,
-  getSeasonName,
-  getSeasonalColors,
-  seasonalPalettes,
-  type Season,
+getCurrentSeason,
+getSeasonalBackground,
+getSeasonalColors,
+getSeasonName,
+seasonalPalettes,
+type Season,
 } from '../../themes/seasonal';
 
 describe('Season Detection', () => {

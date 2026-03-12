@@ -1,4 +1,3 @@
-import React from 'react';
 import { AlertCircle, Loader2, Download, RefreshCw, Trash2, Check } from 'lucide-react';
 import type { ModelsTabProps } from '../types';
 

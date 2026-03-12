@@ -16,7 +16,6 @@ import {
   RefreshCw,
   Shield,
   Download,
-  Wifi,
   WifiOff,
   Check,
   ChevronRight,

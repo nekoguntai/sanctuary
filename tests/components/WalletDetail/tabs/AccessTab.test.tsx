@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent,render,screen } from '@testing-library/react';
+import { describe,expect,it,vi } from 'vitest';
 import { AccessTab } from '../../../../components/WalletDetail/tabs/AccessTab';
 
 vi.mock('../../../../components/PendingTransfersPanel', () => ({
@@ -7,7 +7,7 @@ vi.mock('../../../../components/PendingTransfersPanel', () => ({
 }));
 
 describe('AccessTab', () => {
-  const baseProps = {
+  const baseProps: any = {
     accessSubTab: 'ownership' as const,
     onAccessSubTabChange: vi.fn(),
     walletShareInfo: {

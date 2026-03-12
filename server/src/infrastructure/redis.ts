@@ -31,7 +31,7 @@ import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 import { cache as memoryCache, type ICacheService } from '../services/cache/cacheService';
 import { RedisCache } from '../services/cache/redisCache';
-import { eventBus as localEventBus, type EventName, type EventTypes, type EventHandler } from '../events/eventBus';
+import { eventBus as localEventBus } from '../events/eventBus';
 import { RedisEventBus } from '../events/redisEventBus';
 
 const log = createLogger('RedisInfra');

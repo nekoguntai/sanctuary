@@ -22,7 +22,7 @@ export function createModelsRouter(aiRateLimiter: RequestHandler): Router {
    * POST /api/v1/ai/detect-ollama
    * Auto-detect Ollama at common endpoints
    */
-  router.post('/detect-ollama', authenticate, aiRateLimiter, async (req: Request, res: Response) => {
+  router.post('/detect-ollama', authenticate, aiRateLimiter, async (_req: Request, res: Response) => {
     try {
       const result = await aiService.detectOllama();
       res.json(result);
@@ -39,7 +39,7 @@ export function createModelsRouter(aiRateLimiter: RequestHandler): Router {
    * GET /api/v1/ai/models
    * List available models from configured endpoint
    */
-  router.get('/models', authenticate, aiRateLimiter, async (req: Request, res: Response) => {
+  router.get('/models', authenticate, aiRateLimiter, async (_req: Request, res: Response) => {
     try {
       const result = await aiService.listModels();
 

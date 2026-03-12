@@ -3,22 +3,22 @@
  *
  * Tests for shared bitcoin conversion and formatting functions.
  */
-import { describe, it, expect } from 'vitest';
 import {
-  satsToBTC,
-  btcToSats,
-  formatSats,
-  formatBTC,
-  formatBTCFromSats,
-  isValidAddressFormat,
-  detectAddressType,
-  isMainnetAddress,
-  isTestnetAddress,
-  normalizeDerivationPath,
-  formatPathForDescriptor,
-  extractChangeAndAddressIndex,
-  SATS_PER_BTC,
+btcToSats,
+detectAddressType,
+extractChangeAndAddressIndex,
+formatBTC,
+formatBTCFromSats,
+formatPathForDescriptor,
+formatSats,
+isMainnetAddress,
+isTestnetAddress,
+isValidAddressFormat,
+normalizeDerivationPath,
+SATS_PER_BTC,
+satsToBTC,
 } from '@shared/utils/bitcoin';
+import { describe,expect,it } from 'vitest';
 
 describe('Shared Bitcoin Utilities', () => {
   describe('SATS_PER_BTC constant', () => {

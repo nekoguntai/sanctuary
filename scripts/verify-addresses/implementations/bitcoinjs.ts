@@ -10,13 +10,10 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import { BIP32Factory } from 'bip32';
+import { fromBase58 } from 'bip32';
 import * as ecc from 'tiny-secp256k1';
 import bs58check from 'bs58check';
 import type { AddressDeriver, ScriptType, MultisigScriptType, Network } from '../types.js';
-
-// Initialize BIP32
-const bip32 = BIP32Factory(ecc);
 
 // Initialize ECC for bitcoinjs-lib (required for Taproot)
 bitcoin.initEccLib(ecc);
@@ -86,7 +83,7 @@ export const bitcoinjsImpl: AddressDeriver = {
     const standardXpub = convertToStandardXpub(xpub);
 
     // Parse xpub and derive child key
-    const node = bip32.fromBase58(standardXpub, networkObj);
+    const node = fromBase58(standardXpub, networkObj);
     const changeIndex = change ? 1 : 0;
     const derived = node.derive(changeIndex).derive(index);
 
@@ -166,7 +163,7 @@ export const bitcoinjsImpl: AddressDeriver = {
     const pubkeys: Buffer[] = [];
     for (const xpub of xpubs) {
       const standardXpub = convertToStandardXpub(xpub);
-      const node = bip32.fromBase58(standardXpub, networkObj);
+      const node = fromBase58(standardXpub, networkObj);
       const derived = node.derive(changeIndex).derive(index);
 
       if (!derived.publicKey) {

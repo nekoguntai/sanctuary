@@ -318,12 +318,16 @@ class ApiClient {
    * DELETE request
    */
   async delete<T>(endpoint: string, data?: unknown, retryOptions?: RetryOptions): Promise<T> {
+    const requestOptions: RequestInit = {
+      method: 'DELETE',
+    };
+    if (data !== undefined) {
+      requestOptions.body = JSON.stringify(data);
+    }
+
     return this.request<T>(
       endpoint,
-      {
-        method: 'DELETE',
-        ...(data && { body: JSON.stringify(data) }),
-      },
+      requestOptions,
       retryOptions
     );
   }

@@ -1,9 +1,8 @@
-import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent,render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { WalletType } from '../../../types';
+import { describe,expect,it,vi } from 'vitest';
 import { ConfigurationStep } from '../../../components/CreateWallet/ConfigurationStep';
+import { WalletType } from '../../../types';
 
 vi.mock('lucide-react', () => ({
   Check: () => <span data-testid="check-icon" />,

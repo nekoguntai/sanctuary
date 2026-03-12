@@ -103,14 +103,14 @@ export function useWindChimes(
       soundRingsRef.current = [];
     };
 
-    const getMaterialColors = (material: string, darkMode: boolean) => {
-      const colors = {
+    const getMaterialColors = (material: Chime['material'], _darkMode: boolean) => {
+      const colors: Record<Chime['material'], { body: string; highlight: string; shadow: string }> = {
         brass: { body: '#c9a227', highlight: '#e8c547', shadow: '#8a6d1b' },
         silver: { body: '#a8a8a8', highlight: '#d0d0d0', shadow: '#686868' },
         copper: { body: '#b87333', highlight: '#da9054', shadow: '#8a5522' },
         glass: { body: 'rgba(180, 220, 255, 0.6)', highlight: 'rgba(255, 255, 255, 0.8)', shadow: 'rgba(100, 150, 200, 0.4)' },
       };
-      return colors[material] || colors.brass;
+      return colors[material];
     };
 
     const drawBackground = () => {
@@ -167,7 +167,7 @@ export function useWindChimes(
       ctx.stroke();
     };
 
-    const drawChime = (chime: Chime, time: number) => {
+    const drawChime = (chime: Chime, _time: number) => {
       // Update swing
       chime.swingPhase += chime.swingSpeed;
       const swing = Math.sin(chime.swingPhase) * chime.swingAmplitude;

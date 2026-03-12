@@ -22,7 +22,7 @@ interface AILabelSuggestionProps {
 
 export const AILabelSuggestion: React.FC<AILabelSuggestionProps> = ({
   transaction,
-  existingLabels = [],
+  existingLabels: _existingLabels,
   onSuggestionAccepted,
   className = '',
 }) => {

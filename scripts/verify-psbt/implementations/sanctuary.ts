@@ -24,6 +24,14 @@ function getNetwork(network: Network): bitcoin.Network {
 }
 
 /**
+ * Parse the unsigned transaction from a PSBT across bitcoinjs versions.
+ */
+function getUnsignedTransaction(psbt: bitcoin.Psbt): bitcoin.Transaction {
+  const rawUnsignedTx = psbt.data.getTransaction();
+  return bitcoin.Transaction.fromBuffer(Buffer.from(rawUnsignedTx));
+}
+
+/**
  * Sanctuary (bitcoinjs-lib) PSBT Implementation
  */
 export class SanctuaryImplementation implements PsbtImplementation {
@@ -49,7 +57,7 @@ export class SanctuaryImplementation implements PsbtImplementation {
 
     return {
       tx: {
-        txid: psbt.data.getTransaction().getId(),
+        txid: getUnsignedTransaction(psbt).getId(),
         version: psbt.version,
         locktime: psbt.locktime,
         vin: psbt.txInputs.map((input, index) => ({
@@ -143,7 +151,7 @@ export class SanctuaryImplementation implements PsbtImplementation {
       return {
         valid: true,
         decoded: {
-          txid: psbt.data.getTransaction().getId(),
+          txid: getUnsignedTransaction(psbt).getId(),
           inputs: psbt.data.inputs.length,
           outputs: psbt.data.outputs.length,
           fee,
@@ -259,7 +267,7 @@ export class SanctuaryImplementation implements PsbtImplementation {
  */
 function estimateVsize(psbt: bitcoin.Psbt): number {
   // Get the base transaction size
-  const tx = psbt.data.getTransaction();
+  const tx = getUnsignedTransaction(psbt);
   const baseSize = tx.byteLength();
 
   // Estimate witness size based on input types

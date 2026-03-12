@@ -1,9 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent,render,screen } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { AddressesTab } from '../../../../components/WalletDetail/tabs/AddressesTab';
 
 const copyMock = vi.fn();
-const isCopiedMock = vi.fn(() => false);
+const isCopiedMock = vi.fn((_value?: string) => false);
 
 vi.mock('../../../../contexts/CurrencyContext', () => ({
   useCurrency: () => ({
@@ -226,7 +226,7 @@ describe('AddressesTab', () => {
   });
 
   it('shows copied state and all-addresses-loaded footer', () => {
-    isCopiedMock.mockImplementation((value: string) => value.includes('copied'));
+    isCopiedMock.mockImplementation((value?: string) => value?.includes('copied') ?? false);
     const addresses = [
       {
         id: 'addr-copied',

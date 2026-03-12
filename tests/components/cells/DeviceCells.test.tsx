@@ -1,9 +1,8 @@
-import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent,render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createDeviceCellRenderers, type DeviceWithWallets } from '../../../components/cells/DeviceCells';
-import type { TableColumnConfig } from '../../../types';
+import { describe,expect,it,vi } from 'vitest';
+import { createDeviceCellRenderers,type DeviceWithWallets } from '../../../components/cells/DeviceCells';
+import type { HardwareDeviceModel,TableColumnConfig } from '../../../types';
 
 vi.mock('lucide-react', () => ({
   Edit2: () => <span data-testid="edit-icon" />,
@@ -20,6 +19,26 @@ vi.mock('../../../components/ui/CustomIcons', () => ({
 }));
 
 const baseColumn: TableColumnConfig = { id: 'label', label: 'Label' };
+
+const makeDeviceModel = (overrides: Partial<HardwareDeviceModel> = {}): HardwareDeviceModel => ({
+  id: 'model-passport',
+  slug: 'passport',
+  manufacturer: 'Foundation',
+  name: 'Passport',
+  connectivity: ['usb'],
+  secureElement: true,
+  openSource: true,
+  airGapped: true,
+  supportsBitcoinOnly: true,
+  supportsMultisig: true,
+  supportsTaproot: true,
+  supportsPassphrase: true,
+  scriptTypes: ['native_segwit', 'nested_segwit', 'taproot'],
+  hasScreen: true,
+  integrationTested: true,
+  discontinued: false,
+  ...overrides,
+});
 
 const baseDevice: DeviceWithWallets = {
   id: 'device-1',
@@ -58,7 +77,7 @@ describe('DeviceCells', () => {
       },
       {
         getDeviceDisplayName: (type: string) => `Display ${type}`,
-        deviceModels: [{ slug: 'passport', manufacturer: 'Foundation', name: 'Passport' }],
+        deviceModels: [makeDeviceModel()],
       }
     );
 
@@ -98,8 +117,14 @@ describe('DeviceCells', () => {
       {
         getDeviceDisplayName: (type: string) => `Display ${type}`,
         deviceModels: [
-          { slug: 'passport', manufacturer: 'Foundation', name: 'Passport' },
-          { slug: 'trezor-safe-3', manufacturer: 'Trezor', name: 'Safe 3' },
+          makeDeviceModel(),
+          makeDeviceModel({
+            id: 'model-safe-3',
+            slug: 'trezor-safe-3',
+            manufacturer: 'Trezor',
+            name: 'Safe 3',
+            secureElement: false,
+          }),
         ],
       }
     );

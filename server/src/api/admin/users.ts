@@ -19,7 +19,7 @@ const log = createLogger('ADMIN:USERS');
  * GET /api/v1/admin/users
  * Get all users (admin only)
  */
-router.get('/', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.get('/', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
     const users = await prisma.user.findMany({
       select: {

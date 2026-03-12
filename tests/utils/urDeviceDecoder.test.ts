@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 
 vi.mock('../../utils/logger', () => ({
   createLogger: () => ({
@@ -117,14 +117,14 @@ const {
   MockCryptoAccount,
 } = registry;
 
-import {
-  extractFingerprintFromHdKey,
-  extractFromUrBytesContent,
-  extractFromUrResult,
-  getUrType,
-  isUrFormat,
-} from '../../utils/urDeviceDecoder';
 import type { CryptoHDKey } from '@keystonehq/bc-ur-registry';
+import {
+extractFingerprintFromHdKey,
+extractFromUrBytesContent,
+extractFromUrResult,
+getUrType,
+isUrFormat,
+} from '../../utils/urDeviceDecoder';
 
 describe('urDeviceDecoder', () => {
   beforeEach(() => {

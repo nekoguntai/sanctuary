@@ -63,11 +63,8 @@ interface ValidatedRequest extends Request {
 export function validate(
   schema: ZodSchema,
   target: ValidationTarget,
-  options: ValidationOptions = {}
+  _options: ValidationOptions = {}
 ): (req: Request, res: Response, next: NextFunction) => void {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { stripUnknown = true } = options;
-
   return (req: Request, res: Response, next: NextFunction) => {
     try {
       // Parse and validate the target data

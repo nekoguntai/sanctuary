@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "global.d.ts",
+    "scripts/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "server",
+    "gateway",
+    "ai-proxy",
+    "tests",
+    "e2e"
+  ]
+}

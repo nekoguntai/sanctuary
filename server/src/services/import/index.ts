@@ -22,7 +22,7 @@
  */
 
 import { importFormatRegistry } from './registry';
-import type { ParsedDescriptor, ImportParseResult } from './types';
+import type { ParsedDescriptor } from './types';
 import type { JsonImportDevice, ScriptType } from '../bitcoin/descriptorParser';
 
 // Import handlers

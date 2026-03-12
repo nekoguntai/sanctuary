@@ -141,7 +141,7 @@ export function populateCounterpartyAddress(
   isSentTx: boolean,
   isReceivedTx: boolean,
   updates: Record<string, unknown>,
-  stats: PopulationStats
+  _stats: PopulationStats
 ): void {
   if (tx.counterpartyAddress !== null) return;
 
@@ -195,7 +195,7 @@ export function populateAddressId(
   walletAddressLookup: Map<string, string>,
   walletAddressSet: Set<string>,
   updates: Record<string, unknown>,
-  stats: PopulationStats
+  _stats: PopulationStats
 ): void {
   if (tx.addressId !== null || walletAddresses.length === 0) return;
 

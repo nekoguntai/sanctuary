@@ -4,7 +4,7 @@
  * Common interfaces for repository pattern implementation.
  */
 
-import type { Wallet, Address, Transaction, User, UTXO, Prisma } from '@prisma/client';
+import type { Wallet, Address, Transaction, User, UTXO } from '@prisma/client';
 
 // Re-export Prisma types that repositories use
 export type { Wallet, Address, Transaction, User, UTXO };

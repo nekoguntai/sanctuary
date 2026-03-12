@@ -1,6 +1,5 @@
-import React from 'react';
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
+import { describe,expect,it } from 'vitest';
 import { StatCards } from '../../../components/AuditLogs/StatCards';
 
 describe('AuditLogs StatCards branch coverage', () => {

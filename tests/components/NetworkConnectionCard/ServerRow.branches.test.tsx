@@ -1,7 +1,6 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { ServerRow } from '../../../components/NetworkConnectionCard/ServerRow';
 import type { ElectrumServer } from '../../../types';
 
@@ -35,10 +34,12 @@ const callbacks = {
   onDeleteServer: vi.fn(),
 };
 
-const defaultProps = {
+type ServerRowProps = Parameters<typeof ServerRow>[0];
+
+const defaultProps: Omit<ServerRowProps, 'server'> = {
   index: 0,
   totalServers: 2,
-  serverTestStatus: 'idle' as const,
+  serverTestStatus: 'idle',
   serverActionLoading: null,
   serverPoolStats: undefined,
   ...callbacks,
@@ -46,7 +47,7 @@ const defaultProps = {
 
 const renderRow = (
   serverOverrides: Partial<ElectrumServer> = {},
-  propOverrides: Partial<typeof defaultProps> = {},
+  propOverrides: Partial<Omit<ServerRowProps, 'server'>> = {},
 ) => render(
   <ServerRow
     {...defaultProps}

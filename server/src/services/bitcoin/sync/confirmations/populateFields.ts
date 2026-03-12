@@ -111,7 +111,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
   );
 
   // PHASE 2: Process transactions and collect updates
-  const { pendingUpdates, updated, stats } = await processTransactionUpdates(
+  const { pendingUpdates, updated: _updated, stats } = await processTransactionUpdates(
     walletId, transactions, txDetailsCache, prevTxCache, txHeightFromHistory,
     walletAddresses, walletAddressLookup, walletAddressSet, currentHeight, network
   );

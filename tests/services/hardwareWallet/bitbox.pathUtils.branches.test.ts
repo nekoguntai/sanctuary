@@ -1,5 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as bitcoin from 'bitcoinjs-lib';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
+import {
+extractAccountPath,
+getOutputType,
+getSimpleType,
+getXpubType,
+} from '../../../services/hardwareWallet/adapters/bitbox/pathUtils';
 
 const { mockedConstants } = vi.hoisted(() => ({
   mockedConstants: {
@@ -35,12 +41,6 @@ const { mockedConstants } = vi.hoisted(() => ({
 vi.mock('bitbox02-api', () => ({
   constants: mockedConstants,
 }));
-import {
-  extractAccountPath,
-  getOutputType,
-  getSimpleType,
-  getXpubType,
-} from '../../../services/hardwareWallet/adapters/bitbox/pathUtils';
 
 describe('bitbox pathUtils branch coverage', () => {
   beforeEach(() => {

@@ -7,7 +7,7 @@
 import axios, { AxiosError } from 'axios';
 import { createLogger } from '../../../utils/logger';
 import { getErrorMessage } from '../../../utils/errors';
-import { createCircuitBreaker, CircuitBreaker, CircuitOpenError } from '../../circuitBreaker';
+import { createCircuitBreaker, CircuitBreaker } from '../../circuitBreaker';
 import type { IPriceProvider, PriceData } from '../types';
 
 /**

@@ -1,7 +1,7 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { NetworkConnectionCard } from '../../../components/NetworkConnectionCard/NetworkConnectionCard';
 import * as adminApi from '../../../src/api/admin';
 
@@ -132,7 +132,7 @@ describe('NetworkConnectionCard branch coverage', () => {
       ...baseServers[0],
       label: 'Updated Server',
     } as any);
-    vi.mocked(adminApi.reorderElectrumServers).mockResolvedValue(undefined);
+    vi.mocked(adminApi.reorderElectrumServers).mockResolvedValue(baseServers as any);
   });
 
   it('covers singleton failure path when test result is unsuccessful', async () => {

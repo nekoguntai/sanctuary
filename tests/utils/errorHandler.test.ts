@@ -4,14 +4,14 @@
  * Tests for the error handling utility functions.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  extractErrorMessage,
-  logError,
-  isNotFoundError,
-  isAuthError,
-} from '../../utils/errorHandler';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { ApiError } from '../../src/api/client';
+import {
+extractErrorMessage,
+isAuthError,
+isNotFoundError,
+logError,
+} from '../../utils/errorHandler';
 import { Logger } from '../../utils/logger';
 
 describe('errorHandler', () => {

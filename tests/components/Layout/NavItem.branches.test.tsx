@@ -1,7 +1,6 @@
-import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent,render,screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { describe,expect,it,vi } from 'vitest';
 import { NavItem } from '../../../components/Layout/NavItem';
 
 vi.mock('lucide-react', () => ({

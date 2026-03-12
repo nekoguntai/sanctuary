@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  keystoneMultisigParser,
-  keystoneStandardParser,
+keystoneMultisigParser,
+keystoneStandardParser,
 } from '../../../services/deviceParsers/parsers/keystone';
 
 describe('keystoneStandardParser branch coverage', () => {

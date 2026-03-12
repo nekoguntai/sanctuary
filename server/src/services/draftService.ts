@@ -9,7 +9,6 @@ import type { DraftTransaction, Prisma } from '@prisma/client';
 import * as bitcoin from 'bitcoinjs-lib';
 import { db as prisma } from '../repositories/db';
 import { draftRepository, DraftStatus } from '../repositories';
-import { requireWalletAccess, checkWalletAccess } from './accessControl';
 import { lockUtxosForDraft, resolveUtxoIds } from './draftLockService';
 import { notifyNewDraft } from './notifications/notificationService';
 import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError, WalletNotFoundError } from '../errors';

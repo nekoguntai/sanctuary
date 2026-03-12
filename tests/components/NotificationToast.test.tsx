@@ -1,12 +1,11 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import {
-  NotificationToast,
-  NotificationContainer,
-  generateNotificationId,
-  type Notification,
+NotificationContainer,
+NotificationToast,
+generateNotificationId,
+type Notification,
 } from '../../components/NotificationToast';
 
 vi.mock('lucide-react', () => ({

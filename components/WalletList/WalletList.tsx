@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import type { Wallet } from '../../src/api/wallets';
 import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, ArrowUpDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -117,7 +116,7 @@ export const WalletList: React.FC = () => {
   };
 
   // Use React Query for wallet data with automatic caching and refetching
-  const { data: wallets = [], isLoading: loading, error } = useWallets();
+  const { data: wallets = [], isLoading: loading } = useWallets();
 
   // Filter wallets by selected network
   const filteredWallets = useMemo(() =>

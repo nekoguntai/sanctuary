@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/Button';
-import { AlertTriangle, TrendingUp, Zap, Users, ArrowUpCircle, Loader2, CheckCircle } from 'lucide-react';
+import { AlertTriangle, TrendingUp, ArrowUpCircle, Loader2, CheckCircle } from 'lucide-react';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as draftsApi from '../src/api/drafts';
 import * as transactionsApi from '../src/api/transactions';

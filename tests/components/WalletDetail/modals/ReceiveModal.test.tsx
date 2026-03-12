@@ -5,10 +5,10 @@
  * address selection, and Payjoin functionality.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import type { Address } from '../../../../types';
 
 // Mock QRCodeSVG
@@ -90,6 +90,8 @@ vi.mock('../../../../hooks/useCopyToClipboard', () => ({
 vi.mock('../../../../src/api/payjoin', () => ({
   getPayjoinUri: vi.fn().mockResolvedValue({
     uri: 'bitcoin:bc1qtest?pj=https://payjoin.example.com',
+    address: 'bc1qtest',
+    payjoinUrl: 'https://payjoin.example.com',
   }),
 }));
 
@@ -112,28 +114,36 @@ const mockAddresses: Address[] = [
   {
     id: 'addr-1',
     address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+    derivationPath: "m/84'/0'/0'/0/0",
     index: 0,
+    balance: 0,
     isChange: false,
     used: false,
   },
   {
     id: 'addr-2',
     address: 'bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3',
+    derivationPath: "m/84'/0'/0'/0/1",
     index: 1,
+    balance: 0,
     isChange: false,
     used: false,
   },
   {
     id: 'addr-3',
     address: 'bc1qchange123',
+    derivationPath: "m/84'/0'/0'/1/0",
     index: 0,
+    balance: 0,
     isChange: true,
     used: false,
   },
   {
     id: 'addr-4',
     address: 'bc1qusedaddress',
+    derivationPath: "m/84'/0'/0'/0/2",
     index: 2,
+    balance: 0,
     isChange: false,
     used: true,
   },
@@ -301,7 +311,9 @@ describe('ReceiveModal', () => {
             {
               id: 'addr-9',
               address: 'bc1qnewaddress999',
+              derivationPath: "m/84'/0'/0'/0/9",
               index: 9,
+              balance: 0,
               isChange: false,
               used: false,
             },
@@ -468,6 +480,8 @@ describe('ReceiveModal', () => {
       const getPayjoinUriMock = vi.mocked(payjoinApi.getPayjoinUri);
       getPayjoinUriMock.mockResolvedValue({
         uri: 'bitcoin:bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4?pj=https://payjoin.example.com',
+        address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+        payjoinUrl: 'https://payjoin.example.com',
       });
 
       render(<ReceiveModal {...defaultProps} />);
@@ -511,14 +525,18 @@ describe('ReceiveModal', () => {
         {
           id: 'addr-1',
           address: 'bc1qused1',
+          derivationPath: "m/84'/0'/0'/0/0",
           index: 0,
+          balance: 0,
           isChange: false,
           used: true,
         },
         {
           id: 'addr-2',
           address: 'bc1qchange',
+          derivationPath: "m/84'/0'/0'/1/0",
           index: 0,
+          balance: 0,
           isChange: true,
           used: false,
         },

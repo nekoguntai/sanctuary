@@ -1,5 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { act,fireEvent,render,screen,waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { WebSocketStatsCard } from '../../../components/SystemSettings/WebSocketStatsCard';
 import * as adminApi from '../../../src/api/admin';
 
@@ -62,7 +62,7 @@ describe('WebSocketStatsCard branch coverage', () => {
           intervalCallbacks.push(cb as () => void);
         }
         return 0 as unknown as ReturnType<typeof setInterval>;
-      }) as typeof setInterval);
+      }) as unknown as typeof setInterval);
 
     const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval').mockImplementation(() => undefined);
 

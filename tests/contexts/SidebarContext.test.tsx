@@ -5,10 +5,10 @@
  * Covers provider, hook, and refresh key incrementing.
  */
 
-import { describe, it, expect } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
-import React, { ReactNode } from 'react';
-import { SidebarProvider, useSidebar } from '../../contexts/SidebarContext';
+import { act,renderHook } from '@testing-library/react';
+import { ReactNode } from 'react';
+import { describe,expect,it } from 'vitest';
+import { SidebarProvider,useSidebar } from '../../contexts/SidebarContext';
 
 describe('SidebarContext', () => {
   const wrapper = ({ children }: { children: ReactNode }) => (

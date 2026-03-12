@@ -5,10 +5,8 @@
  * status pills, tooltip display, and education modal.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import React from 'react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { PayjoinSection } from '../../components/PayjoinSection';
 import * as payjoinApi from '../../src/api/payjoin';
 
@@ -23,6 +21,7 @@ describe('PayjoinSection', () => {
     enabled: false,
     onToggle: vi.fn(),
   };
+  const mockedCheckPayjoinEligibility = payjoinApi.checkPayjoinEligibility as any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -30,7 +29,7 @@ describe('PayjoinSection', () => {
 
   describe('rendering', () => {
     it('renders the Enhanced Privacy label', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: true,
         status: 'ready',
       });
@@ -45,7 +44,7 @@ describe('PayjoinSection', () => {
     });
 
     it('renders the toggle switch', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: true,
         status: 'ready',
       });
@@ -60,7 +59,7 @@ describe('PayjoinSection', () => {
     });
 
     it('renders help icon button', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: true,
         status: 'ready',
       });
@@ -77,7 +76,7 @@ describe('PayjoinSection', () => {
 
   describe('eligibility fetching', () => {
     it('fetches eligibility on mount', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: true,
         status: 'ready',
       });
@@ -90,7 +89,7 @@ describe('PayjoinSection', () => {
     });
 
     it('enables toggle when eligible', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: true,
         status: 'ready',
       });
@@ -104,7 +103,7 @@ describe('PayjoinSection', () => {
     });
 
     it('disables toggle when not eligible', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: false,
         status: 'no-utxos',
         reason: 'No confirmed coins available',
@@ -119,7 +118,7 @@ describe('PayjoinSection', () => {
     });
 
     it('skips eligibility fetch when walletId is empty', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: true,
         status: 'ready',
       });
@@ -136,7 +135,7 @@ describe('PayjoinSection', () => {
 
   describe('status pills', () => {
     it('shows "No coins" pill when status is no-utxos', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: false,
         status: 'no-utxos',
       });
@@ -149,7 +148,7 @@ describe('PayjoinSection', () => {
     });
 
     it('shows "Pending" pill when status is pending-confirmations', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: false,
         status: 'pending-confirmations',
       });
@@ -162,7 +161,7 @@ describe('PayjoinSection', () => {
     });
 
     it('shows "Frozen" pill when status is all-frozen', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: false,
         status: 'all-frozen',
       });
@@ -175,7 +174,7 @@ describe('PayjoinSection', () => {
     });
 
     it('shows "Locked" pill when status is all-locked', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: false,
         status: 'all-locked',
       });
@@ -188,7 +187,7 @@ describe('PayjoinSection', () => {
     });
 
     it('shows "Unavailable" pill when status is unavailable', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: false,
         status: 'unavailable',
       });
@@ -201,7 +200,7 @@ describe('PayjoinSection', () => {
     });
 
     it('does not show status pill when eligible (ready)', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: true,
         status: 'ready',
       });
@@ -219,7 +218,7 @@ describe('PayjoinSection', () => {
 
   describe('toggle interaction', () => {
     it('calls onToggle when clicked', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: true,
         status: 'ready',
       });
@@ -237,7 +236,7 @@ describe('PayjoinSection', () => {
     });
 
     it('toggles to false when currently enabled', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: true,
         status: 'ready',
       });
@@ -255,7 +254,7 @@ describe('PayjoinSection', () => {
     });
 
     it('sets aria-checked correctly', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: true,
         status: 'ready',
       });
@@ -274,7 +273,7 @@ describe('PayjoinSection', () => {
 
   describe('tooltip', () => {
     it('shows tooltip when help icon is clicked', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockImplementation(() => new Promise(() => {}));
+      mockedCheckPayjoinEligibility.mockImplementation(() => new Promise(() => {}));
 
       render(<PayjoinSection {...defaultProps} />);
 
@@ -285,7 +284,7 @@ describe('PayjoinSection', () => {
     });
 
     it('hides tooltip when close button is clicked', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockImplementation(() => new Promise(() => {}));
+      mockedCheckPayjoinEligibility.mockImplementation(() => new Promise(() => {}));
 
       render(<PayjoinSection {...defaultProps} />);
 
@@ -306,7 +305,7 @@ describe('PayjoinSection', () => {
     });
 
     it('shows eligibility reason in tooltip when unavailable', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: false,
         status: 'no-utxos',
         reason: 'No confirmed coins available for Payjoin',
@@ -327,7 +326,7 @@ describe('PayjoinSection', () => {
     });
 
     it('shows "Learn more about Payjoin" link', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockImplementation(() => new Promise(() => {}));
+      mockedCheckPayjoinEligibility.mockImplementation(() => new Promise(() => {}));
 
       render(<PayjoinSection {...defaultProps} />);
 
@@ -337,7 +336,7 @@ describe('PayjoinSection', () => {
     });
 
     it('closes tooltip on outside click and stays open on inside click', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockResolvedValue({
+      mockedCheckPayjoinEligibility.mockResolvedValue({
         eligible: false,
         status: 'no-utxos',
       });
@@ -364,7 +363,7 @@ describe('PayjoinSection', () => {
 
   describe('education modal', () => {
     it('opens education modal when "Learn more" is clicked', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockImplementation(() => new Promise(() => {}));
+      mockedCheckPayjoinEligibility.mockImplementation(() => new Promise(() => {}));
 
       render(<PayjoinSection {...defaultProps} />);
 
@@ -381,7 +380,7 @@ describe('PayjoinSection', () => {
     });
 
     it('closes education modal when X is clicked', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockImplementation(() => new Promise(() => {}));
+      mockedCheckPayjoinEligibility.mockImplementation(() => new Promise(() => {}));
 
       render(<PayjoinSection {...defaultProps} />);
 
@@ -403,7 +402,7 @@ describe('PayjoinSection', () => {
     });
 
     it('closes education modal on escape key', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockImplementation(() => new Promise(() => {}));
+      mockedCheckPayjoinEligibility.mockImplementation(() => new Promise(() => {}));
 
       render(<PayjoinSection {...defaultProps} />);
 
@@ -422,7 +421,7 @@ describe('PayjoinSection', () => {
     });
 
     it('keeps modal open on non-Escape key and on inside click', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockImplementation(() => new Promise(() => {}));
+      mockedCheckPayjoinEligibility.mockImplementation(() => new Promise(() => {}));
 
       render(<PayjoinSection {...defaultProps} />);
 
@@ -438,7 +437,7 @@ describe('PayjoinSection', () => {
     });
 
     it('closes education modal on backdrop click', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockImplementation(() => new Promise(() => {}));
+      mockedCheckPayjoinEligibility.mockImplementation(() => new Promise(() => {}));
 
       render(<PayjoinSection {...defaultProps} />);
 
@@ -456,7 +455,7 @@ describe('PayjoinSection', () => {
     });
 
     it('shows BIP78 link in modal', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockImplementation(() => new Promise(() => {}));
+      mockedCheckPayjoinEligibility.mockImplementation(() => new Promise(() => {}));
 
       render(<PayjoinSection {...defaultProps} />);
 
@@ -470,7 +469,7 @@ describe('PayjoinSection', () => {
 
   describe('enabled state', () => {
     it('shows note when enabled', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockImplementation(() => new Promise(() => {}));
+      mockedCheckPayjoinEligibility.mockImplementation(() => new Promise(() => {}));
 
       render(<PayjoinSection {...defaultProps} enabled={true} />);
 
@@ -478,7 +477,7 @@ describe('PayjoinSection', () => {
     });
 
     it('does not show note when disabled', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockImplementation(() => new Promise(() => {}));
+      mockedCheckPayjoinEligibility.mockImplementation(() => new Promise(() => {}));
 
       render(<PayjoinSection {...defaultProps} enabled={false} />);
 
@@ -488,7 +487,7 @@ describe('PayjoinSection', () => {
 
   describe('error handling', () => {
     it('handles API error gracefully', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockRejectedValue(new Error('API Error'));
+      mockedCheckPayjoinEligibility.mockRejectedValue(new Error('API Error'));
 
       render(<PayjoinSection {...defaultProps} />);
 
@@ -503,7 +502,7 @@ describe('PayjoinSection', () => {
 
   describe('className prop', () => {
     it('applies custom className', async () => {
-      vi.mocked(payjoinApi.checkPayjoinEligibility).mockImplementation(() => new Promise(() => {}));
+      mockedCheckPayjoinEligibility.mockImplementation(() => new Promise(() => {}));
 
       const { container } = render(
         <PayjoinSection {...defaultProps} className="custom-class" />

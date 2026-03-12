@@ -1,7 +1,7 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { NodeConfig } from '../../components/NodeConfig';
 import * as adminApi from '../../src/api/admin';
 import * as bitcoinApi from '../../src/api/bitcoin';
@@ -76,13 +76,6 @@ vi.mock('../../components/NetworkConnectionCard', () => ({
 }));
 
 describe('NodeConfig interaction branches', () => {
-  const flushState = async () => {
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-  };
-
   const baseNodeConfig = {
     type: 'electrum',
     explorerUrl: 'https://mempool.space',

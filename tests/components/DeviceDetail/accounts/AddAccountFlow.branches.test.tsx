@@ -1,7 +1,6 @@
-import React from 'react';
-import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { AddAccountFlow } from '../../../../components/DeviceDetail/accounts/AddAccountFlow';
 
 const parseDeviceJsonMock = vi.hoisted(() => vi.fn());
@@ -109,7 +108,7 @@ vi.mock('@keystonehq/bc-ur-registry', () => {
 });
 
 vi.mock('../../../../services/deviceParsers', () => ({
-  parseDeviceJson: (...args: unknown[]) => parseDeviceJsonMock(...args),
+  parseDeviceJson: parseDeviceJsonMock,
 }));
 
 vi.mock('../../../../services/hardwareWallet/environment', () => ({
@@ -118,21 +117,21 @@ vi.mock('../../../../services/hardwareWallet/environment', () => ({
 
 vi.mock('../../../../services/hardwareWallet/runtime', () => ({
   hardwareWalletService: {
-    connect: (...args: unknown[]) => connectMock(...args),
-    getAllXpubs: (...args: unknown[]) => getAllXpubsMock(...args),
-    disconnect: (...args: unknown[]) => disconnectMock(...args),
+    connect: connectMock,
+    getAllXpubs: getAllXpubsMock,
+    disconnect: disconnectMock,
   },
   DeviceType: {},
 }));
 
 vi.mock('../../../../src/api/devices', () => ({
-  getDevice: (...args: unknown[]) => getDeviceMock(...args),
-  addDeviceAccount: (...args: unknown[]) => addDeviceAccountMock(...args),
+  getDevice: getDeviceMock,
+  addDeviceAccount: addDeviceAccountMock,
 }));
 
 vi.mock('../../../../components/DeviceDetail/accounts/urHelpers', () => ({
-  extractFromUrResult: (...args: unknown[]) => extractFromUrResultMock(...args),
-  normalizeDerivationPath: (...args: unknown[]) => normalizeDerivationPathMock(...args),
+  extractFromUrResult: extractFromUrResultMock,
+  normalizeDerivationPath: normalizeDerivationPathMock,
 }));
 
 vi.mock('../../../../utils/logger', () => ({

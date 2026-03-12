@@ -40,7 +40,7 @@ export const bluewalletHandler: ExportFormatHandler = {
   fileExtension: '.txt',
   mimeType: 'text/plain',
 
-  canExport(wallet: WalletExportData): boolean {
+  canExport(_wallet: WalletExportData): boolean {
     // BlueWallet format is best for multisig wallets
     // But can also export single-sig
     return true;
@@ -64,7 +64,6 @@ export const bluewalletHandler: ExportFormatHandler = {
     // Device/Key information
     for (let i = 0; i < wallet.devices.length; i++) {
       const device = wallet.devices[i];
-      const keyNum = i + 1;
 
       lines.push(`Derivation: ${device.derivationPath || "m/48'/0'/0'/2'"}`);
       lines.push(`${device.fingerprint}: ${device.xpub}`);

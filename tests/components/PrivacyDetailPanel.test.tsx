@@ -5,9 +5,8 @@
  * factors list, warnings, and learn more section.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import React from 'react';
+import { act,fireEvent,render,screen } from '@testing-library/react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { PrivacyDetailPanel } from '../../components/PrivacyDetailPanel';
 import type { UtxoPrivacyInfo } from '../../src/api/transactions';
 
@@ -26,17 +25,24 @@ describe('PrivacyDetailPanel', () => {
     address: 'bc1qtest123',
   };
 
-  const mockPrivacyInfo: UtxoPrivacyInfo = {
-    score: {
-      score: 75,
-      grade: 'good',
-      factors: [
-        { factor: 'addressReuse', impact: -15, description: 'Address has been reused' },
-        { factor: 'clusterSize', impact: -10, description: 'Multiple linked outputs' },
-      ],
-      warnings: ['Consider using a fresh address for better privacy'],
-    },
-  };
+  const makePrivacyInfo = (score: UtxoPrivacyInfo['score']): UtxoPrivacyInfo => ({
+    utxoId: 'utxo-1',
+    txid: mockUtxo.txid,
+    vout: mockUtxo.vout,
+    amount: mockUtxo.amount,
+    address: mockUtxo.address,
+    score,
+  });
+
+  const mockPrivacyInfo: UtxoPrivacyInfo = makePrivacyInfo({
+    score: 75,
+    grade: 'good',
+    factors: [
+      { factor: 'addressReuse', impact: -15, description: 'Address has been reused' },
+      { factor: 'clusterSize', impact: -10, description: 'Multiple linked outputs' },
+    ],
+    warnings: ['Consider using a fresh address for better privacy'],
+  });
 
   const defaultProps = {
     utxo: mockUtxo,
@@ -175,9 +181,12 @@ describe('PrivacyDetailPanel', () => {
 
   describe('grade configurations', () => {
     it('renders excellent grade', async () => {
-      const excellentInfo: UtxoPrivacyInfo = {
-        score: { score: 95, grade: 'excellent', factors: [], warnings: [] },
-      };
+      const excellentInfo: UtxoPrivacyInfo = makePrivacyInfo({
+        score: 95,
+        grade: 'excellent',
+        factors: [],
+        warnings: [],
+      });
 
       render(<PrivacyDetailPanel {...defaultProps} privacyInfo={excellentInfo} />);
 
@@ -191,9 +200,12 @@ describe('PrivacyDetailPanel', () => {
     });
 
     it('renders fair grade', async () => {
-      const fairInfo: UtxoPrivacyInfo = {
-        score: { score: 55, grade: 'fair', factors: [], warnings: [] },
-      };
+      const fairInfo: UtxoPrivacyInfo = makePrivacyInfo({
+        score: 55,
+        grade: 'fair',
+        factors: [],
+        warnings: [],
+      });
 
       render(<PrivacyDetailPanel {...defaultProps} privacyInfo={fairInfo} />);
 
@@ -207,9 +219,12 @@ describe('PrivacyDetailPanel', () => {
     });
 
     it('renders poor grade', async () => {
-      const poorInfo: UtxoPrivacyInfo = {
-        score: { score: 25, grade: 'poor', factors: [], warnings: [] },
-      };
+      const poorInfo: UtxoPrivacyInfo = makePrivacyInfo({
+        score: 25,
+        grade: 'poor',
+        factors: [],
+        warnings: [],
+      });
 
       render(<PrivacyDetailPanel {...defaultProps} privacyInfo={poorInfo} />);
 
@@ -225,9 +240,12 @@ describe('PrivacyDetailPanel', () => {
 
   describe('perfect score (no factors)', () => {
     it('shows no concerns message when factors array is empty', async () => {
-      const perfectInfo: UtxoPrivacyInfo = {
-        score: { score: 100, grade: 'excellent', factors: [], warnings: [] },
-      };
+      const perfectInfo: UtxoPrivacyInfo = makePrivacyInfo({
+        score: 100,
+        grade: 'excellent',
+        factors: [],
+        warnings: [],
+      });
 
       render(<PrivacyDetailPanel {...defaultProps} privacyInfo={perfectInfo} />);
 
@@ -395,14 +413,12 @@ describe('PrivacyDetailPanel', () => {
     });
 
     it('falls back to original description for unknown factors', async () => {
-      const unknownFactorInfo: UtxoPrivacyInfo = {
-        score: {
-          score: 80,
-          grade: 'good',
-          factors: [{ factor: 'unknownFactor', impact: -5, description: 'Original description' }],
-          warnings: [],
-        },
-      };
+      const unknownFactorInfo: UtxoPrivacyInfo = makePrivacyInfo({
+        score: 80,
+        grade: 'good',
+        factors: [{ factor: 'unknownFactor', impact: -5, description: 'Original description' }],
+        warnings: [],
+      });
 
       render(<PrivacyDetailPanel {...defaultProps} privacyInfo={unknownFactorInfo} />);
 
@@ -414,14 +430,12 @@ describe('PrivacyDetailPanel', () => {
     });
 
     it('shows + prefix for positive factor impacts', async () => {
-      const positiveFactorInfo: UtxoPrivacyInfo = {
-        score: {
-          score: 85,
-          grade: 'good',
-          factors: [{ factor: 'benefitFactor', impact: 5, description: 'Improved privacy signal' }],
-          warnings: [],
-        },
-      };
+      const positiveFactorInfo: UtxoPrivacyInfo = makePrivacyInfo({
+        score: 85,
+        grade: 'good',
+        factors: [{ factor: 'benefitFactor', impact: 5, description: 'Improved privacy signal' }],
+        warnings: [],
+      });
 
       render(<PrivacyDetailPanel {...defaultProps} privacyInfo={positiveFactorInfo} />);
 

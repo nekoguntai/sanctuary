@@ -1,9 +1,9 @@
-import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act,renderHook } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { useContainerLifecycle } from '../../../../components/AISettings/hooks/useContainerLifecycle';
+import { invalidateAIStatusCache } from '../../../../hooks/useAIStatus';
 import * as adminApi from '../../../../src/api/admin';
 import * as aiApi from '../../../../src/api/ai';
-import { invalidateAIStatusCache } from '../../../../hooks/useAIStatus';
 
 vi.mock('../../../../src/api/admin', () => ({
   updateSystemSettings: vi.fn(),

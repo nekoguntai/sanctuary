@@ -9,9 +9,8 @@ import { createLogger } from '../../../utils/logger';
 import { getErrorMessage } from '../../../utils/errors';
 import { getMempoolEstimatorType } from './config';
 import { getRecentBlocks, getMempoolInfo, getRecommendedFees, getProjectedMempoolBlocks } from './endpoints';
-import { formatConfirmedBlocks, getValidMedianFee, formatFeeRate } from './formatting';
+import { formatConfirmedBlocks, formatFeeRate } from './formatting';
 import { getBlocksAndMempoolSimple } from './simpleEstimator';
-import type { MempoolBlock, MempoolInfo, FeeEstimates } from './types';
 
 const log = createLogger('MEMPOOL');
 

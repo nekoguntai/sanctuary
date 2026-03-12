@@ -4,7 +4,7 @@
  * Tests for the account type configuration, helper functions, and import logic
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe,expect,it } from 'vitest';
 
 // Replicate the types and config from DeviceDetail for testing
 interface DeviceAccount {

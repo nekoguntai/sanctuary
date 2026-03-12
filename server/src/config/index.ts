@@ -13,9 +13,9 @@
 
 import dotenv from 'dotenv';
 import path from 'path';
-import type { AppConfig, CombinedConfig, LogLevel, NetworkType, ElectrumProtocol, SyncConfig, ElectrumClientConfig } from './types';
+import type { CombinedConfig, LogLevel, NetworkType, ElectrumProtocol } from './types';
 import { loadFeatureFlags } from './features';
-import { assertValidConfig, validateConfigSchema } from './schema';
+import { assertValidConfig } from './schema';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../../.env') });

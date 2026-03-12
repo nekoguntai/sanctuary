@@ -94,7 +94,7 @@ router.get('/models/:slug', async (req: Request, res: Response) => {
  * GET /api/v1/devices/models/manufacturers
  * Get list of all manufacturers (public endpoint)
  */
-router.get('/manufacturers', async (req: Request, res: Response) => {
+router.get('/manufacturers', async (_req: Request, res: Response) => {
   try {
     const manufacturers = await prisma.hardwareDeviceModel.findMany({
       where: { discontinued: false },

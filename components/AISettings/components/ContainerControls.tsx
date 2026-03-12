@@ -1,4 +1,3 @@
-import React from 'react';
 import { Loader2, Play, Square, RefreshCw } from 'lucide-react';
 import type { ContainerControlsProps } from '../types';
 

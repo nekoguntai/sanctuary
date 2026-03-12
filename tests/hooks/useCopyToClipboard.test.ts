@@ -4,8 +4,8 @@
  * Tests for the clipboard hook that provides copy functionality with visual feedback.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { act,renderHook } from '@testing-library/react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 
 // Mock the clipboard utility

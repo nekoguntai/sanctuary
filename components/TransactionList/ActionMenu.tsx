@@ -2,7 +2,7 @@ import React from 'react';
 import { Transaction, Wallet } from '../../types';
 import { TransactionActions } from '../TransactionActions';
 import { getTxExplorerUrl } from '../../utils/explorer';
-import { ExternalLink, Copy, Check, X } from 'lucide-react';
+import { ExternalLink, Copy, Check } from 'lucide-react';
 
 interface ActionMenuProps {
   selectedTx: Transaction;

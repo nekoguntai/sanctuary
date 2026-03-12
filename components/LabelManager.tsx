@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Tag, Plus, Edit2, Trash2, X, Check, Palette, Hash } from 'lucide-react';
+import { Tag, Plus, Edit2, Trash2, X, Check, Hash } from 'lucide-react';
 import * as labelsApi from '../src/api/labels';
 import type { Label } from '../src/api/labels';
 import { useLoadingState } from '../hooks/useLoadingState';

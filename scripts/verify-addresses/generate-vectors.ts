@@ -17,8 +17,7 @@
  */
 
 import * as bip39 from 'bip39';
-import { BIP32Factory } from 'bip32';
-import * as ecc from 'tiny-secp256k1';
+import { fromSeed } from 'bip32';
 import * as bitcoin from 'bitcoinjs-lib';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
@@ -45,8 +44,6 @@ import { goImpl } from './implementations/go.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-const bip32 = BIP32Factory(ecc);
 
 // =============================================================================
 // Configuration
@@ -84,7 +81,7 @@ const MIN_IMPLEMENTATIONS = 2;
  */
 function deriveXpub(mnemonic: string, path: string, network: Network): string {
   const seed = bip39.mnemonicToSeedSync(mnemonic);
-  const root = bip32.fromSeed(seed, network === 'mainnet'
+  const root = fromSeed(seed, network === 'mainnet'
     ? { bip32: { public: 0x0488B21E, private: 0x0488ADE4 }, wif: 0x80 } as any
     : { bip32: { public: 0x043587CF, private: 0x04358394 }, wif: 0xEF } as any
   );
@@ -211,7 +208,7 @@ function generateMultisigTestCases(): MultisigTestCase[] {
   }
 
   // Key ordering tests - verify that different input orders produce same address
-  const baseXpubs = MULTISIG_MNEMONICS.slice(0, 3).map((mnemonic, i) =>
+  const baseXpubs = MULTISIG_MNEMONICS.slice(0, 3).map((mnemonic) =>
     deriveXpub(mnemonic, "m/48'/1'/0'/2'", 'testnet')
   );
 
@@ -268,7 +265,6 @@ function decodeBech32WitnessProgram(address: string): string | null {
       const sepIdx = lower.lastIndexOf('1');
       if (sepIdx < 1) return null;
 
-      const hrp = lower.slice(0, sepIdx);
       const data = lower.slice(sepIdx + 1);
 
       // Decode the data part
@@ -283,8 +279,6 @@ function decodeBech32WitnessProgram(address: string): string | null {
       const dataWithoutChecksum = decoded.slice(0, -6);
 
       // First byte is witness version
-      const witnessVersion = dataWithoutChecksum[0];
-
       // Rest is the witness program (5-bit to 8-bit conversion)
       const programBits = dataWithoutChecksum.slice(1);
       const program: number[] = [];
@@ -330,13 +324,6 @@ function normalizeAddress(address: string): string {
   // These are base58check with network byte embedded
   // Testnet addresses start with 'm', 'n', '2' vs mainnet '1', '3'
   return address;
-}
-
-/**
- * Check if two addresses are equivalent (same despite network prefix differences)
- */
-function addressesEquivalent(addr1: string, addr2: string): boolean {
-  return normalizeAddress(addr1) === normalizeAddress(addr2);
 }
 
 // =============================================================================
@@ -691,6 +678,7 @@ async function main() {
         index: testCase.index,
         change: testCase.change,
         expectedAddress: result.consensusAddress,
+        expectedDescriptor: '',
         verifiedBy: [...result.results.keys()],
       });
     } else {

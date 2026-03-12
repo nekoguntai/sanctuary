@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent,render,screen,waitFor } from '@testing-library/react';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { UTXOList } from '../../components/UTXOList';
 import * as currencyContext from '../../contexts/CurrencyContext';
 import * as bitcoinHooks from '../../hooks/queries/useBitcoin';

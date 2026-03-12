@@ -7,7 +7,7 @@
 
 import { createLogger } from '../../../utils/logger';
 import { parseDescriptorForImport, extractDescriptorFromText, isDescriptorTextFormat } from './descriptorParser';
-import { parseJsonImport, validateJsonImport, isWalletExportFormat } from './jsonParser';
+import { parseJsonImport, isWalletExportFormat } from './jsonParser';
 import { isColdcardExportFormat, parseColdcardExport } from './coldcardParser';
 import { isBlueWalletTextFormat, parseBlueWalletText, parseBlueWalletTextImport } from './bluewalletParser';
 import type { ParsedDescriptor, ScriptType, JsonImportConfig, JsonImportDevice } from './types';

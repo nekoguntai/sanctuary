@@ -45,7 +45,6 @@ interface SettingsTabProps {
   onSetShowDangerZone: (show: boolean) => void;
   onShowDelete: () => void;
   onShowExport: () => void;
-  explorerUrl: string;
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({
@@ -68,7 +67,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onSetShowDangerZone,
   onShowDelete,
   onShowExport,
-  explorerUrl,
 }) => {
   const navigate = useNavigate();
 

@@ -5,10 +5,10 @@
  * Covers adding, removing, auto-dismissal, and deduplication of notifications.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
-import React, { ReactNode } from 'react';
-import { NotificationProvider, useNotifications } from '../../contexts/NotificationContext';
+import { act,renderHook } from '@testing-library/react';
+import { ReactNode } from 'react';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
+import { NotificationProvider,useNotifications } from '../../contexts/NotificationContext';
 
 // Mock the generateNotificationId function
 vi.mock('../../components/NotificationToast', () => ({

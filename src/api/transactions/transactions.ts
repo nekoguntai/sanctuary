@@ -192,7 +192,10 @@ export async function getBalanceHistory(
  * Get addresses for a wallet
  */
 export async function getAddresses(walletId: string, params?: GetAddressesParams): Promise<Address[]> {
-  return apiClient.get<Address[]>(`/wallets/${walletId}/addresses`, params);
+  return apiClient.get<Address[]>(
+    `/wallets/${walletId}/addresses`,
+    params as Record<string, string | number | boolean | string[] | undefined | null> | undefined
+  );
 }
 
 /**

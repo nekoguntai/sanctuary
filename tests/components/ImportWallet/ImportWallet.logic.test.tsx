@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ApiError } from '../../../src/api/client';
+import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { ImportWallet } from '../../../components/ImportWallet/ImportWallet';
+import { ApiError } from '../../../src/api/client';
 
 const mockNavigate = vi.fn();
 const mockUseImportState = vi.fn();

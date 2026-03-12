@@ -3,13 +3,13 @@
  *
  * Tests for shared error handling functions.
  */
-import { describe, it, expect } from 'vitest';
 import {
-  extractErrorMessage,
-  isAbortError,
-  isNetworkError,
-  isTimeoutError,
+extractErrorMessage,
+isAbortError,
+isNetworkError,
+isTimeoutError,
 } from '@shared/utils/errors';
+import { describe,expect,it } from 'vitest';
 
 describe('Shared Error Utilities', () => {
   describe('extractErrorMessage', () => {

@@ -5,15 +5,10 @@ import type {
   DeviceType,
   TransactionForSigning,
 } from '../services/hardwareWallet/types';
+import { loadHardwareWalletRuntime } from '../services/hardwareWallet/loader';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('useHardwareWallet');
-let hardwareWalletModulePromise: Promise<typeof import('../services/hardwareWallet/runtime')> | null = null;
-
-const loadHardwareWalletModule = async () => {
-  hardwareWalletModulePromise ??= import('../services/hardwareWallet/runtime');
-  return hardwareWalletModulePromise;
-};
 
 export interface UseHardwareWalletReturn {
   // Device state
@@ -56,7 +51,7 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
    */
   const refreshDevices = useCallback(async () => {
     try {
-      const { getConnectedDevices } = await loadHardwareWalletModule();
+      const { getConnectedDevices } = await loadHardwareWalletRuntime();
       const connectedDevices = await getConnectedDevices();
       setDevices(connectedDevices);
     } catch (err) {
@@ -79,7 +74,7 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
       setConnecting(true);
       setError(null);
 
-      const { hardwareWalletService } = await loadHardwareWalletModule();
+      const { hardwareWalletService } = await loadHardwareWalletRuntime();
       const connectedDevice = await hardwareWalletService.connect(type);
       setDevice(connectedDevice);
 
@@ -99,7 +94,7 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
    */
   const disconnect = useCallback(() => {
     void (async () => {
-      const { hardwareWalletService } = await loadHardwareWalletModule();
+      const { hardwareWalletService } = await loadHardwareWalletRuntime();
       await hardwareWalletService.disconnect();
     })().catch(err => {
       log.warn('Failed to disconnect hardware wallet service', { error: err });
@@ -120,7 +115,7 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
         throw new Error('No device connected');
       }
 
-      const { hardwareWalletService } = await loadHardwareWalletModule();
+      const { hardwareWalletService } = await loadHardwareWalletRuntime();
       const txid = await hardwareWalletService.signTransaction(tx);
       return txid;
     } catch (err) {
@@ -144,7 +139,7 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
     inputPaths: string[] = [],
     multisigXpubs?: Record<string, string>
   ): Promise<{ psbt: string; rawTx?: string }> => {
-    const { hardwareWalletService } = await loadHardwareWalletModule();
+    const { hardwareWalletService } = await loadHardwareWalletRuntime();
 
     // Check the service's connection state directly (not React state which updates async)
     if (!hardwareWalletService.isConnected()) {

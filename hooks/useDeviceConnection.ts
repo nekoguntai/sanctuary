@@ -10,16 +10,11 @@
 import { useState, useCallback } from 'react';
 import { HardwareDeviceModel } from '../src/api/devices';
 import { DeviceAccount } from '../services/deviceParsers';
+import { loadHardwareWalletRuntime } from '../services/hardwareWallet/loader';
 import { getDeviceTypeFromModel } from '../utils/deviceConnection';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('useDeviceConnection');
-let hardwareWalletModulePromise: Promise<typeof import('../services/hardwareWallet/runtime')> | null = null;
-
-const loadHardwareWalletModule = async () => {
-  hardwareWalletModulePromise ??= import('../services/hardwareWallet/runtime');
-  return hardwareWalletModulePromise;
-};
 
 /** Progress state for USB scanning */
 export interface UsbProgress {
@@ -96,7 +91,7 @@ export function useDeviceConnection(): UseDeviceConnectionState {
     setConnectionResult(null);
 
     try {
-      const { hardwareWalletService } = await loadHardwareWalletModule();
+      const { hardwareWalletService } = await loadHardwareWalletRuntime();
       // Determine device type from model
       const deviceType = getDeviceTypeFromModel(model);
 

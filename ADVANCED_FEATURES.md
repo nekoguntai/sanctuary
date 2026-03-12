@@ -151,9 +151,8 @@ Spend from specific UTXOs and get privacy impact analysis before you sign.
 
 #### Frontend Components
 - **Files**:
-  - `components/CoinControlPanel.tsx`
+  - `components/send/steps/OutputsStep/CoinControlPanel.tsx`
   - `components/SpendPrivacyCard.tsx`
-  - `components/StrategySelector.tsx`
 
 #### How It Works
 1. Users can select specific UTXOs to spend (`selectedUtxoIds`)

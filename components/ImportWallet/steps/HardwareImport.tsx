@@ -8,17 +8,12 @@ import {
 import { Button } from '../../ui/Button';
 import type { DeviceType } from '../../../services/hardwareWallet/types';
 import { isSecureContext } from '../../../services/hardwareWallet/environment';
+import { loadHardwareWalletRuntime } from '../../../services/hardwareWallet/loader';
 import { createLogger } from '../../../utils/logger';
 import { ScriptType, HardwareDeviceType, getDerivationPath, scriptTypeOptions } from '../importHelpers';
 import { XpubData } from '../hooks/useImportState';
 
 const log = createLogger('ImportWallet');
-let hardwareWalletModulePromise: Promise<typeof import('../../../services/hardwareWallet/runtime')> | null = null;
-
-const loadHardwareWalletModule = async () => {
-  hardwareWalletModulePromise ??= import('../../../services/hardwareWallet/runtime');
-  return hardwareWalletModulePromise;
-};
 
 interface HardwareImportProps {
   hardwareDeviceType: HardwareDeviceType;
@@ -70,7 +65,7 @@ export const HardwareImport: React.FC<HardwareImportProps> = ({
     setHardwareError(null);
 
     try {
-      const { hardwareWalletService } = await loadHardwareWalletModule();
+      const { hardwareWalletService } = await loadHardwareWalletRuntime();
       // Connect using the selected device type
       const device = await hardwareWalletService.connect(hardwareDeviceType as DeviceType);
       setDeviceConnected(true);
@@ -89,7 +84,7 @@ export const HardwareImport: React.FC<HardwareImportProps> = ({
     setHardwareError(null);
 
     try {
-      const { hardwareWalletService } = await loadHardwareWalletModule();
+      const { hardwareWalletService } = await loadHardwareWalletRuntime();
       const path = getDerivationPath(scriptType, accountIndex);
       // Use the service which routes to the correct device implementation
       const result = await hardwareWalletService.getXpub(path);

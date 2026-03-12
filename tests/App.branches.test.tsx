@@ -215,7 +215,7 @@ describe('App branch coverage', () => {
     expect(mockUseWebSocketQueryInvalidation).toHaveBeenCalled();
   });
 
-  it('renders authenticated app with preference fallbacks and theme toggling', () => {
+  it('renders authenticated app with preference fallbacks and theme toggling', async () => {
     const updatePreferences = vi.fn();
     const logout = vi.fn();
     mockUseUser.mockReturnValue({
@@ -230,8 +230,8 @@ describe('App branch coverage', () => {
 
     render(<App />);
 
-    expect(screen.getByText('Dashboard Page')).toBeInTheDocument();
-    const bg = screen.getByTestId('animated-background');
+    expect(await screen.findByText('Dashboard Page')).toBeInTheDocument();
+    const bg = await screen.findByTestId('animated-background');
     expect(bg.getAttribute('data-pattern')).toBe('minimal');
     expect(bg.getAttribute('data-opacity')).toBe('50');
     expect(bg.getAttribute('data-dark-mode')).toBe('false');
@@ -265,7 +265,7 @@ describe('App branch coverage', () => {
       expect(screen.getByText('password-changed')).toBeInTheDocument();
     });
 
-    const bg = screen.getByTestId('animated-background');
+    const bg = await screen.findByTestId('animated-background');
     expect(bg.getAttribute('data-pattern')).toBe('sakura-petals');
     expect(bg.getAttribute('data-opacity')).toBe('22');
     expect(bg.getAttribute('data-dark-mode')).toBe('true');
@@ -302,6 +302,8 @@ describe('App branch coverage', () => {
     });
 
     const routes: Array<{ hash: string; text: string }> = [
+      { hash: '#/wallets', text: 'Wallet List' },
+      { hash: '#/wallets/wallet-1', text: 'Wallet Detail' },
       { hash: '#/wallets/create', text: 'Create Wallet Page' },
       { hash: '#/wallets/import', text: 'Import Wallet Page' },
       { hash: '#/wallets/abc/send', text: 'Send Transaction Page' },

@@ -2,13 +2,13 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, HashRouter } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Login } from './components/Login';
-import { Dashboard } from './components/Dashboard';
-import { WalletList } from './components/WalletList';
-import { WalletDetail } from './components/WalletDetail';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 
 // Lazy-loaded routes for code splitting
 // These are loaded on-demand to reduce initial bundle size
+const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
+const WalletList = lazy(() => import('./components/WalletList').then(m => ({ default: m.WalletList })));
+const WalletDetail = lazy(() => import('./components/WalletDetail').then(m => ({ default: m.WalletDetail })));
 const SendTransactionPage = lazy(() => import('./components/send').then(m => ({ default: m.SendTransactionPage })));
 const CreateWallet = lazy(() => import('./components/CreateWallet').then(m => ({ default: m.CreateWallet })));
 const ImportWallet = lazy(() => import('./components/ImportWallet').then(m => ({ default: m.ImportWallet })));
@@ -26,6 +26,7 @@ const AuditLogs = lazy(() => import('./components/AuditLogs').then(m => ({ defau
 const AISettings = lazy(() => import('./components/AISettings'));
 const Monitoring = lazy(() => import('./components/Monitoring'));
 const FeatureFlags = lazy(() => import('./components/FeatureFlags').then(m => ({ default: m.FeatureFlags })));
+const AnimatedBackground = lazy(() => import('./components/AnimatedBackground').then(m => ({ default: m.AnimatedBackground })));
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { UserProvider, useUser } from './contexts/UserContext';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -37,7 +38,6 @@ import { QueryProvider } from './providers/QueryProvider';
 import { useWebSocketQueryInvalidation } from './hooks/useWebSocket';
 import * as authApi from './src/api/auth';
 import { createLogger } from './utils/logger';
-import { AnimatedBackground } from './components/AnimatedBackground';
 
 const log = createLogger('App');
 
@@ -92,15 +92,17 @@ const AppRoutes: React.FC = () => {
   return (
     <>
       {/* Animated background for special patterns like sakura-petals */}
-      <AnimatedBackground
-        pattern={backgroundPattern}
-        darkMode={isDarkMode}
-        opacity={patternOpacity}
-      />
+      <Suspense fallback={null}>
+        <AnimatedBackground
+          pattern={backgroundPattern}
+          darkMode={isDarkMode}
+          opacity={patternOpacity}
+        />
+      </Suspense>
       <Layout darkMode={isDarkMode} toggleTheme={toggleTheme} onLogout={logout}>
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
-            {/* Core routes - eagerly loaded for fast initial render */}
+            {/* Core routes */}
             <Route path="/" element={<Dashboard />} />
             <Route path="/wallets" element={<WalletList />} />
             <Route path="/wallets/:id" element={<WalletDetail />} />

@@ -121,6 +121,7 @@ vi.mock('../../../src/utils/encryption', () => ({
 }));
 
 // Mock password validation
+const mockVerifyPassword = vi.fn().mockResolvedValue(true);
 vi.mock('../../../src/utils/password', () => ({
   validatePasswordStrength: vi.fn((password: string) => {
     if (password.length < 8) {
@@ -128,6 +129,7 @@ vi.mock('../../../src/utils/password', () => ({
     }
     return { valid: true, errors: [] };
   }),
+  verifyPassword: (...args: unknown[]) => mockVerifyPassword(...args),
 }));
 
 // Mock logger
@@ -168,6 +170,29 @@ vi.mock('fs', () => {
     readFileSync: vi.fn(() => JSON.stringify({ version: '1.0.0' })),
   };
 });
+
+/**
+ * Find a route layer in an Express router, searching both direct routes
+ * and sub-routers mounted with router.use('/', subRouter).
+ */
+function findRouteLayer(router: any, path: string, method: string): any {
+  // Check direct routes first
+  const direct = router.stack.find((layer: any) =>
+    layer.route?.path === path && layer.route?.methods?.[method]
+  );
+  if (direct) return direct;
+
+  // Search sub-routers
+  for (const layer of router.stack) {
+    if (!layer.route && layer.handle?.stack) {
+      const sub = layer.handle.stack.find((subLayer: any) =>
+        subLayer.route?.path === path && subLayer.route?.methods?.[method]
+      );
+      if (sub) return sub;
+    }
+  }
+  return undefined;
+}
 
 describe('Admin API', () => {
   let adminRouter: any;
@@ -1675,123 +1700,155 @@ describe('Admin API', () => {
       process.env = originalEnv;
     });
 
-    describe('GET /encryption-keys', () => {
-      it('should return encryption keys for admin users', async () => {
+    describe('POST /encryption-keys', () => {
+      it('should return encryption keys for admin users with valid password', async () => {
+        mockVerifyPassword.mockResolvedValueOnce(true);
+        mockPrismaClient.user.findUnique.mockResolvedValueOnce({ password: 'hashed-password' });
+
         const req = createMockRequest({
           user: { userId: 'admin-1', username: 'admin', isAdmin: true },
+          body: { password: 'correct-password' },
         });
         const { res, getResponse } = createMockResponse();
 
-        const handler = adminRouter.stack.find((layer: any) =>
-          layer.route?.path === '/encryption-keys' && layer.route?.methods?.get
-        )?.route?.stack?.[2]?.handle;
+        const routeLayer = findRouteLayer(adminRouter, '/encryption-keys', 'post');
+        expect(routeLayer).toBeDefined();
+        const handler = routeLayer.route.stack[2].handle;
+        await handler(req, res);
+        const response = getResponse();
+        expect(response.statusCode).toBe(200);
+        expect(response.body.encryptionKey).toBe('test-encryption-key-32-chars-long!');
+        expect(response.body.encryptionSalt).toBe('test-encryption-salt-value');
+        expect(response.body.hasEncryptionKey).toBe(true);
+        expect(response.body.hasEncryptionSalt).toBe(true);
+      });
 
-        if (handler) {
-          await handler(req, res);
-          const response = getResponse();
-          expect(response.statusCode).toBe(200);
-          expect(response.body.encryptionKey).toBe('test-encryption-key-32-chars-long!');
-          expect(response.body.encryptionSalt).toBe('test-encryption-salt-value');
-          expect(response.body.hasEncryptionKey).toBe(true);
-          expect(response.body.hasEncryptionSalt).toBe(true);
-        }
+      it('should reject requests without password with 400', async () => {
+        const req = createMockRequest({
+          user: { userId: 'admin-1', username: 'admin', isAdmin: true },
+          body: {},
+        });
+        const { res, getResponse } = createMockResponse();
+
+        const routeLayer = findRouteLayer(adminRouter, '/encryption-keys', 'post');
+        expect(routeLayer).toBeDefined();
+        const handler = routeLayer.route.stack[2].handle;
+        await handler(req, res);
+        const response = getResponse();
+        expect(response.statusCode).toBe(400);
+        expect(response.body.message).toBe('Password confirmation required to view encryption keys');
+      });
+
+      it('should reject incorrect password with 401', async () => {
+        mockVerifyPassword.mockResolvedValueOnce(false);
+        mockPrismaClient.user.findUnique.mockResolvedValueOnce({ password: 'hashed-password' });
+
+        const req = createMockRequest({
+          user: { userId: 'admin-1', username: 'admin', isAdmin: true },
+          body: { password: 'wrong-password' },
+        });
+        const { res, getResponse } = createMockResponse();
+
+        const routeLayer = findRouteLayer(adminRouter, '/encryption-keys', 'post');
+        expect(routeLayer).toBeDefined();
+        const handler = routeLayer.route.stack[2].handle;
+        await handler(req, res);
+        const response = getResponse();
+        expect(response.statusCode).toBe(401);
+        expect(response.body.message).toBe('Incorrect password');
       });
 
       it('should audit log the access', async () => {
         mockAuditLogFromRequest.mockClear();
+        mockVerifyPassword.mockResolvedValueOnce(true);
+        mockPrismaClient.user.findUnique.mockResolvedValueOnce({ password: 'hashed-password' });
 
         const req = createMockRequest({
           user: { userId: 'admin-1', username: 'admin', isAdmin: true },
+          body: { password: 'correct-password' },
         });
         const { res } = createMockResponse();
 
-        const handler = adminRouter.stack.find((layer: any) =>
-          layer.route?.path === '/encryption-keys' && layer.route?.methods?.get
-        )?.route?.stack?.[2]?.handle;
-
-        if (handler) {
-          await handler(req, res);
-          expect(mockAuditLogFromRequest).toHaveBeenCalledWith(
-            req,
-            'admin.encryption_keys_view',
-            'admin',
-            expect.objectContaining({
-              details: { action: 'view_encryption_keys' },
-            })
-          );
-        }
+        const routeLayer = findRouteLayer(adminRouter, '/encryption-keys', 'post');
+        expect(routeLayer).toBeDefined();
+        const handler = routeLayer.route.stack[2].handle;
+        await handler(req, res);
+        expect(mockAuditLogFromRequest).toHaveBeenCalledWith(
+          req,
+          'admin.encryption_keys_view',
+          'admin',
+          expect.objectContaining({
+            details: { action: 'view_encryption_keys' },
+          })
+        );
       });
 
       it('should return empty strings and false flags when keys are not set', async () => {
         // Clear the environment variables
         delete process.env.ENCRYPTION_KEY;
         delete process.env.ENCRYPTION_SALT;
+        mockVerifyPassword.mockResolvedValueOnce(true);
+        mockPrismaClient.user.findUnique.mockResolvedValueOnce({ password: 'hashed-password' });
 
         const req = createMockRequest({
           user: { userId: 'admin-1', username: 'admin', isAdmin: true },
+          body: { password: 'correct-password' },
         });
         const { res, getResponse } = createMockResponse();
 
-        const handler = adminRouter.stack.find((layer: any) =>
-          layer.route?.path === '/encryption-keys' && layer.route?.methods?.get
-        )?.route?.stack?.[2]?.handle;
-
-        if (handler) {
-          await handler(req, res);
-          const response = getResponse();
-          expect(response.statusCode).toBe(200);
-          expect(response.body.encryptionKey).toBe('');
-          expect(response.body.encryptionSalt).toBe('');
-          expect(response.body.hasEncryptionKey).toBe(false);
-          expect(response.body.hasEncryptionSalt).toBe(false);
-        }
+        const routeLayer = findRouteLayer(adminRouter, '/encryption-keys', 'post');
+        expect(routeLayer).toBeDefined();
+        const handler = routeLayer.route.stack[2].handle;
+        await handler(req, res);
+        const response = getResponse();
+        expect(response.statusCode).toBe(200);
+        expect(response.body.encryptionKey).toBe('');
+        expect(response.body.encryptionSalt).toBe('');
+        expect(response.body.hasEncryptionKey).toBe(false);
+        expect(response.body.hasEncryptionSalt).toBe(false);
       });
 
       it('should reject non-admin users with 403', async () => {
         const req = createMockRequest({
           user: { userId: 'user-1', username: 'regularuser', isAdmin: false },
+          body: { password: 'some-password' },
         });
         const { res, getResponse } = createMockResponse();
 
         // For non-admin, the requireAdmin middleware (stack[1]) should reject
-        const middlewareStack = adminRouter.stack.find((layer: any) =>
-          layer.route?.path === '/encryption-keys' && layer.route?.methods?.get
-        )?.route?.stack;
+        const routeLayer = findRouteLayer(adminRouter, '/encryption-keys', 'post');
+        expect(routeLayer).toBeDefined();
+        const middlewareStack = routeLayer.route.stack;
+        const requireAdminMiddleware = middlewareStack[1].handle;
+        const next = createMockNext();
 
-        if (middlewareStack && middlewareStack[1]) {
-          const requireAdminMiddleware = middlewareStack[1].handle;
-          const next = createMockNext();
+        await requireAdminMiddleware(req, res, next);
+        const response = getResponse();
 
-          await requireAdminMiddleware(req, res, next);
-          const response = getResponse();
-
-          // requireAdmin should return 403 for non-admin
-          expect(response.statusCode).toBe(403);
-          expect(response.body.error).toBe('Forbidden');
-        }
+        // requireAdmin should return 403 for non-admin
+        expect(response.statusCode).toBe(403);
+        expect(response.body.error).toBe('Forbidden');
       });
 
       it('should reject unauthenticated requests with 401', async () => {
         const req = createMockRequest({
           // No user attached - unauthenticated
+          body: { password: 'some-password' },
         });
         const { res, getResponse } = createMockResponse();
 
         // For unauthenticated, the authenticate middleware (stack[0]) should reject
-        const middlewareStack = adminRouter.stack.find((layer: any) =>
-          layer.route?.path === '/encryption-keys' && layer.route?.methods?.get
-        )?.route?.stack;
+        const routeLayer = findRouteLayer(adminRouter, '/encryption-keys', 'post');
+        expect(routeLayer).toBeDefined();
+        const middlewareStack = routeLayer.route.stack;
+        const authenticateMiddleware = middlewareStack[0].handle;
+        const next = createMockNext();
 
-        if (middlewareStack && middlewareStack[0]) {
-          const authenticateMiddleware = middlewareStack[0].handle;
-          const next = createMockNext();
+        await authenticateMiddleware(req, res, next);
+        const response = getResponse();
 
-          await authenticateMiddleware(req, res, next);
-          const response = getResponse();
-
-          // authenticate should return 401 for unauthenticated
-          expect(response.statusCode).toBe(401);
-        }
+        // authenticate should return 401 for unauthenticated
+        expect(response.statusCode).toBe(401);
       });
     });
   });

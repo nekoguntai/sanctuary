@@ -20,7 +20,7 @@ const log = createLogger('ADMIN:BACKUP');
 const largeBodyParser = express.json({ limit: '200mb' });
 
 /**
- * GET /api/v1/admin/encryption-keys
+ * POST /api/v1/admin/encryption-keys
  * Get the encryption keys needed for backup restoration (admin only)
  *
  * These keys are required to restore encrypted data (node passwords, 2FA secrets)

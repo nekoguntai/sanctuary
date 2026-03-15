@@ -670,7 +670,7 @@ async function mockAuthenticatedApi(page: Page, options?: { failures?: MockApiFa
     if (method === 'GET' && path === '/admin/monitoring/grafana') {
       return json(route, GRAFANA_CONFIG);
     }
-    if (method === 'GET' && path === '/admin/encryption-keys') {
+    if (method === 'POST' && path === '/admin/encryption-keys') {
       return json(route, ENCRYPTION_KEYS);
     }
     if (method === 'GET' && path === '/admin/audit-logs') {
@@ -1058,6 +1058,11 @@ test.describe('Route-level rendering regressions', () => {
     await expect(main.getByRole('button', { name: 'Restore', exact: true })).toBeVisible();
     await expect(main.getByRole('heading', { name: 'Create Backup' })).toBeVisible();
     await expect(main.getByRole('heading', { name: 'Encryption Keys' })).toBeVisible();
+    await expect(main.getByText('Enter your password to reveal encryption keys.')).toBeVisible();
+
+    // Reveal encryption keys via password entry
+    await main.getByPlaceholder('Enter your password').fill('test-password');
+    await main.getByRole('button', { name: 'Reveal' }).click();
     await expect(main.getByText('ENCRYPTION_KEY', { exact: true })).toBeVisible();
 
     await main.getByRole('button', { name: 'Restore', exact: true }).click();

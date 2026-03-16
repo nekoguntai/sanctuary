@@ -174,27 +174,43 @@ export const Dashboard: React.FC = () => {
             <Zap className="w-4 h-4 text-warning-500" />
           </div>
           <div className="space-y-2">
-            <div className="flex justify-between items-center p-2.5 surface-secondary rounded-xl">
-              <div className="flex items-center">
-                <div className="w-2 h-2 rounded-full bg-success-500 mr-2"></div>
-                <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">Fast</span>
-              </div>
-              <span className="font-bold text-sm tabular-nums text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(fees?.fast)} sat/vB</span>
-            </div>
-            <div className="flex justify-between items-center p-2.5 surface-secondary rounded-xl">
-              <div className="flex items-center">
-                <div className="w-2 h-2 rounded-full bg-warning-500 mr-2"></div>
-                <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">Normal</span>
-              </div>
-              <span className="font-bold text-sm tabular-nums text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(fees?.medium)} sat/vB</span>
-            </div>
-            <div className="flex justify-between items-center p-2.5 surface-secondary rounded-xl">
-              <div className="flex items-center">
-                <div className="w-2 h-2 rounded-full bg-sanctuary-400 mr-2"></div>
-                <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">Slow</span>
-              </div>
-              <span className="font-bold text-sm tabular-nums text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(fees?.slow)} sat/vB</span>
-            </div>
+            {[
+              { label: 'Fast', rate: fees?.fast, dot: 'bg-success-500', time: '~10 min / ~1 block' },
+              { label: 'Normal', rate: fees?.medium, dot: 'bg-warning-500', time: '~30 min / ~3 blocks' },
+              { label: 'Slow', rate: fees?.slow, dot: 'bg-sanctuary-400', time: '~60 min / ~6 blocks' },
+            ].map((tier) => {
+              const typicalVb = 140;
+              const estSats = tier.rate !== undefined ? Math.round(tier.rate * typicalVb) : undefined;
+              return (
+                <div key={tier.label} className="relative group/fee flex justify-between items-center p-2.5 surface-secondary rounded-xl">
+                  <div className="flex items-center">
+                    <div className={`w-2 h-2 rounded-full ${tier.dot} mr-2`}></div>
+                    <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">{tier.label}</span>
+                  </div>
+                  <span className="font-bold text-sm tabular-nums text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(tier.rate)} sat/vB</span>
+                  {/* Fee tooltip */}
+                  <div className={`
+                    absolute z-50 pointer-events-none
+                    text-[11px] font-medium px-3 py-2.5 rounded-lg
+                    bg-sanctuary-800 text-sanctuary-100 dark:bg-sanctuary-100 dark:text-sanctuary-900
+                    shadow-xl border border-sanctuary-700 dark:border-sanctuary-200
+                    whitespace-nowrap
+                    bottom-full left-1/2 -translate-x-1/2 mb-2
+                    opacity-0 group-hover/fee:opacity-100
+                    transition-all duration-200 delay-150
+                    group-hover/fee:translate-y-0 translate-y-1
+                  `}>
+                    <div className="absolute w-2 h-2 rotate-45 bg-sanctuary-800 dark:bg-sanctuary-100 border-sanctuary-700 dark:border-sanctuary-200 -bottom-1 left-1/2 -translate-x-1/2 border-b border-r" />
+                    <div>{tier.time}</div>
+                    {estSats !== undefined && (
+                      <div className="text-sanctuary-400 dark:text-sanctuary-500 tabular-nums">
+                        ~{estSats.toLocaleString()} sats for typical tx (~{typicalVb} vB)
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 

@@ -67,11 +67,11 @@ describe('WalletSummary', () => {
     expect(screen.getByText('Multisig')).toBeInTheDocument();
     expect(screen.getAllByText('Single Sig').length).toBeGreaterThan(0);
 
-    expect(screen.getByTitle('Syncing...')).toBeInTheDocument();
-    expect(screen.getByTitle('Sync failed')).toBeInTheDocument();
-    expect(screen.getByTitle('Never synced')).toBeInTheDocument();
-    expect(screen.getByTitle(/Synced/)).toBeInTheDocument();
-    expect(screen.getByTitle(/Cached from/)).toBeInTheDocument();
+    expect(screen.getByText('Syncing in progress\u2026')).toBeInTheDocument();
+    expect(screen.getByText('Sync failed')).toBeInTheDocument();
+    expect(screen.getByText('Never synced')).toBeInTheDocument();
+    expect(screen.getByText(/Last synced:/)).toBeInTheDocument();
+    expect(screen.getByText(/Cached from/)).toBeInTheDocument();
 
     await user.click(screen.getByText('Alpha'));
     expect(mockNavigate).toHaveBeenCalledWith('/wallets/w1');
@@ -97,8 +97,9 @@ describe('WalletSummary', () => {
       />
     );
 
-    const segment = container.querySelector('[title="ZeroPercent: 0.0%"]') as HTMLElement;
-    expect(segment).toHaveStyle({ width: '0%' });
-    expect(screen.getByTitle('Synced')).toBeInTheDocument();
+    // Bar segment has min-width but 0% width style on wrapper
+    const segment = container.querySelector('[style*="width: 0%"]') as HTMLElement;
+    expect(segment).toBeInTheDocument();
+    expect(screen.getByText('Synced')).toBeInTheDocument();
   });
 });

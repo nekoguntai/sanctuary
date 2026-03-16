@@ -27,6 +27,7 @@ import { NotificationBell } from '../NotificationPanel';
 import { NavItem } from './NavItem';
 import { SubNavItem } from './SubNavItem';
 import { ExpandedState } from './types';
+import { EmptyState } from '../ui/EmptyState';
 
 interface SidebarContentProps {
   user: { username: string; isAdmin?: boolean } | null;
@@ -76,9 +77,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
             onToggle={() => toggleSection('wallets')}
           />
           {expanded.wallets && (
-            <div className="animate-fade-in-up space-y-0.5 mb-2">
+            <div className="animate-accordion-open space-y-0.5 mb-2 overflow-hidden">
               {wallets.length === 0 && (
-                 <div className="pl-11 py-2 text-xs text-sanctuary-400 italic">No wallets created</div>
+                 <EmptyState compact title="No wallets created" actionLabel="Create wallet" actionTo="/wallets/create" />
               )}
               {[...wallets].sort((a, b) => a.name.localeCompare(b.name)).map(w => {
                 const isMultisig = isMultisigType(w.type);
@@ -113,9 +114,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
               onToggle={() => toggleSection('devices')}
             />
             {expanded.devices && (
-              <div className="animate-fade-in-up space-y-0.5 mb-2">
+              <div className="animate-accordion-open space-y-0.5 mb-2 overflow-hidden">
                  {devices.length === 0 && (
-                    <div className="pl-11 py-2 text-xs text-sanctuary-400 italic">No devices connected</div>
+                    <EmptyState compact title="No devices connected" actionLabel="Connect device" actionTo="/devices/connect" />
                  )}
                  {[...devices].sort((a, b) => a.label.localeCompare(b.label)).map(d => {
                    const deviceNotifCount = getDeviceCount(d.id);
@@ -151,7 +152,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
               onToggle={() => toggleSection('admin')}
             />
             {expanded.admin && (
-              <div className="animate-fade-in-up space-y-0.5 mb-2">
+              <div className="animate-accordion-open space-y-0.5 mb-2 overflow-hidden">
                 <SubNavItem
                   to="/admin/node-config"
                   label="Node Config"
@@ -204,34 +205,42 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
         <NavItem to="/settings" icon={Settings} label="Settings" />
       </nav>
 
-      <div className="flex-shrink-0 border-t border-sanctuary-200 dark:border-sanctuary-800 p-4">
-        <div className="flex items-center w-full justify-between">
-          <div className="flex items-center gap-1">
+      <div className="flex-shrink-0 border-t border-sanctuary-200 dark:border-sanctuary-800">
+        {/* User profile row */}
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-primary-100 dark:bg-sanctuary-800 flex items-center justify-center text-xs font-semibold text-primary-700 dark:text-primary-400 uppercase">
+              {user?.username?.charAt(0) || '?'}
+            </div>
+            <span className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">{user?.username}</span>
+          </div>
+          <button
+            onClick={logout}
+            className="p-1.5 rounded-lg text-sanctuary-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+            title="Logout"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
+        {/* Utility row */}
+        <div className="flex items-center justify-between px-4 py-2">
+          <div className="flex items-center gap-0.5">
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-lg text-sanctuary-500 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors"
+              className="p-2 rounded-lg text-sanctuary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 hover:text-sanctuary-600 dark:hover:text-sanctuary-300 transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+              title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             <NotificationBell />
-            <button
-              onClick={onVersionClick}
-              className="text-xs text-sanctuary-400 ml-1 hover:text-sanctuary-600 dark:hover:text-sanctuary-300 transition-colors cursor-pointer"
-              title="Version info & support"
-            >
-              v{version}
-            </button>
           </div>
-          <div className="flex items-center">
-             <span className="text-xs font-medium text-sanctuary-500 mr-3">{user?.username}</span>
-             <button
-                onClick={logout}
-                className="p-2 rounded-lg text-sanctuary-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                title="Logout"
-             >
-                <LogOut className="h-5 w-5" />
-             </button>
-          </div>
+          <button
+            onClick={onVersionClick}
+            className="text-[11px] text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300 transition-colors cursor-pointer"
+            title="Version info & support"
+          >
+            v{version}
+          </button>
         </div>
       </div>
     </>

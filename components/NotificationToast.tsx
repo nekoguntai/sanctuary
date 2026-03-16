@@ -146,11 +146,16 @@ interface NotificationContainerProps {
   onDismiss: (id: string) => void;
 }
 
+const MAX_VISIBLE_NOTIFICATIONS = 4;
+
 export const NotificationContainer: React.FC<NotificationContainerProps> = ({
   notifications,
   onDismiss,
 }) => {
   if (notifications.length === 0) return null;
+
+  const visibleNotifications = notifications.slice(0, MAX_VISIBLE_NOTIFICATIONS);
+  const hiddenCount = notifications.length - visibleNotifications.length;
 
   return (
     <div
@@ -159,13 +164,18 @@ export const NotificationContainer: React.FC<NotificationContainerProps> = ({
       aria-atomic="true"
     >
       <div className="space-y-3 pointer-events-auto">
-        {notifications.map((notification) => (
+        {visibleNotifications.map((notification) => (
           <NotificationToast
             key={notification.id}
             notification={notification}
             onDismiss={onDismiss}
           />
         ))}
+        {hiddenCount > 0 && (
+          <div className="text-center text-xs text-sanctuary-500 dark:text-sanctuary-400 surface-elevated rounded-lg py-1.5 px-3 border border-sanctuary-200 dark:border-sanctuary-800 shadow-sm">
+            +{hiddenCount} more notification{hiddenCount > 1 ? 's' : ''}
+          </div>
+        )}
       </div>
     </div>
   );

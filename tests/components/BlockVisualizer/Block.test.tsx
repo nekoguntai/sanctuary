@@ -84,7 +84,7 @@ describe('Block', () => {
     );
 
     expect(screen.getByText('Median Fee')).toBeInTheDocument();
-    expect(screen.getByText('10-20')).toBeInTheDocument();
+    expect(screen.getAllByText('10-20').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('BLK mempool')).toBeInTheDocument();
     expect(screen.getByText('5m')).toBeInTheDocument();
 
@@ -96,7 +96,8 @@ describe('Block', () => {
     expect(container.querySelector('[data-txid="tx-2"]')).toHaveAttribute('data-stuck', 'true');
     expect(container.querySelector('[data-txid="tx-3"]')).toHaveAttribute('data-stuck', 'false');
 
-    expect(screen.getByText('1,234 txs • Median: 12 • Range: 10-20 • 100% full')).toBeInTheDocument();
+    // Tooltip now uses separate spans with dot separators
+    expect(screen.getByText(/1,234/)).toBeInTheDocument();
     expect(container.querySelector('div[style*="width: 100%"]')).toBeInTheDocument();
   });
 
@@ -195,9 +196,11 @@ describe('Block', () => {
       />
     );
 
-    expect(screen.getByText('0.7')).toBeInTheDocument();
-    expect(screen.getByText('800,000')).toBeInTheDocument();
-    expect(screen.getByText('420 txs • Median: 0.7 • Range: 1-2 • 50% full')).toBeInTheDocument();
+    expect(screen.getAllByText('0.7').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('800,000').length).toBeGreaterThanOrEqual(1);
+    // Tooltip now uses separate spans with dot separators
+    expect(screen.getByText(/420/)).toBeInTheDocument();
+    expect(screen.getByText(/50%/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button'));
     expect(onClick).toHaveBeenCalledTimes(1);

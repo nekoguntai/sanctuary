@@ -48,6 +48,7 @@ export const Block: React.FC<BlockProps> = ({ block, index, onClick, compact, is
           ${getAnimationClass()}
         `}
         style={{
+          background: colors.bgGradient,
           animationDelay: `${index * 50}ms`,
         }}
       >
@@ -91,7 +92,7 @@ export const Block: React.FC<BlockProps> = ({ block, index, onClick, compact, is
           {/* Middle: Median Fee Rate - main focus */}
           <div className="text-center">
             {!compact && <div className={`text-[10px] uppercase font-bold ${colors.text} mb-0.5`}>Median Fee</div>}
-            <div className={`${compact ? 'text-base' : 'text-xl md:text-2xl'} font-black leading-none ${colors.text}`}>
+            <div className={`${compact ? 'text-base' : 'text-xl md:text-2xl'} font-black leading-none tabular-nums ${colors.text}`}>
               {block.medianFee < 1 ? block.medianFee.toFixed(1) : Math.round(block.medianFee)}
             </div>
             <div className={`${compact ? 'text-[9px]' : 'text-[10px]'} font-bold ${colors.text}`}>sat/vB</div>
@@ -104,7 +105,7 @@ export const Block: React.FC<BlockProps> = ({ block, index, onClick, compact, is
 
           {/* Bottom: Height label - darker background */}
           <div className="w-full text-center">
-            <div className={`${compact ? 'text-[9px] py-0.5 mx-0.5' : 'text-[10px] py-0.5 mx-1'} font-mono font-bold rounded ${colors.label}`}>
+            <div className={`${compact ? 'text-[9px] py-0.5 mx-0.5' : 'text-[10px] py-0.5 mx-1'} font-mono font-bold rounded tabular-nums ${colors.label}`}>
               {isPending ? `${compact ? '' : 'BLK '}${block.height}` : `${typeof block.height === 'number' ? (compact ? block.height : block.height.toLocaleString()) : block.height}`}
             </div>
           </div>
@@ -132,13 +133,23 @@ export const Block: React.FC<BlockProps> = ({ block, index, onClick, compact, is
       {/* TX count tooltip on hover - outside button to avoid overflow clip */}
       {!compact && block.txCount !== undefined && (
         <div className={`
-          absolute top-full left-1/2 -translate-x-1/2 mt-1
-          text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded
-          bg-sanctuary-800 text-white dark:bg-white dark:text-sanctuary-900
-          opacity-0 group-hover:opacity-100 transition-opacity duration-200
-          whitespace-nowrap z-50 pointer-events-none shadow-lg
+          absolute top-full left-1/2 -translate-x-1/2 mt-2
+          text-[10px] font-medium px-3 py-2 rounded-lg
+          bg-sanctuary-800 text-sanctuary-100 dark:bg-sanctuary-100 dark:text-sanctuary-900
+          opacity-0 group-hover:opacity-100 transition-all duration-200 delay-150
+          group-hover:translate-y-0 translate-y-1
+          whitespace-nowrap z-50 pointer-events-none shadow-xl
+          border border-sanctuary-700 dark:border-sanctuary-200
         `}>
-          {block.txCount.toLocaleString()} txs • Median: {block.medianFee < 1 ? block.medianFee.toFixed(1) : Math.round(block.medianFee)} • Range: {block.feeRange} • {Math.round(fillPercentage)}% full
+          {/* Tooltip arrow */}
+          <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 bg-sanctuary-800 dark:bg-sanctuary-100 border-l border-t border-sanctuary-700 dark:border-sanctuary-200" />
+          <span className="tabular-nums">{block.txCount.toLocaleString()}</span> txs
+          <span className="mx-1.5 text-sanctuary-500 dark:text-sanctuary-400">·</span>
+          Median: <span className="tabular-nums">{block.medianFee < 1 ? block.medianFee.toFixed(1) : Math.round(block.medianFee)}</span>
+          <span className="mx-1.5 text-sanctuary-500 dark:text-sanctuary-400">·</span>
+          Range: <span className="tabular-nums">{block.feeRange}</span>
+          <span className="mx-1.5 text-sanctuary-500 dark:text-sanctuary-400">·</span>
+          <span className="tabular-nums">{Math.round(fillPercentage)}%</span> full
         </div>
       )}
     </div>

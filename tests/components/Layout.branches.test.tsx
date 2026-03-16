@@ -398,14 +398,14 @@ describe('Layout branch coverage', () => {
     const mobileToggle = screen.getByRole('button', { name: /open sidebar/i });
     await user.click(mobileToggle);
 
-    const overlay = container.querySelector('.bg-gray-600');
+    const overlay = container.querySelector('.bg-black\\/50');
     expect(overlay).toBeInTheDocument();
 
     if (!overlay) throw new Error('Expected overlay to exist');
     await user.click(overlay);
 
     await waitFor(() => {
-      expect(container.querySelector('.bg-gray-600')).not.toBeInTheDocument();
+      expect(container.querySelector('.bg-black\\/50')).not.toBeInTheDocument();
     });
   });
 

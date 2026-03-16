@@ -29,7 +29,7 @@ export const FormatSelection: React.FC<FormatSelectionProps> = ({ format, setFor
         <div className={`p-4 rounded-full ${
           format === 'descriptor'
             ? 'bg-primary-100 text-primary-600'
-            : 'bg-sanctuary-100 text-sanctuary-400'
+            : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-400'
         }`}>
           <FileText className="w-12 h-12" />
         </div>
@@ -52,7 +52,7 @@ export const FormatSelection: React.FC<FormatSelectionProps> = ({ format, setFor
         <div className={`p-4 rounded-full ${
           format === 'json'
             ? 'bg-primary-100 text-primary-600'
-            : 'bg-sanctuary-100 text-sanctuary-400'
+            : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-400'
         }`}>
           <FileJson className="w-12 h-12" />
         </div>
@@ -75,7 +75,7 @@ export const FormatSelection: React.FC<FormatSelectionProps> = ({ format, setFor
         <div className={`p-4 rounded-full ${
           format === 'hardware'
             ? 'bg-primary-100 text-primary-600'
-            : 'bg-sanctuary-100 text-sanctuary-400'
+            : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-400'
         }`}>
           <Usb className="w-12 h-12" />
         </div>
@@ -98,7 +98,7 @@ export const FormatSelection: React.FC<FormatSelectionProps> = ({ format, setFor
         <div className={`p-4 rounded-full ${
           format === 'qr_code'
             ? 'bg-primary-100 text-primary-600'
-            : 'bg-sanctuary-100 text-sanctuary-400'
+            : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-400'
         }`}>
           <QrCode className="w-12 h-12" />
         </div>

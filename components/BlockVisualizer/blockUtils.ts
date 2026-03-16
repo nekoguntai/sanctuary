@@ -9,7 +9,8 @@ export const getBlockColors = (isPending: boolean) => {
     // Pending blocks use warning/amber colors
     // Light: warning-200 (#efe0c0), Dark: warning-200 is actually dark (#644a2d)
     return {
-      bg: 'bg-warning-200 dark:bg-warning-200',
+      bg: '',
+      bgGradient: 'linear-gradient(to bottom, var(--color-warning-100), var(--color-warning-500))',
       bar: 'bg-warning-600 dark:bg-warning-600',
       barBg: 'bg-warning-100 dark:bg-warning-100',
       text: 'text-warning-800 dark:text-warning-800',
@@ -18,7 +19,8 @@ export const getBlockColors = (isPending: boolean) => {
   } else {
     // Confirmed blocks use success/green colors
     return {
-      bg: 'bg-success-200 dark:bg-success-200',
+      bg: '',
+      bgGradient: 'linear-gradient(to bottom, var(--color-success-100), var(--color-success-500))',
       bar: 'bg-success-600 dark:bg-success-600',
       barBg: 'bg-success-100 dark:bg-success-100',
       text: 'text-success-800 dark:text-success-800',

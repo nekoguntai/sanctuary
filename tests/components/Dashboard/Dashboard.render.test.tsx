@@ -69,6 +69,7 @@ vi.mock('lucide-react', () => ({
   Bitcoin: () => <span data-testid="bitcoin-icon" />,
   Download: () => <span data-testid="download-icon" />,
   X: () => <span data-testid="dismiss-icon" />,
+  Loader2: (props: any) => <span data-testid="loader-icon" className={props.className} />,
 }));
 
 const makeDashboardState = (overrides: Partial<any> = {}) => ({
@@ -148,7 +149,7 @@ describe('Dashboard render branches', () => {
     mocks.dashboardData = makeDashboardState({ loading: true });
     render(<Dashboard />);
 
-    expect(screen.getByText('⟳')).toBeInTheDocument();
+    expect(document.querySelector('.animate-spin')).toBeInTheDocument();
     expect(screen.queryByTestId('network-tabs')).not.toBeInTheDocument();
   });
 

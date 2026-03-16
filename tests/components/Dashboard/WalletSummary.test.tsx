@@ -24,6 +24,9 @@ vi.mock('lucide-react', () => ({
   Check: () => <span data-testid="check-icon" />,
   AlertTriangle: () => <span data-testid="alert-icon" />,
   Clock: () => <span data-testid="clock-icon" />,
+  Plus: () => <span data-testid="plus-icon" />,
+  Cpu: () => <span data-testid="cpu-icon" />,
+  Loader2: () => <span data-testid="loader-icon" />,
 }));
 
 describe('WalletSummary', () => {
@@ -37,7 +40,7 @@ describe('WalletSummary', () => {
     );
 
     expect(screen.getByText('Testnet Wallets')).toBeInTheDocument();
-    expect(screen.getByText(/No testnet wallets found/i)).toBeInTheDocument();
+    expect(screen.getByText(/No testnet wallets yet/i)).toBeInTheDocument();
   });
 
   it('renders wallet rows, sync states, and navigates on row click', async () => {

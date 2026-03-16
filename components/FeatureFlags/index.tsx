@@ -239,7 +239,7 @@ export function FeatureFlags() {
       <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <button
           onClick={handleToggleAuditLog}
-          className="w-full p-4 flex items-center justify-between hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50 transition-colors"
+          className="w-full p-4 flex items-center justify-between hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
         >
           <div className="flex items-center space-x-2">
             <Clock className="w-4 h-4 text-sanctuary-500" />

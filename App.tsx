@@ -39,15 +39,12 @@ import { useWebSocketQueryInvalidation } from './hooks/websocket';
 import * as authApi from './src/api/auth';
 import { createLogger } from './utils/logger';
 import { isAnimatedPattern } from './components/animatedPatterns';
+import { DashboardSkeleton, WalletDetailSkeleton, ListSkeleton, SettingsSkeleton } from './components/ui/Skeleton';
 
 const log = createLogger('App');
 
-// Loading fallback for lazy-loaded routes
-const RouteLoadingFallback: React.FC = () => (
-  <div className="flex items-center justify-center h-64">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 dark:border-primary-400" />
-  </div>
-);
+// Skeleton fallback for lazy-loaded routes
+const RouteLoadingFallback: React.FC = () => <DashboardSkeleton />;
 
 const AppRoutes: React.FC = () => {
   const { isAuthenticated, logout, user, updatePreferences } = useUser();
@@ -104,37 +101,35 @@ const AppRoutes: React.FC = () => {
         </Suspense>
       )}
       <Layout darkMode={isDarkMode} toggleTheme={toggleTheme} onLogout={logout}>
-        <Suspense fallback={<RouteLoadingFallback />}>
-          <Routes>
-            {/* Core routes */}
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/wallets" element={<WalletList />} />
-            <Route path="/wallets/:id" element={<WalletDetail />} />
+        <Routes>
+          {/* Core routes with page-specific skeletons */}
+          <Route path="/" element={<Suspense fallback={<DashboardSkeleton />}><Dashboard /></Suspense>} />
+          <Route path="/wallets" element={<Suspense fallback={<ListSkeleton />}><WalletList /></Suspense>} />
+          <Route path="/wallets/:id" element={<Suspense fallback={<WalletDetailSkeleton />}><WalletDetail /></Suspense>} />
 
-            {/* Lazy-loaded routes - loaded on-demand */}
-            <Route path="/wallets/create" element={<CreateWallet />} />
-            <Route path="/wallets/import" element={<ImportWallet />} />
-            <Route path="/wallets/:id/send" element={<SendTransactionPage />} />
-            <Route path="/devices" element={<DeviceList />} />
-            <Route path="/devices/connect" element={<ConnectDevice />} />
-            <Route path="/devices/:id" element={<DeviceDetail />} />
-            <Route path="/account" element={<Account />} />
-            <Route path="/settings" element={<Settings />} />
+          {/* Lazy-loaded routes */}
+          <Route path="/wallets/create" element={<Suspense fallback={<SettingsSkeleton />}><CreateWallet /></Suspense>} />
+          <Route path="/wallets/import" element={<Suspense fallback={<SettingsSkeleton />}><ImportWallet /></Suspense>} />
+          <Route path="/wallets/:id/send" element={<Suspense fallback={<SettingsSkeleton />}><SendTransactionPage /></Suspense>} />
+          <Route path="/devices" element={<Suspense fallback={<ListSkeleton />}><DeviceList /></Suspense>} />
+          <Route path="/devices/connect" element={<Suspense fallback={<SettingsSkeleton />}><ConnectDevice /></Suspense>} />
+          <Route path="/devices/:id" element={<Suspense fallback={<WalletDetailSkeleton />}><DeviceDetail /></Suspense>} />
+          <Route path="/account" element={<Suspense fallback={<SettingsSkeleton />}><Account /></Suspense>} />
+          <Route path="/settings" element={<Suspense fallback={<SettingsSkeleton />}><Settings /></Suspense>} />
 
-            {/* Admin routes - lazy-loaded */}
-            <Route path="/admin/node-config" element={<NodeConfig />} />
-            <Route path="/admin/users-groups" element={<UsersGroups />} />
-            <Route path="/admin/settings" element={<SystemSettings />} />
-            <Route path="/admin/variables" element={<Variables />} />
-            <Route path="/admin/backup" element={<BackupRestore />} />
-            <Route path="/admin/audit-logs" element={<AuditLogs />} />
-            <Route path="/admin/ai" element={<AISettings />} />
-            <Route path="/admin/monitoring" element={<Monitoring />} />
-            <Route path="/admin/feature-flags" element={<FeatureFlags />} />
-            <Route path="/admin" element={<Navigate to="/admin/settings" replace />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
+          {/* Admin routes - lazy-loaded */}
+          <Route path="/admin/node-config" element={<Suspense fallback={<SettingsSkeleton />}><NodeConfig /></Suspense>} />
+          <Route path="/admin/users-groups" element={<Suspense fallback={<ListSkeleton />}><UsersGroups /></Suspense>} />
+          <Route path="/admin/settings" element={<Suspense fallback={<SettingsSkeleton />}><SystemSettings /></Suspense>} />
+          <Route path="/admin/variables" element={<Suspense fallback={<SettingsSkeleton />}><Variables /></Suspense>} />
+          <Route path="/admin/backup" element={<Suspense fallback={<SettingsSkeleton />}><BackupRestore /></Suspense>} />
+          <Route path="/admin/audit-logs" element={<Suspense fallback={<ListSkeleton />}><AuditLogs /></Suspense>} />
+          <Route path="/admin/ai" element={<Suspense fallback={<SettingsSkeleton />}><AISettings /></Suspense>} />
+          <Route path="/admin/monitoring" element={<Suspense fallback={<DashboardSkeleton />}><Monitoring /></Suspense>} />
+          <Route path="/admin/feature-flags" element={<Suspense fallback={<ListSkeleton />}><FeatureFlags /></Suspense>} />
+          <Route path="/admin" element={<Navigate to="/admin/settings" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </Layout>
       <NotificationContainer notifications={notifications} onDismiss={removeNotification} />
 

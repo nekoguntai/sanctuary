@@ -1,4 +1,5 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -14,7 +15,7 @@ export const Button: React.FC<ButtonProps> = ({
   isLoading = false,
   ...props 
 }) => {
-  const baseStyles = "inline-flex items-center justify-center rounded-lg transition-all duration-200 font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
+  const baseStyles = "inline-flex items-center justify-center rounded-lg transition-all duration-200 font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
   
   const variants = {
     // Primary uses the 'primary' palette (variable driven) in Light Mode.
@@ -42,7 +43,7 @@ export const Button: React.FC<ButtonProps> = ({
       {...props}
     >
       {isLoading ? (
-        <span className="mr-2 animate-spin">⟳</span>
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
       ) : null}
       {children}
     </button>

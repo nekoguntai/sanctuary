@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Wallet, isMultisigType } from '../../types';
 import { Wallet as WalletIcon, ChevronRight, RefreshCw, Check, AlertTriangle, Clock } from 'lucide-react';
 import { Amount } from '../Amount';
+import { WalletEmptyState } from '../ui/EmptyState';
 import { TabNetwork } from '../NetworkTabs';
 
 const distributionColors = [
@@ -28,7 +29,7 @@ export const WalletSummary: React.FC<WalletSummaryProps> = ({
   const navigate = useNavigate();
 
   return (
-    <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+    <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive">
        <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 flex items-center">
              <WalletIcon className="w-5 h-5 mr-2 text-sanctuary-400" />
@@ -71,8 +72,8 @@ export const WalletSummary: React.FC<WalletSummaryProps> = ({
              <tbody className="divide-y divide-sanctuary-100 dark:divide-sanctuary-800">
                 {filteredWallets.length === 0 && (
                    <tr className="bg-transparent">
-                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-sanctuary-500 bg-transparent">
-                         No {selectedNetwork} wallets found. Create or import a {selectedNetwork} wallet to get started.
+                      <td colSpan={6} className="bg-transparent">
+                         <WalletEmptyState network={selectedNetwork} />
                       </td>
                    </tr>
                 )}
@@ -88,7 +89,7 @@ export const WalletSummary: React.FC<WalletSummaryProps> = ({
                       <tr
                          key={w.id}
                          onClick={() => navigate(`/wallets/${w.id}`)}
-                         className="group hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 cursor-pointer transition-colors"
+                         className="group hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 cursor-pointer transition-all duration-200 hover:shadow-sm active:bg-sanctuary-100 dark:active:bg-sanctuary-700"
                          style={{ backgroundColor: 'transparent' }}
                       >
                          <td className="px-4 py-4 whitespace-nowrap">

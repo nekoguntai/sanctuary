@@ -220,7 +220,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
             </div>
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="-ml-0.5 -mt-0.5 h-12 w-12 inline-flex items-center justify-center rounded-md text-sanctuary-500 hover:text-sanctuary-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+              className="-ml-0.5 -mt-0.5 h-12 w-12 inline-flex items-center justify-center rounded-md text-sanctuary-500 hover:text-sanctuary-900 dark:hover:text-sanctuary-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 transition-colors"
             >
               <span className="sr-only">Open sidebar</span>
               {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -230,7 +230,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
         {/* Mobile Menu Overlay */}
         {isMobileMenuOpen && (
           <div className="md:hidden fixed inset-0 z-40 flex">
-            <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setIsMobileMenuOpen(false)}></div>
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
             <div className="relative flex-1 flex flex-col max-w-xs w-full surface-elevated">
                {sidebarContent}
             </div>

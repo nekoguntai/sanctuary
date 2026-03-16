@@ -26,21 +26,21 @@ export const TabBar: React.FC<TabBarProps> = ({
   ];
 
   return (
-    <div className="border-b border-sanctuary-200 dark:border-sanctuary-800 overflow-x-auto scrollbar-hide">
-      <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+    <div className="overflow-x-auto scrollbar-hide">
+      <nav className="flex gap-1 p-1 surface-secondary rounded-xl" aria-label="Tabs">
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => onTabChange(tab)}
             className={`${
               activeTab === tab
-                ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300'
-                : 'border-transparent text-sanctuary-500 hover:text-sanctuary-700 hover:border-sanctuary-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm capitalize transition-colors relative`}
+                ? 'bg-white dark:bg-sanctuary-700 text-primary-700 dark:text-primary-300 shadow-sm'
+                : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800'
+            } whitespace-nowrap py-2 px-3.5 rounded-lg font-medium text-sm capitalize transition-all duration-200 relative focus-visible:ring-2 focus-visible:ring-primary-500`}
           >
             {tab === 'tx' ? 'Transactions' : tab === 'utxo' ? 'UTXOs' : tab}
             {tab === 'drafts' && draftsCount > 0 && (
-              <span className="absolute -top-0.5 -right-3 flex h-4 w-4 items-center justify-center rounded-full bg-rose-400 dark:bg-rose-500 text-[10px] font-bold text-white">
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-400 dark:bg-rose-500 text-[10px] font-bold text-white">
                 {draftsCount > 9 ? '9+' : draftsCount}
               </span>
             )}

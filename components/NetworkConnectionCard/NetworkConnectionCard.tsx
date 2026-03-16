@@ -219,38 +219,28 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
         {/* Mode Selector */}
         <div>
           <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-3">Connection Mode</label>
-          <div className="flex space-x-3">
+          <div className="flex gap-1 p-1 surface-secondary rounded-xl">
             <button
               onClick={() => updateNetworkConfig('mode', 'singleton')}
-              className={`flex-1 p-3 rounded-xl border-2 transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${
                 mode === 'singleton'
-                  ? `${colors.border} ${colors.bg}`
-                  : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-300'
+                  ? 'bg-white dark:bg-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 shadow-sm'
+                  : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 hover:bg-black/5 dark:hover:bg-white/5'
               }`}
             >
-              <div className="flex items-center space-x-2">
-                <Radio className={`w-4 h-4 ${mode === 'singleton' ? colors.text : 'text-sanctuary-400'}`} />
-                <span className={`font-medium ${mode === 'singleton' ? colors.text : 'text-sanctuary-600 dark:text-sanctuary-400'}`}>
-                  Singleton
-                </span>
-              </div>
-              <p className="text-xs text-sanctuary-500 mt-1 text-left">Single server connection</p>
+              <Radio className="w-4 h-4" />
+              <span>Singleton</span>
             </button>
             <button
               onClick={() => updateNetworkConfig('mode', 'pool')}
-              className={`flex-1 p-3 rounded-xl border-2 transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${
                 mode === 'pool'
-                  ? `${colors.border} ${colors.bg}`
-                  : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-300'
+                  ? 'bg-white dark:bg-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 shadow-sm'
+                  : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 hover:bg-black/5 dark:hover:bg-white/5'
               }`}
             >
-              <div className="flex items-center space-x-2">
-                <Layers className={`w-4 h-4 ${mode === 'pool' ? colors.text : 'text-sanctuary-400'}`} />
-                <span className={`font-medium ${mode === 'pool' ? colors.text : 'text-sanctuary-600 dark:text-sanctuary-400'}`}>
-                  Pool
-                </span>
-              </div>
-              <p className="text-xs text-sanctuary-500 mt-1 text-left">Multi-server with failover</p>
+              <Layers className="w-4 h-4" />
+              <span>Pool</span>
             </button>
           </div>
         </div>

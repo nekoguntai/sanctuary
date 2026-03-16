@@ -36,7 +36,7 @@ export const MempoolSection: React.FC<MempoolSectionProps> = ({
   const navigate = useNavigate();
 
   return (
-    <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+    <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive">
        <div className="flex items-center justify-between px-2 mb-2">
           <div className="flex items-center space-x-2">
              <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">

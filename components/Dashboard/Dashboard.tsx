@@ -1,6 +1,6 @@
 import React from 'react';
 import { NetworkTabs } from '../NetworkTabs';
-import { TrendingUp, TrendingDown, Zap, CheckCircle2, XCircle, Bitcoin, Download, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, Zap, CheckCircle2, XCircle, Bitcoin, Download, X, Loader2 } from 'lucide-react';
 import { useDashboardData } from './hooks/useDashboardData';
 import { MempoolSection } from './MempoolSection';
 import { AnimatedPrice, PriceChart } from './PriceChart';
@@ -45,7 +45,7 @@ export const Dashboard: React.FC = () => {
   } = useDashboardData();
 
   if (loading) {
-    return <div className="flex h-full items-center justify-center"><div className="animate-spin text-sanctuary-400">⟳</div></div>;
+    return <div className="flex h-full items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-sanctuary-400" /></div>;
   }
 
   return (
@@ -118,7 +118,7 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
         {/* BTC Price Card - Compact with animated price */}
-        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive animate-fade-in-up-1">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-wide">Bitcoin Price</h3>
             <div className="p-2 bg-warning-100 dark:bg-warning-900/30 rounded-xl">
@@ -168,7 +168,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Fee Estimation Card */}
-        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive animate-fade-in-up-2">
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Fee Estimation</h4>
             <Zap className="w-4 h-4 text-warning-500" />
@@ -179,27 +179,27 @@ export const Dashboard: React.FC = () => {
                 <div className="w-2 h-2 rounded-full bg-success-500 mr-2"></div>
                 <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">Fast</span>
               </div>
-              <span className="font-bold text-sm text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(fees?.fast)} sat/vB</span>
+              <span className="font-bold text-sm tabular-nums text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(fees?.fast)} sat/vB</span>
             </div>
             <div className="flex justify-between items-center p-2.5 surface-secondary rounded-xl">
               <div className="flex items-center">
                 <div className="w-2 h-2 rounded-full bg-warning-500 mr-2"></div>
                 <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">Normal</span>
               </div>
-              <span className="font-bold text-sm text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(fees?.medium)} sat/vB</span>
+              <span className="font-bold text-sm tabular-nums text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(fees?.medium)} sat/vB</span>
             </div>
             <div className="flex justify-between items-center p-2.5 surface-secondary rounded-xl">
               <div className="flex items-center">
                 <div className="w-2 h-2 rounded-full bg-sanctuary-400 mr-2"></div>
                 <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">Slow</span>
               </div>
-              <span className="font-bold text-sm text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(fees?.slow)} sat/vB</span>
+              <span className="font-bold text-sm tabular-nums text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(fees?.slow)} sat/vB</span>
             </div>
           </div>
         </div>
 
         {/* Node Status Card */}
-        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive animate-fade-in-up-3">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Node Status</h4>
@@ -260,7 +260,7 @@ export const Dashboard: React.FC = () => {
                     {bitcoinStatus.blockHeight && (
                       <div className="flex items-center text-xs">
                         <span className="text-sanctuary-500 dark:text-sanctuary-400 w-14">Height:</span>
-                        <span className="text-sanctuary-700 dark:text-sanctuary-300 font-mono">{bitcoinStatus.blockHeight.toLocaleString()}</span>
+                        <span className="text-sanctuary-700 dark:text-sanctuary-300 font-mono tabular-nums">{bitcoinStatus.blockHeight.toLocaleString()}</span>
                       </div>
                     )}
                     {/* Show Host when pool is disabled, Pool when enabled */}

@@ -103,6 +103,26 @@ describe('NotificationContainer', () => {
     expect(screen.getByText('Transaction received')).toBeInTheDocument();
     expect(screen.getByText('Second')).toBeInTheDocument();
   });
+
+  it('shows singular overflow when exactly one notification is hidden', () => {
+    const notifications = Array.from({ length: 5 }, (_, i) => ({
+      ...baseNotification,
+      id: `notif-${i}`,
+      title: `Notification ${i}`,
+    }));
+    render(<NotificationContainer notifications={notifications} onDismiss={vi.fn()} />);
+    expect(screen.getByText('+1 more notification')).toBeInTheDocument();
+  });
+
+  it('shows plural overflow when multiple notifications are hidden', () => {
+    const notifications = Array.from({ length: 7 }, (_, i) => ({
+      ...baseNotification,
+      id: `notif-${i}`,
+      title: `Notification ${i}`,
+    }));
+    render(<NotificationContainer notifications={notifications} onDismiss={vi.fn()} />);
+    expect(screen.getByText('+3 more notifications')).toBeInTheDocument();
+  });
 });
 
 describe('generateNotificationId', () => {

@@ -43,9 +43,6 @@ import { DashboardSkeleton, WalletDetailSkeleton, ListSkeleton, SettingsSkeleton
 
 const log = createLogger('App');
 
-// Skeleton fallback for lazy-loaded routes
-const RouteLoadingFallback: React.FC = () => <DashboardSkeleton />;
-
 const AppRoutes: React.FC = () => {
   const { isAuthenticated, logout, user, updatePreferences } = useUser();
   const { notifications, removeNotification } = useNotifications();

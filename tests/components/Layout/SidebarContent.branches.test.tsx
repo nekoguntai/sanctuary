@@ -51,6 +51,12 @@ const buildProps = (overrides: Partial<React.ComponentProps<typeof SidebarConten
 });
 
 describe('SidebarContent branch coverage', () => {
+  it('falls back to ? when username is missing', () => {
+    const props = buildProps({ user: { username: '', isAdmin: false } });
+    render(<SidebarContent {...props} />);
+    expect(screen.getByText('?')).toBeInTheDocument();
+  });
+
   it('covers empty wallets/devices state and admin toggle callback path', () => {
     const props = buildProps();
     render(<SidebarContent {...props} />);

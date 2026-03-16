@@ -47,6 +47,15 @@ export {
 } from './verified-address-vectors';
 
 // ========================================
+// BITCOIN CORE KEY_IO VECTORS
+// ========================================
+export {
+  KEY_IO_MAINNET_ADDRESSES,
+  KEY_IO_INVALID_ADDRESSES,
+  type KeyIoAddressVector,
+} from './bitcoin-core-key-io-vectors';
+
+// ========================================
 // DATA GENERATORS
 // ========================================
 // Re-export from repository setup for consistency

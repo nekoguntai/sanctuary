@@ -323,6 +323,17 @@ describe('Dashboard render branches', () => {
     expect(screen.getByText('(2 conns)')).toBeInTheDocument();
   });
 
+  it('renders fee estimation with undefined rates (no estSats tooltip)', () => {
+    mocks.dashboardData = makeDashboardState({
+      fees: undefined,
+      formatFeeRate: (rate?: number) => (rate === undefined ? '---' : rate.toString()),
+    });
+    render(<Dashboard />);
+
+    const feeLabels = screen.getAllByText('--- sat/vB');
+    expect(feeLabels).toHaveLength(3);
+  });
+
   it('renders signet placeholder copy and symbol', () => {
     mocks.dashboardData = makeDashboardState({
       isMainnet: false,

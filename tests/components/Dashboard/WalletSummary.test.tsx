@@ -102,4 +102,33 @@ describe('WalletSummary', () => {
     expect(segment).toBeInTheDocument();
     expect(screen.getByText('Synced')).toBeInTheDocument();
   });
+
+  it('triggers cross-highlight on bar segment and table row hover', async () => {
+    const user = userEvent.setup();
+    const wallets = [
+      { id: 'w1', name: 'Alpha', type: 'single_sig', balance: 5000, lastSyncStatus: 'success' },
+      { id: 'w2', name: 'Beta', type: 'single_sig', balance: 5000, lastSyncStatus: 'success' },
+    ] as any[];
+
+    const { container } = render(
+      <WalletSummary selectedNetwork="mainnet" filteredWallets={wallets} totalBalance={10000} />
+    );
+
+    // Hover the first bar segment to trigger onMouseEnter/onMouseLeave (lines 97-98)
+    const barSegments = container.querySelectorAll('.relative[style*="width"]');
+    expect(barSegments.length).toBe(2);
+
+    await user.hover(barSegments[0]);
+    // Tooltip should appear with percentage text
+    expect(screen.getByText('50.0% of total')).toBeInTheDocument();
+
+    await user.unhover(barSegments[0]);
+    // Tooltip should disappear
+    expect(screen.queryByText('50.0% of total')).not.toBeInTheDocument();
+
+    // Hover a table row to trigger onMouseEnter/onMouseLeave (line 163)
+    const betaRow = screen.getByText('Beta').closest('tr')!;
+    await user.hover(betaRow);
+    await user.unhover(betaRow);
+  });
 });

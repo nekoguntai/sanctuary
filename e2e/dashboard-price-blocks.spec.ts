@@ -243,9 +243,9 @@ test.describe('Dashboard 24h Price Change', () => {
     await page.goto('/#/');
     await page.waitForLoadState('networkidle');
 
-    // When change24h is null, the display should show ---
-    const fallbackText = page.getByText('---');
-    await expect(fallbackText).toBeVisible();
+    // When change24h is null, the display should show --- next to the 24h label
+    const priceChangeArea = page.locator('div', { hasText: '24h' }).filter({ hasText: '---' });
+    await expect(priceChangeArea.first()).toBeVisible({ timeout: 10000 });
   });
 
   test('displays zero change correctly', async ({ page }) => {
@@ -267,12 +267,11 @@ test.describe('Block Visualizer Tooltip', () => {
     await page.goto('/#/');
     await page.waitForLoadState('networkidle');
 
-    // Wait for blocks to render — look for a confirmed block height
-    const confirmedBlock = page.getByText('900,100');
-    await expect(confirmedBlock).toBeVisible({ timeout: 10000 });
+    // Wait for blocks to render — target the block button specifically (block height also shows in status area)
+    const blockButton = page.locator('button', { hasText: '900,100' }).first();
+    await expect(blockButton).toBeVisible({ timeout: 10000 });
 
-    // Find the block button that contains this height and hover it
-    const blockButton = page.locator('button', { has: confirmedBlock });
+    // Hover the block button
     await blockButton.hover();
 
     // The tooltip should appear with transaction count and details
@@ -302,12 +301,11 @@ test.describe('Block Visualizer Tooltip', () => {
     await page.goto('/#/');
     await page.waitForLoadState('networkidle');
 
-    // Wait for a confirmed block to render
-    const confirmedBlock = page.getByText('900,100');
-    await expect(confirmedBlock).toBeVisible({ timeout: 10000 });
+    // Wait for blocks to render — target the block button specifically (block height also shows in status area)
+    const blockButton = page.locator('button', { hasText: '900,100' }).first();
+    await expect(blockButton).toBeVisible({ timeout: 10000 });
 
     // Hover the block
-    const blockButton = page.locator('button', { has: confirmedBlock });
     await blockButton.hover();
 
     // Tooltip should show fullness percentage

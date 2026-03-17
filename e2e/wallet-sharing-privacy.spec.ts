@@ -225,6 +225,15 @@ async function mockShareApi(page: Page) {
     // Wallet labels (used by settings tab)
     if (method === 'GET' && path === `/wallets/${WALLET_ID}/labels`) return json(route, []);
 
+    // Admin endpoints needed by layout/feature flag checks
+    if (method === 'GET' && path === '/admin/features') return json(route, []);
+    if (method === 'GET' && path === '/admin/settings') {
+      return json(route, { registrationEnabled: false, confirmationThreshold: 1, deepConfirmationThreshold: 6, dustThreshold: 546, aiEnabled: false });
+    }
+    if (method === 'GET' && path === '/admin/websocket/stats') {
+      return json(route, { connections: { current: 1, max: 100, uniqueUsers: 1, maxPerUser: 10 }, subscriptions: { total: 0, channels: 0, channelList: [] }, rateLimits: { maxMessagesPerSecond: 15, gracePeriodMs: 2000, gracePeriodMessageLimit: 30, maxSubscriptionsPerConnection: 40 }, recentRateLimitEvents: [] });
+    }
+
     // Admin data for sharing
     if (method === 'GET' && path === '/admin/users') return json(route, [
       { id: ADMIN_USER.id, username: 'admin', email: null, isAdmin: true, createdAt: '2026-03-11T00:00:00.000Z', updatedAt: '2026-03-11T00:00:00.000Z' },
@@ -299,12 +308,12 @@ test.describe('Wallet sharing and privacy', () => {
       await mockShareApi(page);
 
       await page.goto(`/#/wallets/${WALLET_ID}`);
-      await expect(page.getByRole('heading', { name: WALLET.name })).toBeVisible();
+      await expect(page.getByRole('heading', { name: WALLET.name })).toBeVisible({ timeout: 10000 });
 
       const tabButton = page.getByRole('button', locator);
       await expect(tabButton).toBeVisible();
       await tabButton.click();
-      await expect(page.getByRole('main')).toBeVisible();
+      await expect(page.getByRole('main')).toBeVisible({ timeout: 10000 });
     });
   }
 

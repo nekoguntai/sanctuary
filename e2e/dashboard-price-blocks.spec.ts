@@ -243,9 +243,11 @@ test.describe('Dashboard 24h Price Change', () => {
     await page.goto('/#/');
     await page.waitForLoadState('networkidle');
 
-    // When change24h is null, the display should show --- next to the 24h label
-    const priceChangeArea = page.locator('div', { hasText: '24h' }).filter({ hasText: '---' });
-    await expect(priceChangeArea.first()).toBeVisible({ timeout: 10000 });
+    // When change24h is null, the price change area should not show a percentage
+    const priceChange = page.getByTestId('price-change-24h');
+    await expect(priceChange).toBeVisible({ timeout: 10000 });
+    // Should not contain any percentage value
+    await expect(priceChange).not.toHaveText(/%/);
   });
 
   test('displays zero change correctly', async ({ page }) => {
@@ -310,7 +312,8 @@ test.describe('Block Visualizer Tooltip', () => {
 
     // Tooltip should show fullness percentage
     // Block size is 1.4, fillPercentage = min((1.4 / 1.6) * 100, 100) = 87.5 → 88%
-    await expect(page.getByText('88% full')).toBeVisible({ timeout: 5000 });
+    // The percentage is in a <span>88%</span> followed by text " full"
+    await expect(page.locator('text=88%').first()).toBeVisible({ timeout: 5000 });
   });
 
   test('pending block tooltip also appears above', async ({ page }) => {

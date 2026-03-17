@@ -138,7 +138,7 @@ export const Dashboard: React.FC = () => {
               <AnimatedPrice value={btcPrice} symbol={currencySymbol} />
 
               <div className="flex items-center justify-between mt-4">
-                <div className={`flex items-center text-sm font-medium ${
+                <div data-testid="price-change-24h" className={`flex items-center text-sm font-medium ${
                   priceChange24h === null
                     ? 'text-sanctuary-400'
                     : priceChangePositive

@@ -313,7 +313,9 @@ test.describe('Wallet sharing and privacy', () => {
       const tabButton = page.getByRole('button', locator);
       await expect(tabButton).toBeVisible();
       await tabButton.click();
-      await expect(page.getByRole('main')).toBeVisible({ timeout: 10000 });
+
+      // Verify the page still renders after tab switch (wallet heading remains visible)
+      await expect(page.getByRole('heading', { name: WALLET.name })).toBeVisible({ timeout: 10000 });
     });
   }
 

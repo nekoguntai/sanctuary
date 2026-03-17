@@ -708,10 +708,10 @@ test.describe('User journey flows', () => {
     await page.goto('/#/account');
     const main = page.getByRole('main');
 
-    await expect(main.getByRole('heading', { name: 'Account' })).toBeVisible();
-    await expect(main.getByText('Profile')).toBeVisible();
-    await expect(main.getByText('Change Password')).toBeVisible();
-    await expect(main.getByText('Two-Factor Authentication')).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'Account Settings' })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'Profile Information' })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'Change Password' })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'Two-Factor Authentication' })).toBeVisible();
 
     expect(unhandledRequests).toEqual([]);
   });
@@ -755,7 +755,7 @@ test.describe('User journey flows', () => {
 
     await page.goto('/#/wallets/import');
 
-    await expect(main.getByRole('heading', { name: 'Import Wallet' })).toBeVisible();
+    await expect(main.getByText('Select Import Format')).toBeVisible();
     await expect(main.getByRole('button', { name: 'Output Descriptor' })).toBeVisible();
     await expect(main.getByRole('button', { name: 'Hardware Device' })).toBeVisible();
 
@@ -770,8 +770,8 @@ test.describe('User journey flows', () => {
 
     await page.goto('/#/devices/connect');
 
-    await expect(main.getByRole('heading', { name: 'Connect Device' })).toBeVisible();
-    await expect(main.getByText('Select your hardware wallet model')).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'Connect Hardware Device' })).toBeVisible();
+    await expect(main.getByRole('heading', { name: '1. Select Your Device' })).toBeVisible();
 
     expect(unhandledRequests).toEqual([]);
   });
@@ -784,8 +784,8 @@ test.describe('User journey flows', () => {
 
     await page.goto(`/#/wallets/${MAINNET_WALLET_ID}/send`);
 
-    await expect(main.getByText('Select Transaction Type')).toBeVisible();
-    await expect(main.getByRole('button', { name: 'Standard Transaction' })).toBeVisible();
+    await expect(main.getByRole('heading', { name: `Send from ${MAINNET_WALLET.name}` })).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Standard Send' })).toBeVisible();
 
     expect(unhandledRequests).toEqual([]);
   });

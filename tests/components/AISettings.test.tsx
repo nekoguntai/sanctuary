@@ -12,10 +12,12 @@ import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 // Mock admin API
 const mockGetSystemSettings = vi.fn();
 const mockUpdateSystemSettings = vi.fn();
+const mockGetFeatureFlags = vi.fn();
 
 vi.mock('../../src/api/admin', () => ({
   getSystemSettings: () => mockGetSystemSettings(),
   updateSystemSettings: (settings: Record<string, unknown>) => mockUpdateSystemSettings(settings),
+  getFeatureFlags: () => mockGetFeatureFlags(),
 }));
 
 // Mock AI API
@@ -128,6 +130,9 @@ const mockSystemResources = {
 describe('AISettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetFeatureFlags.mockResolvedValue([
+      { key: 'aiAssistant', enabled: true, description: 'Enable AI', category: 'general' },
+    ]);
     mockGetSystemSettings.mockResolvedValue(defaultSettings);
     mockUpdateSystemSettings.mockResolvedValue({});
     mockGetAIStatus.mockResolvedValue({ available: true, model: 'llama3.2:3b' });
@@ -142,6 +147,45 @@ describe('AISettings', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  describe('Feature Flag Gate', () => {
+    it('should show feature unavailable when aiAssistant flag is disabled', async () => {
+      mockGetFeatureFlags.mockResolvedValue([
+        { key: 'aiAssistant', enabled: false, description: 'Enable AI', category: 'general' },
+      ]);
+
+      render(<AISettings />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Feature not available')).toBeInTheDocument();
+      });
+
+      expect(screen.getByText(/AI Assistant feature flag is not enabled/)).toBeInTheDocument();
+      expect(mockGetSystemSettings).not.toHaveBeenCalled();
+    });
+
+    it('should proceed normally when aiAssistant flag is enabled', async () => {
+      render(<AISettings />);
+
+      await waitFor(() => {
+        expect(screen.getByText('AI Assistant')).toBeInTheDocument();
+        expect(screen.getByText('Enable AI Features')).toBeInTheDocument();
+      });
+
+      expect(mockGetSystemSettings).toHaveBeenCalled();
+    });
+
+    it('should proceed normally when feature flags fetch fails (best-effort)', async () => {
+      mockGetFeatureFlags.mockRejectedValue(new Error('Network error'));
+
+      render(<AISettings />);
+
+      await waitFor(() => {
+        expect(screen.getByText('AI Assistant')).toBeInTheDocument();
+        expect(screen.getByText('Enable AI Features')).toBeInTheDocument();
+      });
+    });
   });
 
   describe('Initial Loading', () => {

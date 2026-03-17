@@ -8,12 +8,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as adminApi from '../../../src/api/admin';
 import * as aiApi from '../../../src/api/ai';
+import { ApiError } from '../../../src/api/client';
 import { createLogger } from '../../../utils/logger';
 
 const log = createLogger('AISettings:useAISettings');
 
 interface UseAISettingsReturn {
   // State
+  featureUnavailable: boolean;
   aiEnabled: boolean;
   setAiEnabled: (value: boolean) => void;
   aiEndpoint: string;
@@ -43,6 +45,9 @@ interface UseAISettingsReturn {
 }
 
 export function useAISettings(): UseAISettingsReturn {
+  // Feature flag state
+  const [featureUnavailable, setFeatureUnavailable] = useState(false);
+
   // AI settings state
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiEndpoint, setAiEndpoint] = useState('');
@@ -83,6 +88,25 @@ export function useAISettings(): UseAISettingsReturn {
   // Load settings and container status on mount
   useEffect(() => {
     const loadSettings = async () => {
+      try {
+        // Check if the aiAssistant feature flag is enabled
+        const flags = await adminApi.getFeatureFlags();
+        const aiFlag = flags.find(f => f.key === 'aiAssistant');
+        if (aiFlag && !aiFlag.enabled) {
+          setFeatureUnavailable(true);
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        // If we get a 403, the feature flags endpoint itself is gated
+        if (err instanceof ApiError && err.status === 403) {
+          setFeatureUnavailable(true);
+          setLoading(false);
+          return;
+        }
+        // Otherwise continue — flag check is best-effort
+      }
+
       try {
         const [settings, containerResult] = await Promise.all([
           adminApi.getSystemSettings(),
@@ -175,6 +199,7 @@ export function useAISettings(): UseAISettingsReturn {
   };
 
   return {
+    featureUnavailable,
     aiEnabled,
     setAiEnabled,
     aiEndpoint,

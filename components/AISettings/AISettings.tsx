@@ -12,7 +12,7 @@
  */
 
 import React, { useState } from 'react';
-import { Brain, Download, Server, Loader2 } from 'lucide-react';
+import { Brain, Download, Server, Loader2, AlertCircle } from 'lucide-react';
 import { useAIConnectionStatus } from './hooks/useAIConnectionStatus';
 import { useAISettings } from './hooks/useAISettings';
 import { useModelManagement } from './hooks/useModelManagement';
@@ -58,6 +58,33 @@ export default function AISettings() {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+      </div>
+    );
+  }
+
+  if (settings.featureUnavailable) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50">AI Assistant</h2>
+            <p className="text-sanctuary-500">Configure AI-powered transaction labeling and natural language queries</p>
+          </div>
+          <div className="p-3 surface-secondary rounded-xl">
+            <Brain className="w-8 h-8 text-sanctuary-400" />
+          </div>
+        </div>
+        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-6">
+          <div className="flex items-start space-x-3">
+            <AlertCircle className="w-5 h-5 text-sanctuary-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">Feature not available</p>
+              <p className="text-xs text-sanctuary-500 mt-1">
+                The AI Assistant feature flag is not enabled on this server. An admin can enable it from the Feature Flags page.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

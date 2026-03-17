@@ -315,8 +315,9 @@ test.describe('Block Visualizer Tooltip', () => {
     await expect(tooltip).toBeVisible({ timeout: 5000 });
 
     // Tooltip should show fullness percentage
-    // Block size is 1.4, fillPercentage = min((1.4 / 1.6) * 100, 100) = 87.5 → 88%
-    await expect(page.getByText('88%')).toBeVisible();
+    // Block size is 1.4, fillPercentage = min((1.4 / 1.6) * 100, 100)
+    // Note: 1.4/1.6 = 0.8749999999999999 (floating point), so Math.round(87.49...) = 87
+    await expect(page.getByText('87%')).toBeVisible();
   });
 
   test('pending block tooltip also appears above', async ({ page }) => {

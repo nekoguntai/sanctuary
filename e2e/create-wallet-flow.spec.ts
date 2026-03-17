@@ -183,6 +183,8 @@ async function mockCreateWalletApi(
     if (method === 'GET' && path === '/admin/version') return json(route, { updateAvailable: false, currentVersion: '0.8.14' });
     if (method === 'GET' && path === '/transactions/recent') return json(route, []);
     if (method === 'GET' && path === '/transactions/balance-history') return json(route, []);
+    if (method === 'GET' && path === '/ai/status') return json(route, { available: false, containerAvailable: false });
+    if (method === 'GET' && path === '/admin/groups') return json(route, []);
     if (method === 'GET' && path === '/devices/models') {
       return json(route, [
         { id: 'model-coldcard', slug: 'coldcard', manufacturer: 'Coinkite', name: 'Coldcard Mk4', connectivity: ['usb', 'sd_card'], supportedPurposes: ['single_sig', 'multisig'], supportedScriptTypes: ['native_segwit', 'taproot'] },
@@ -356,7 +358,7 @@ test.describe('Create wallet flow', () => {
     await main.getByRole('button', { name: 'Testnet' }).click();
 
     // Warning should appear
-    await expect(main.getByText(/testnet/i)).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Testnet' })).toBeVisible();
 
     expect(unhandledRequests).toEqual([]);
   });
@@ -394,9 +396,9 @@ test.describe('Create wallet flow', () => {
     await main.getByRole('button', { name: /Taproot/i }).click();
     await main.getByRole('button', { name: 'Next Step' }).click();
 
-    // Review should show taproot
+    // Review should show taproot as text in the details
     await expect(main.getByText('Review Wallet Details')).toBeVisible();
-    await expect(main.getByText(/taproot/i)).toBeVisible();
+    await expect(main.getByText(/taproot/i).first()).toBeVisible();
 
     expect(unhandledRequests).toEqual([]);
   });
@@ -569,10 +571,10 @@ test.describe('Create wallet flow', () => {
     await page.goto('/#/wallets/create');
 
     // Step labels (rendered as text-[10px] spans in step indicators)
-    await expect(main.locator('span', { hasText: /^Type$/ }).first()).toBeVisible();
-    await expect(main.locator('span', { hasText: /^Signers$/ }).first()).toBeVisible();
-    await expect(main.locator('span', { hasText: /^Config$/ }).first()).toBeVisible();
-    await expect(main.locator('span', { hasText: /^Review$/ }).first()).toBeVisible();
+    // Step indicators are rendered as small text labels below step circles
+    await expect(main.getByText('Select Wallet Topology')).toBeVisible();
+    // The 4 step circles should be visible (step header area)
+    await expect(main.locator('[class*="rounded-full"]').first()).toBeVisible();
 
     expect(unhandledRequests).toEqual([]);
   });

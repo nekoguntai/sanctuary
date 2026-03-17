@@ -91,7 +91,7 @@ const renderRow = (
 describe('TransactionRow branch coverage', () => {
   it('renders consolidation with pending timestamp and pending confirmation', () => {
     renderRow(
-      { timestamp: undefined, confirmations: 0, amount: 2500 },
+      { timestamp: undefined, confirmations: 0, amount: -2500 },
       { isConsolidation: true, isReceive: false }
     );
 
@@ -99,6 +99,20 @@ describe('TransactionRow branch coverage', () => {
     expect(screen.getByTestId('refresh-cw')).toBeInTheDocument();
     expect(screen.getByText('Consolidation')).toBeInTheDocument();
     expect(screen.getByTestId('clock')).toBeInTheDocument();
+  });
+
+  it('displays consolidation amount as negative even if stored positive', () => {
+    // Regression: consolidation transactions must always show negative amounts
+    // because they represent fees burned during UTXO consolidation
+    renderRow(
+      { amount: 500, confirmations: 1 },
+      { isConsolidation: true, isReceive: false }
+    );
+
+    // The Amount mock renders raw sats; with the fix, sats should be -500
+    const amounts = screen.getAllByTestId('amount');
+    const consolidationAmount = amounts[0];
+    expect(consolidationAmount.textContent).toContain('-500');
   });
 
   it('renders receive path with confirmed branch and balance fallback to zero', () => {

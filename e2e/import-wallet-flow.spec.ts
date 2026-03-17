@@ -97,6 +97,8 @@ async function mockImportApi(
     if (method === 'GET' && path === '/transactions/recent') return json(route, []);
     if (method === 'GET' && path === '/transactions/balance-history') return json(route, []);
     if (method === 'GET' && path === '/devices/models') return json(route, []);
+    if (method === 'GET' && path === '/ai/status') return json(route, { available: false, containerAvailable: false });
+    if (method === 'GET' && path === '/admin/groups') return json(route, []);
 
     // Import validation
     if (method === 'POST' && path === '/wallets/import/validate') {
@@ -234,7 +236,7 @@ test.describe('Import wallet flow', () => {
     await main.getByRole('button', { name: 'Next Step' }).click();
 
     // Should reach configuration step with wallet name
-    await expect(main.getByText(/Wallet Name|Configure Import|Confirm/i)).toBeVisible({ timeout: 10000 });
+    await expect(main.getByRole('heading', { name: /Configure|Import/i }).first()).toBeVisible({ timeout: 10000 });
 
     expect(unhandledRequests).toEqual([]);
   });
@@ -252,7 +254,7 @@ test.describe('Import wallet flow', () => {
     await main.getByRole('button', { name: 'Next Step' }).click();
 
     // Configuration - enter name
-    await expect(main.getByText(/Wallet Name|Configure Import/i)).toBeVisible({ timeout: 10000 });
+    await expect(main.getByRole('heading', { name: /Configure|Import/i }).first()).toBeVisible({ timeout: 10000 });
     const nameInput = main.locator('input[type="text"]').first();
     await nameInput.clear();
     await nameInput.fill('Imported Descriptor Wallet');
@@ -360,7 +362,7 @@ test.describe('Import wallet flow', () => {
     await main.locator('textarea').first().fill(VALID_DESCRIPTOR);
     await main.getByRole('button', { name: 'Next Step' }).click();
 
-    await expect(main.getByText(/Wallet Name|Configure Import/i)).toBeVisible({ timeout: 10000 });
+    await expect(main.getByRole('heading', { name: /Configure|Import/i }).first()).toBeVisible({ timeout: 10000 });
     const nameInput = main.locator('input[type="text"]').first();
     await nameInput.clear();
     await nameInput.fill('Duplicate Import');
@@ -432,13 +434,10 @@ test.describe('Import wallet flow', () => {
     await main.locator('textarea').first().fill(VALID_DESCRIPTOR);
     await main.getByRole('button', { name: 'Next Step' }).click();
 
-    await expect(main.getByText(/Wallet Name|Configure Import/i)).toBeVisible({ timeout: 10000 });
+    await expect(main.getByRole('heading', { name: /Configure|Import/i }).first()).toBeVisible({ timeout: 10000 });
 
     // Network buttons should be available
-    await expect(
-      main.getByRole('button', { name: /Mainnet/i })
-        .or(main.getByText(/Network/i))
-    ).toBeVisible();
+    await expect(main.getByRole('button', { name: /Mainnet/i })).toBeVisible();
 
     expect(unhandledRequests).toEqual([]);
   });

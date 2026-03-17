@@ -282,7 +282,7 @@ test.describe('Error recovery', () => {
     });
 
     await page.goto('/#/admin/variables');
-    await expect(page.getByText('Confirmation Threshold')).toBeVisible();
+    await expect(page.getByText('Confirmation Threshold').first()).toBeVisible();
 
     // Change a value to trigger auto-save (the form auto-saves on change)
     const confirmInput = page.getByRole('spinbutton').first();
@@ -297,7 +297,7 @@ test.describe('Error recovery', () => {
 
     // After the save attempt, the button should change state (from "Saving..." back to "Save Changes" or show error)
     // We just verify the page doesn't crash and the variables page is still functional
-    await expect(page.getByText('Confirmation Threshold')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Confirmation Threshold').first()).toBeVisible({ timeout: 10000 });
   });
 
   // --- Network Disconnection ---

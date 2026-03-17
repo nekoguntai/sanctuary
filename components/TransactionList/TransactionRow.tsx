@@ -101,14 +101,14 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
       >
         <span className={`text-sm font-semibold ${
           isConsolidation
-            ? 'text-primary-600 dark:text-primary-400'
+            ? 'text-sent-600 dark:text-sent-400'
             : isReceive
             ? 'text-success-600 dark:text-success-400'
             : 'text-sanctuary-900 dark:text-sanctuary-100'
         }`}>
           <Amount
-            sats={tx.amount}
-            showSign={isReceive}
+            sats={isConsolidation ? -Math.abs(tx.amount) : tx.amount}
+            showSign={isReceive || isConsolidation}
             size="sm"
             className="justify-end"
           />

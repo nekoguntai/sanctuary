@@ -51,7 +51,7 @@ export const AILabelSuggestion: React.FC<AILabelSuggestionProps> = ({
       if (msg.includes('503') || msg.includes('not enabled')) {
         setError('AI is not enabled. Configure it in Admin → AI Assistant.');
       } else if (msg.includes('429') || msg.includes('rate limit')) {
-        setError('Too many requests. Please try again in a moment.');
+        setError('AI rate limit reached — too many requests in a short period. Please wait a minute before trying again.');
       } else if (msg.includes('timeout') || msg.includes('timed out')) {
         setError('Request timed out. The AI is taking too long to respond. Please try again.');
       } else if (msg.includes('network') || msg.includes('fetch failed')) {

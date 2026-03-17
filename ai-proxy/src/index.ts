@@ -115,9 +115,10 @@ const rateLimit = (req: Request, res: Response, next: NextFunction) => {
     entry.count++;
     if (entry.count > RATE_LIMIT_MAX_REQUESTS) {
       console.warn(`[AI] Rate limit exceeded for ${clientIp}`);
+      const retryAfter = Math.ceil((entry.windowStart + RATE_LIMIT_WINDOW_MS - now) / 1000);
       return res.status(429).json({
-        error: 'Rate limit exceeded',
-        retryAfter: Math.ceil((entry.windowStart + RATE_LIMIT_WINDOW_MS - now) / 1000),
+        error: `Rate limit exceeded. AI requests are limited to ${RATE_LIMIT_MAX_REQUESTS} per minute. Please wait ${retryAfter}s before trying again.`,
+        retryAfter,
       });
     }
   }

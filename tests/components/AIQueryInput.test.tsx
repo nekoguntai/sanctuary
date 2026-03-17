@@ -441,7 +441,7 @@ describe('AIQueryInput', () => {
       fireEvent.submit(form!);
 
       await waitFor(() => {
-        expect(screen.getByText(/Too many requests/)).toBeInTheDocument();
+        expect(screen.getByText(/rate limit reached/i)).toBeInTheDocument();
       });
     });
 

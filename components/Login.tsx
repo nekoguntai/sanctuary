@@ -106,8 +106,12 @@ export const Login: React.FC = () => {
   // 2FA Verification Screen
   if (twoFactorPending) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-atmospheric p-4 transition-colors duration-500">
-        <div className="max-w-md w-full space-y-8 animate-fade-in-up">
+      <div className="min-h-screen flex items-center justify-center bg-atmospheric p-4 transition-colors duration-500 relative overflow-hidden">
+        {/* Vignette overlay */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_30%,_rgba(250,250,250,0.15)_100%)] dark:bg-[radial-gradient(ellipse_at_center,_transparent_30%,_rgba(0,0,0,0.4)_100%)] pointer-events-none" />
+        {/* Ambient glow behind card */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-success-50/30 dark:bg-success-700/[0.07] blur-[120px] pointer-events-none" />
+        <div className="max-w-md w-full space-y-8 animate-fade-in-up relative z-10">
           <div className="text-center">
             <div className="mx-auto h-20 w-20 bg-sanctuary-200/80 dark:bg-sanctuary-800/80 rounded-2xl flex items-center justify-center mb-6 shadow-inner backdrop-blur-sm">
               <Shield className="h-10 w-10 text-primary-600 dark:text-primary-400" />
@@ -178,8 +182,12 @@ export const Login: React.FC = () => {
 
   // Regular Login/Register Screen
   return (
-    <div className="min-h-screen flex items-center justify-center bg-atmospheric p-4 transition-colors duration-500">
-      <div className="max-w-md w-full space-y-8 animate-fade-in-up">
+    <div className="min-h-screen flex items-center justify-center bg-atmospheric p-4 transition-colors duration-500 relative overflow-hidden">
+      {/* Vignette overlay */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_30%,_rgba(250,250,250,0.15)_100%)] dark:bg-[radial-gradient(ellipse_at_center,_transparent_30%,_rgba(0,0,0,0.4)_100%)] pointer-events-none" />
+      {/* Ambient glow behind card */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-success-50/30 dark:bg-success-700/[0.07] blur-[120px] pointer-events-none" />
+      <div className="max-w-md w-full space-y-8 animate-fade-in-up relative z-10">
         <div className="text-center">
           <div className="mx-auto h-20 w-20 bg-sanctuary-200/80 dark:bg-sanctuary-800/80 rounded-2xl flex items-center justify-center mb-6 shadow-inner backdrop-blur-sm">
             <SanctuaryLogo className="h-10 w-10 text-primary-600 dark:text-primary-400" />

@@ -60,7 +60,7 @@ function sendRateLimitResponse(
     res
       .status(429)
       .type(options.contentType || 'text/plain')
-      .send(message || 'Too many requests. Please try again later.');
+      .send(message || `Too many requests. You've exceeded the rate limit. Please wait ${result.retryAfter ?? 'a few'} seconds before trying again.`);
     return;
   }
 
@@ -69,7 +69,7 @@ function sendRateLimitResponse(
     error: {
       type: 'RateLimitError',
       code: 'RATE_LIMIT_EXCEEDED',
-      message: message || 'Too many requests. Please try again later.',
+      message: message || `Too many requests. You've exceeded the rate limit (${result.limit} requests). Please wait ${result.retryAfter ?? 'a few'} seconds before trying again.`,
       details: {
         retryAfter: result.retryAfter,
         limit: result.limit,

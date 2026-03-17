@@ -622,29 +622,34 @@
       /* Login atmospheric gradient */
       @keyframes atmosphericShift {
         0%, 100% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
+        33% { background-position: 100% 25%; }
+        66% { background-position: 50% 100%; }
       }
       .bg-atmospheric {
         background: linear-gradient(135deg,
           var(--color-bg-50) 0%,
-          var(--color-primary-50) 25%,
-          var(--color-bg-50) 50%,
-          var(--color-success-50) 75%,
+          var(--color-primary-100) 20%,
+          var(--color-bg-100) 40%,
+          var(--color-success-50) 60%,
+          var(--color-primary-50) 80%,
           var(--color-bg-50) 100%
         );
-        background-size: 400% 400%;
-        animation: atmosphericShift 15s ease-in-out infinite;
+        background-size: 300% 300%;
+        animation: atmosphericShift 45s ease-in-out infinite;
       }
+      /* Dark mode: use low-numbered shades of inverted palettes (dark values) */
+      /* primary-50/100 and success-50/100 resolve to deep earthy/forest tones in dark mode */
       html.dark .bg-atmospheric {
         background: linear-gradient(135deg,
           var(--color-bg-950) 0%,
-          var(--color-primary-950) 25%,
-          var(--color-bg-950) 50%,
-          var(--color-success-950) 75%,
+          var(--color-primary-100) 20%,
+          var(--color-bg-900) 40%,
+          var(--color-success-100) 60%,
+          var(--color-primary-50) 80%,
           var(--color-bg-950) 100%
         );
-        background-size: 400% 400%;
-        animation: atmosphericShift 15s ease-in-out infinite;
+        background-size: 300% 300%;
+        animation: atmosphericShift 45s ease-in-out infinite;
       }
 
       /* ==============================================

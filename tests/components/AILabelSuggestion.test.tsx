@@ -246,7 +246,7 @@ describe('AILabelSuggestion', () => {
       fireEvent.click(screen.getByText('Suggest with AI'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Too many requests/)).toBeInTheDocument();
+        expect(screen.getByText(/rate limit reached/i)).toBeInTheDocument();
       });
     });
 

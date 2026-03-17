@@ -205,7 +205,7 @@ describe('Rate Limit Middleware', () => {
         success: false,
         error: expect.objectContaining({
           code: 'RATE_LIMIT_EXCEEDED',
-          message: 'Too many requests. Please try again later.',
+          message: expect.stringContaining("You've exceeded the rate limit (10 requests)"),
         }),
       });
     });
@@ -423,7 +423,7 @@ describe('Rate Limit Middleware', () => {
 
       expect(statusMock).toHaveBeenCalledWith(429);
       expect(typeMock).toHaveBeenCalledWith('text/plain');
-      expect(sendMock).toHaveBeenCalledWith('Too many requests. Please try again later.');
+      expect(sendMock).toHaveBeenCalledWith(expect.stringContaining("You've exceeded the rate limit"));
     });
   });
 

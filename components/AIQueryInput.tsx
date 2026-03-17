@@ -60,7 +60,7 @@ export const AIQueryInput: React.FC<AIQueryInputProps> = ({
       if (msg.includes('503') || msg.includes('not enabled')) {
         setError('AI is not enabled. Configure it in Admin → AI Assistant.');
       } else if (msg.includes('429')) {
-        setError('Too many requests. Please try again in a moment.');
+        setError('AI rate limit reached — too many requests in a short period. Please wait a minute before trying again.');
       } else {
         setError('Failed to process query. AI may be unavailable.');
       }

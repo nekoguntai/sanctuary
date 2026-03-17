@@ -343,8 +343,8 @@ main() {
         set -a
         source "$INSTALL_DIR/.env"
         set +a
-        # Force overwrite since we're upgrading
-        SETUP_FLAGS="$SETUP_FLAGS --force"
+        # Force overwrite since we're upgrading, and force clean rebuild
+        SETUP_FLAGS="$SETUP_FLAGS --force --upgrade"
     fi
 
     # Pass through optional feature flags if set via environment

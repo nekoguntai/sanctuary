@@ -779,6 +779,50 @@ test_install_script_has_upgrade_backup_guidance() {
     fi
 }
 
+test_install_script_passes_upgrade_flag() {
+    # install.sh should pass --upgrade to setup.sh during upgrades
+    # so that Docker images are rebuilt from scratch (no cache)
+    if grep -q "\-\-upgrade" "$INSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should pass --upgrade flag to setup.sh during upgrades"
+        echo "  This ensures Docker images are rebuilt with --no-cache on version upgrades"
+        return 1
+    fi
+}
+
+test_setup_script_has_upgrade_flag() {
+    # setup.sh should accept --upgrade flag
+    if grep -q "\-\-upgrade" "$SETUP_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} setup.sh should accept --upgrade flag"
+        return 1
+    fi
+}
+
+test_setup_script_uses_no_cache_on_upgrade() {
+    # setup.sh should use --no-cache when building during upgrades
+    if grep -q "no-cache" "$SETUP_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} setup.sh should use --no-cache for Docker builds during upgrades"
+        echo "  Without this, Docker may serve stale images from the build cache"
+        return 1
+    fi
+}
+
+test_start_script_rebuild_uses_no_cache() {
+    # start.sh --rebuild should use --no-cache to ensure fresh images
+    if grep -q "no-cache" "$START_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} start.sh --rebuild should use --no-cache for Docker builds"
+        echo "  Without this, 'start.sh --rebuild' may still serve cached images"
+        return 1
+    fi
+}
+
 test_install_script_has_health_check_timeout() {
     # Health check timeout is now in setup.sh - should have MAX_WAIT for health check polling
     if grep -q "MAX_WAIT" "$SETUP_SCRIPT"; then
@@ -1040,6 +1084,13 @@ main() {
     run_test "install script checks multiple ports" test_install_script_checks_multiple_ports
     run_test "install script has upgrade backup guidance" test_install_script_has_upgrade_backup_guidance
     run_test "install script has health check timeout" test_install_script_has_health_check_timeout
+    run_test "install script passes --upgrade flag" test_install_script_passes_upgrade_flag
+    echo ""
+
+    echo -e "${YELLOW}Test Suite: Upgrade Clean Rebuild${NC}"
+    run_test "setup script has --upgrade flag" test_setup_script_has_upgrade_flag
+    run_test "setup script uses --no-cache on upgrade" test_setup_script_uses_no_cache_on_upgrade
+    run_test "start script --rebuild uses --no-cache" test_start_script_rebuild_uses_no_cache
     echo ""
 
     echo -e "${YELLOW}Test Suite: start.sh Enhancements${NC}"

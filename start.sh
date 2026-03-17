@@ -298,10 +298,14 @@ case "${1:-}" in
         [ "$HAS_MONITORING" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.monitoring.yml"
         [ "$HAS_TOR" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.tor.yml"
 
+        # Force clean rebuild to ensure all code changes are included
+        echo "Building fresh images (no cache)..."
+        docker compose $COMPOSE_FILES build --no-cache
+
         if [ "$HAS_AI" = "yes" ]; then
-            docker compose $COMPOSE_FILES --profile ai up -d --build
+            docker compose $COMPOSE_FILES --profile ai up -d
         else
-            docker compose $COMPOSE_FILES up -d --build
+            docker compose $COMPOSE_FILES up -d
         fi
         echo ""
         echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"

@@ -552,13 +552,21 @@ test_force_rebuild_upgrade() {
     # Load secrets
     source "$PROJECT_ROOT/.env"
 
-    # Force rebuild all containers (all secrets required)
+    # Force rebuild all containers with --no-cache to ensure fresh images
+    # This mirrors what install.sh --upgrade and start.sh --rebuild do
     JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
         GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
         AI_CONFIG_SECRET="$AI_CONFIG_SECRET" \
         HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
         RATE_LIMIT_LOGIN=100 RATE_LIMIT_PASSWORD_CHANGE=100 \
-        docker compose up -d --build --force-recreate 2>&1
+        docker compose build --no-cache 2>&1
+
+    JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+        GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+        AI_CONFIG_SECRET="$AI_CONFIG_SECRET" \
+        HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
+        RATE_LIMIT_LOGIN=100 RATE_LIMIT_PASSWORD_CHANGE=100 \
+        docker compose up -d --force-recreate 2>&1
 
     # Wait for all containers
     if ! wait_for_all_containers_healthy 300; then

@@ -17,6 +17,7 @@
 #   --force              Overwrite existing .env without prompting
 #   --non-interactive    Don't prompt for any input (use defaults or env vars)
 #   --no-start           Don't start services after setup
+#   --upgrade            Force clean rebuild of Docker images (no cache)
 #   --enable-monitoring  Enable monitoring stack (Grafana/Loki/Promtail)
 #   --enable-tor         Enable Tor proxy
 #   --skip-ssl           Skip SSL certificate generation
@@ -48,6 +49,7 @@ OPT_NO_START=false
 OPT_SKIP_SSL=false
 OPT_SKIP_PREREQS=false
 OPT_FROM_INSTALL=false
+OPT_UPGRADE=false
 OPT_ENABLE_MONITORING="${ENABLE_MONITORING:-}"
 OPT_ENABLE_TOR="${ENABLE_TOR:-}"
 
@@ -98,6 +100,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --from-install)
             OPT_FROM_INSTALL=true
+            shift
+            ;;
+        --upgrade)
+            OPT_UPGRADE=true
             shift
             ;;
         --help|-h)
@@ -551,10 +557,17 @@ start_services() {
     [ "$OPT_ENABLE_TOR" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.tor.yml"
 
     # Step 1: Build all images first (ensures all build output completes before continuing)
-    echo "Building containers..."
+    BUILD_ARGS=""
+    if [ "$OPT_UPGRADE" = true ]; then
+        echo "Upgrading — rebuilding containers from scratch..."
+        echo -e "${YELLOW}This ensures all code changes are included in the new images.${NC}"
+        BUILD_ARGS="--no-cache"
+    else
+        echo "Building containers..."
+    fi
     # Note: parallel builds can sometimes fail with "already exists" race condition
     # but the images are still built successfully, so we continue on error
-    if ! docker compose $COMPOSE_FILES build; then
+    if ! docker compose $COMPOSE_FILES build $BUILD_ARGS; then
         echo ""
         echo -e "${YELLOW}Build completed with warnings (this is usually fine).${NC}"
     fi

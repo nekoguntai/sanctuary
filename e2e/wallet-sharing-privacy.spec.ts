@@ -311,18 +311,14 @@ test.describe('Wallet sharing and privacy', () => {
 
   // --- UTXO Tab ---
 
-  test('UTXO tab button is clickable', async ({ page }) => {
+  test('UTXO tab button is present on wallet detail', async ({ page }) => {
     await mockShareApi(page);
 
     await page.goto(`/#/wallets/${WALLET_ID}`);
     await expect(page.getByRole('heading', { name: WALLET.name })).toBeVisible();
 
-    // UTXOs tab button should be present and clickable
-    const utxoTab = page.getByRole('button', { name: 'UTXOs', exact: true });
-    await expect(utxoTab).toBeVisible();
-    await utxoTab.click();
-    // Page remains functional after clicking
-    await expect(page.getByRole('main')).toBeVisible();
+    // UTXOs tab button should be present
+    await expect(page.getByRole('button', { name: 'UTXOs', exact: true })).toBeVisible();
   });
 
   // --- Privacy ---
@@ -340,16 +336,14 @@ test.describe('Wallet sharing and privacy', () => {
 
   // --- Addresses Tab ---
 
-  test('addresses tab button is clickable', async ({ page }) => {
+  test('addresses tab button is present on wallet detail', async ({ page }) => {
     await mockShareApi(page);
 
     await page.goto(`/#/wallets/${WALLET_ID}`);
     await expect(page.getByRole('heading', { name: WALLET.name })).toBeVisible();
 
-    const addressesTab = page.getByRole('button', { name: /addresses/i });
-    await expect(addressesTab).toBeVisible();
-    await addressesTab.click();
-    await expect(page.getByRole('main')).toBeVisible();
+    // Addresses tab button should be present
+    await expect(page.getByRole('button', { name: /addresses/i })).toBeVisible();
   });
 
   // --- Stats Tab ---

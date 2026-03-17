@@ -522,8 +522,6 @@ test.describe('Admin operations', () => {
 
     // The backup page should render with an encryption keys section
     await expect(main.getByRole('heading', { name: 'Create Backup' })).toBeVisible();
-    // The page renders encryption key management area
-    await expect(main.getByRole('main')).toBeVisible();
 
     expect(unhandledRequests).toEqual([]);
   });

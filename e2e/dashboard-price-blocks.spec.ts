@@ -222,7 +222,9 @@ async function mockDashboardApi(
       });
     }
 
-    return route.continue();
+    // Return 404 for unmocked routes instead of route.continue()
+    // to avoid hanging on dead backend in CI
+    return json(route, { message: `Unmocked: ${method} ${path}` }, 404);
   };
 
   if (API_ORIGIN) {

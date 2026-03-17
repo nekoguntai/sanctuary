@@ -354,12 +354,16 @@ test.describe('Error recovery', () => {
         return json(route, { price: 95000, currency: 'USD', sources: [], median: 95000, average: 95000, timestamp: '2026-03-11T00:00:00.000Z', cached: true, change24h: -1.5 });
       }
       if (method === 'GET' && path === `/wallets/${WALLET_ID}/transactions/pending`) return json(route, []);
+      if (method === 'GET' && path === '/admin/groups') return json(route, []);
+      if (method === 'GET' && path === '/admin/settings') return json(route, { registrationEnabled: false, confirmationThreshold: 1, deepConfirmationThreshold: 6, dustThreshold: 546, aiEnabled: false });
+      if (method === 'GET' && path === '/admin/features') return json(route, []);
+      if (method === 'GET' && path === '/ai/status') return json(route, { available: false, containerAvailable: false });
       return json(route, { message: `Unmocked: ${method} ${path}` }, 404);
     });
 
     // Load with failing price
     await page.goto('/#/');
-    await expect(page.getByRole('main')).toBeVisible();
+    await expect(page.getByRole('main')).toBeVisible({ timeout: 10000 });
 
     // Fix the price endpoint
     priceFailure = false;

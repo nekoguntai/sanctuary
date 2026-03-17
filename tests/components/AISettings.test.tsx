@@ -176,6 +176,19 @@ describe('AISettings', () => {
       expect(mockGetSystemSettings).toHaveBeenCalled();
     });
 
+    it('should show feature unavailable when feature flags returns 403', async () => {
+      const { ApiError } = await import('../../src/api/client');
+      mockGetFeatureFlags.mockRejectedValue(new ApiError('Forbidden', 403));
+
+      render(<AISettings />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Feature not available')).toBeInTheDocument();
+      });
+
+      expect(mockGetSystemSettings).not.toHaveBeenCalled();
+    });
+
     it('should proceed normally when feature flags fetch fails (best-effort)', async () => {
       mockGetFeatureFlags.mockRejectedValue(new Error('Network error'));
 

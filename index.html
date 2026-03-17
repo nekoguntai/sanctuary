@@ -652,6 +652,88 @@
         animation: atmosphericShift 45s ease-in-out infinite;
       }
 
+      /* Login: Breathing logo - SVG layers gently expand/contract */
+      @keyframes logoBreathe {
+        0%, 100% { transform: scaleY(1); }
+        50% { transform: scaleY(1.08); }
+      }
+      @keyframes logoGlow {
+        0%, 100% { opacity: 0.5; }
+        50% { opacity: 1; filter: drop-shadow(0 0 3px var(--color-success-500)); }
+      }
+      .logo-breathe path:first-child {
+        animation: logoBreathe 4s ease-in-out infinite;
+        transform-origin: center 40%;
+      }
+      .logo-breathe path:nth-child(2) {
+        animation: logoBreathe 4s ease-in-out infinite 0.3s;
+        transform-origin: center 60%;
+      }
+      .logo-breathe path:nth-child(3) {
+        animation: logoBreathe 4s ease-in-out infinite 0.6s;
+        transform-origin: center 80%;
+      }
+      .logo-breathe circle {
+        animation: logoGlow 4s ease-in-out infinite;
+      }
+
+      /* Login: Input focus ripple effect */
+      @keyframes focusRipple {
+        0% { transform: scale(0.8); opacity: 0.5; }
+        100% { transform: scale(1.02); opacity: 0; }
+      }
+      .input-ripple {
+        position: relative;
+      }
+      .input-ripple::after {
+        content: '';
+        position: absolute;
+        inset: -3px;
+        border-radius: 10px;
+        border: 2px solid var(--color-success-500);
+        opacity: 0;
+        pointer-events: none;
+        transition: none;
+      }
+      .input-ripple:focus-within::after {
+        animation: focusRipple 0.6s ease-out forwards;
+      }
+
+      /* Login: Floating dust motes */
+      @keyframes dustFloat {
+        0% { transform: translate(0, 0) scale(1); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { transform: translate(var(--dust-dx), var(--dust-dy)) scale(0.5); opacity: 0; }
+      }
+      .dust-mote {
+        position: absolute;
+        border-radius: 50%;
+        pointer-events: none;
+        animation: dustFloat var(--dust-duration) var(--dust-delay) ease-in-out infinite;
+      }
+
+      /* Login: Staggered entrance delays for login elements */
+      @keyframes loginReveal {
+        0% { opacity: 0; transform: translateY(16px) scale(0.98); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      .login-reveal-1 { animation: loginReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both; }
+      .login-reveal-2 { animation: loginReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both; }
+      .login-reveal-3 { animation: loginReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both; }
+      .login-reveal-4 { animation: loginReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.55s both; }
+      .login-reveal-5 { animation: loginReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.7s both; }
+
+      /* Login: Logo scale entrance */
+      @keyframes logoEntrance {
+        0% { opacity: 0; transform: scale(0.5); }
+        60% { transform: scale(1.05); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+      .login-logo-enter {
+        animation: logoEntrance 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+      }
+
       /* ==============================================
        * QUICK REFERENCE - Which surface class to use:
        *

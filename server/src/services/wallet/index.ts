@@ -15,6 +15,7 @@ export {
   checkWalletAccess,
   checkWalletEditAccess,
   checkWalletOwnerAccess,
+  checkWalletApproveAccess,
   checkWalletAccessWithRole,
 } from './accessControl';
 

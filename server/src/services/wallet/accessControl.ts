@@ -10,6 +10,9 @@ import type { WalletRole, WalletAccessCheckResult } from './types';
 // Roles that can edit wallet data (labels, etc.)
 const EDIT_ROLES = ['owner', 'signer'];
 
+// Roles that can approve transactions
+const APPROVE_ROLES = ['owner', 'approver'];
+
 /**
  * Get user's role for a specific wallet
  * Returns the highest privilege role if user has multiple access paths
@@ -67,13 +70,22 @@ export async function checkWalletOwnerAccess(walletId: string, userId: string): 
 }
 
 /**
+ * Check if user can approve transactions on a wallet (owner or approver roles)
+ * Use this for approval vote operations
+ */
+export async function checkWalletApproveAccess(walletId: string, userId: string): Promise<boolean> {
+  const role = await getUserWalletRole(walletId, userId);
+  return role !== null && APPROVE_ROLES.includes(role);
+}
+
+/**
  * Check wallet access and edit permission in a single query
  * Use this to avoid N+1 queries when checking both access and edit permission
  *
  * Returns: { hasAccess, canEdit, role }
  * - hasAccess: true if user can view the wallet
  * - canEdit: true if user can modify the wallet (owner or signer)
- * - role: the user's role ('owner' | 'signer' | 'viewer' | null)
+ * - role: the user's role ('owner' | 'approver' | 'signer' | 'viewer' | null)
  */
 export async function checkWalletAccessWithRole(walletId: string, userId: string): Promise<WalletAccessCheckResult> {
   const role = await getUserWalletRole(walletId, userId);

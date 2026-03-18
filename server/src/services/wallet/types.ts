@@ -7,7 +7,7 @@
 /**
  * User's role for a specific wallet
  */
-export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
+export type WalletRole = 'owner' | 'approver' | 'signer' | 'viewer' | null;
 
 /**
  * Result of checking wallet access with edit permission
@@ -33,6 +33,9 @@ export interface CreateWalletInput {
 
 /** Roles that can edit wallet data (labels, etc.) */
 export const EDIT_ROLES: string[] = ['owner', 'signer'];
+
+/** Roles that can approve transactions */
+export const APPROVE_ROLES: string[] = ['owner', 'approver'];
 
 export interface WalletWithBalance {
   id: string;

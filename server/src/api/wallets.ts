@@ -28,6 +28,8 @@ import exportRouter from './wallets/export';
 import sharingRouter from './wallets/sharing';
 import telegramRouter from './wallets/telegram';
 import autopilotRouter from './wallets/autopilot';
+import policiesRouter from './wallets/policies';
+import approvalsRouter from './wallets/approvals';
 
 const router = Router();
 
@@ -46,5 +48,7 @@ router.use('/', exportRouter);
 router.use('/', sharingRouter);
 router.use('/', telegramRouter);
 router.use('/', autopilotRouter);
+router.use('/', policiesRouter);
+router.use('/', approvalsRouter);
 
 export default router;

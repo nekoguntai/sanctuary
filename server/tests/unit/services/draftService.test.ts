@@ -50,6 +50,12 @@ vi.mock('../../../src/services/wallet', () => ({
   getWalletById: vi.fn(),
 }));
 
+vi.mock('../../../src/services/vaultPolicy/approvalService', () => ({
+  approvalService: {
+    createApprovalRequestsForDraft: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
     info: vi.fn(),

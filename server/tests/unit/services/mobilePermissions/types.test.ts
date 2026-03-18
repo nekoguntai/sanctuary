@@ -15,8 +15,8 @@ import {
 
 describe('Mobile Permissions Types', () => {
   describe('ALL_MOBILE_ACTIONS', () => {
-    it('should contain all 11 mobile actions', () => {
-      expect(ALL_MOBILE_ACTIONS).toHaveLength(11);
+    it('should contain all 13 mobile actions', () => {
+      expect(ALL_MOBILE_ACTIONS).toHaveLength(13);
     });
 
     it('should contain expected actions', () => {
@@ -32,6 +32,8 @@ describe('Mobile Permissions Types', () => {
         'manageDevices',
         'shareWallet',
         'deleteWallet',
+        'approveTransaction',
+        'managePolicies',
       ];
 
       expectedActions.forEach((action) => {
@@ -60,6 +62,8 @@ describe('Mobile Permissions Types', () => {
       expect(ACTION_TO_FIELD.manageDevices).toBe('canManageDevices');
       expect(ACTION_TO_FIELD.shareWallet).toBe('canShareWallet');
       expect(ACTION_TO_FIELD.deleteWallet).toBe('canDeleteWallet');
+      expect(ACTION_TO_FIELD.approveTransaction).toBe('canApproveTransaction');
+      expect(ACTION_TO_FIELD.managePolicies).toBe('canManagePolicies');
     });
   });
 
@@ -125,15 +129,42 @@ describe('Mobile Permissions Types', () => {
       });
     });
 
+    describe('approver role', () => {
+      const approverCaps = ROLE_CAPABILITIES.approver;
+
+      it('should allow view actions', () => {
+        expect(approverCaps.viewBalance).toBe(true);
+        expect(approverCaps.viewTransactions).toBe(true);
+        expect(approverCaps.viewUtxos).toBe(true);
+      });
+
+      it('should allow approval actions', () => {
+        expect(approverCaps.approveTransaction).toBe(true);
+      });
+
+      it('should deny signing and transaction creation', () => {
+        expect(approverCaps.createTransaction).toBe(false);
+        expect(approverCaps.broadcast).toBe(false);
+        expect(approverCaps.signPsbt).toBe(false);
+      });
+
+      it('should deny administrative actions', () => {
+        expect(approverCaps.manageDevices).toBe(false);
+        expect(approverCaps.shareWallet).toBe(false);
+        expect(approverCaps.deleteWallet).toBe(false);
+        expect(approverCaps.managePolicies).toBe(false);
+      });
+    });
+
     it('should have capabilities for all roles', () => {
-      const roles: WalletRole[] = ['viewer', 'signer', 'owner'];
+      const roles: WalletRole[] = ['viewer', 'signer', 'approver', 'owner'];
       roles.forEach((role) => {
         expect(ROLE_CAPABILITIES[role]).toBeDefined();
       });
     });
 
     it('should define all actions for each role', () => {
-      const roles: WalletRole[] = ['viewer', 'signer', 'owner'];
+      const roles: WalletRole[] = ['viewer', 'signer', 'approver', 'owner'];
       roles.forEach((role) => {
         ALL_MOBILE_ACTIONS.forEach((action) => {
           expect(typeof ROLE_CAPABILITIES[role][action]).toBe('boolean');
@@ -175,11 +206,10 @@ describe('Mobile Permissions Types', () => {
       });
     });
 
-    it('should have consistent permission escalation', () => {
-      // If a viewer can do something, signer and owner can too
+    it('should have consistent permission escalation to owner', () => {
+      // If a viewer can do something, owner can too
       ALL_MOBILE_ACTIONS.forEach((action) => {
         if (ROLE_CAPABILITIES.viewer[action]) {
-          expect(ROLE_CAPABILITIES.signer[action]).toBe(true);
           expect(ROLE_CAPABILITIES.owner[action]).toBe(true);
         }
       });
@@ -190,6 +220,23 @@ describe('Mobile Permissions Types', () => {
           expect(ROLE_CAPABILITIES.owner[action]).toBe(true);
         }
       });
+
+      // If an approver can do something, owner can too
+      ALL_MOBILE_ACTIONS.forEach((action) => {
+        if (ROLE_CAPABILITIES.approver[action]) {
+          expect(ROLE_CAPABILITIES.owner[action]).toBe(true);
+        }
+      });
+    });
+
+    it('should have approver and signer as orthogonal peers', () => {
+      // Approver can approve but signer cannot (by default)
+      expect(ROLE_CAPABILITIES.approver.approveTransaction).toBe(true);
+      expect(ROLE_CAPABILITIES.signer.approveTransaction).toBe(false);
+
+      // Signer can sign but approver cannot
+      expect(ROLE_CAPABILITIES.signer.signPsbt).toBe(true);
+      expect(ROLE_CAPABILITIES.approver.signPsbt).toBe(false);
     });
   });
 });

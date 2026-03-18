@@ -24,6 +24,7 @@ vi.mock('../../../src/services/wallet', () => ({
   checkWalletAccess: vi.fn(),
   checkWalletEditAccess: vi.fn(),
   checkWalletOwnerAccess: vi.fn(),
+  checkWalletApproveAccess: vi.fn(),
   getUserWalletRole: vi.fn(),
 }));
 
@@ -33,6 +34,7 @@ import {
   checkWalletAccess,
   checkWalletEditAccess,
   checkWalletOwnerAccess,
+  checkWalletApproveAccess,
   getUserWalletRole,
 } from '../../../src/services/wallet';
 
@@ -312,6 +314,45 @@ describe('Wallet Access Middleware', () => {
       const response = getResponse();
       expect(response.statusCode).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
+      expect(next).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('requireWalletAccess - Approve Level', () => {
+    const middleware = requireWalletAccess('approve');
+
+    it('should allow access for users with approve permission', async () => {
+      (checkWalletApproveAccess as Mock).mockResolvedValue(true);
+      (getUserWalletRole as Mock).mockResolvedValue('approver');
+
+      const req = createMockRequest({
+        params: { walletId },
+        user: { userId, username, isAdmin: false },
+      });
+      const { res } = createMockResponse();
+      const next = createMockNext();
+
+      await middleware(req as any, res as any, next);
+
+      expect(checkWalletApproveAccess).toHaveBeenCalledWith(walletId, userId);
+      expect(next).toHaveBeenCalled();
+      expect((req as any).walletId).toBe(walletId);
+    });
+
+    it('should deny access for users without approve permission', async () => {
+      (checkWalletApproveAccess as Mock).mockResolvedValue(false);
+
+      const req = createMockRequest({
+        params: { walletId },
+        user: { userId, username, isAdmin: false },
+      });
+      const { res, getResponse } = createMockResponse();
+      const next = createMockNext();
+
+      await middleware(req as any, res as any, next);
+
+      const response = getResponse();
+      expect(response.statusCode).toBe(403);
       expect(next).not.toHaveBeenCalled();
     });
   });

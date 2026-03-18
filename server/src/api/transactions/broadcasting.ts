@@ -9,6 +9,7 @@ import { requireWalletAccess } from '../../middleware/walletAccess';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { auditService, AuditCategory, AuditAction } from '../../services/auditService';
+import { policyEvaluationEngine } from '../../services/vaultPolicy';
 
 const router = Router();
 const log = createLogger('TX:BROADCAST');
@@ -42,8 +43,47 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
       });
     }
 
-    // Broadcast transaction
+    // Re-evaluate policies before broadcast (guard against drift).
+    // Extract from PSBT when available; fall back to client-supplied fields.
     const txService = await import('../../services/bitcoin/transactionService');
+    let evalRecipient = recipient;
+    let evalAmount = amount;
+
+    if (signedPsbtBase64 && (!evalRecipient || !evalAmount)) {
+      try {
+        const psbtInfo = txService.getPSBTInfo(signedPsbtBase64);
+        const firstOutput = psbtInfo.outputs[0];
+        if (firstOutput) {
+          evalRecipient = evalRecipient || firstOutput.address;
+          evalAmount = evalAmount || firstOutput.value;
+        }
+      } catch (parseErr) {
+        log.debug('Could not parse PSBT for policy eval', { error: getErrorMessage(parseErr) });
+      }
+    }
+
+    if (evalRecipient && evalAmount) {
+      const policyResult = await policyEvaluationEngine.evaluatePolicies({
+        walletId,
+        userId: req.user!.userId,
+        recipient: evalRecipient,
+        amount: BigInt(evalAmount),
+      });
+
+      if (!policyResult.allowed) {
+        log.warn('Broadcast blocked by policy', {
+          walletId,
+          triggered: policyResult.triggered.map(t => t.policyName),
+        });
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Transaction blocked by vault policy',
+          policyEvaluation: policyResult,
+        });
+      }
+    }
+
+    // Broadcast transaction
     const result = await txService.broadcastAndSave(walletId, signedPsbtBase64, {
       recipient,
       amount,
@@ -53,6 +93,14 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
       utxos,
       rawTxHex, // Pass raw tx for Trezor
     });
+
+    // Record policy usage after successful broadcast
+    const recordAmount = evalAmount || amount;
+    if (recordAmount) {
+      policyEvaluationEngine.recordUsage(walletId, req.user!.userId, BigInt(recordAmount)).catch(err => {
+        log.warn('Failed to record policy usage', { error: getErrorMessage(err) });
+      });
+    }
 
     // Audit log successful broadcast
     await auditService.logFromRequest(req, AuditAction.TRANSACTION_BROADCAST, AuditCategory.WALLET, {
@@ -114,10 +162,33 @@ router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), as
     const outputs = psbtInfo.outputs;
     const recipientOutput = outputs[0];
     const amount = recipientOutput?.value || 0;
+    const recipientAddress = recipientOutput?.address || '';
+
+    // Evaluate policies using data extracted from the PSBT itself (not client metadata)
+    if (recipientAddress && amount > 0) {
+      const policyResult = await policyEvaluationEngine.evaluatePolicies({
+        walletId,
+        userId: req.user!.userId,
+        recipient: recipientAddress,
+        amount: BigInt(amount),
+      });
+
+      if (!policyResult.allowed) {
+        log.warn('PSBT broadcast blocked by policy', {
+          walletId,
+          triggered: policyResult.triggered.map(t => t.policyName),
+        });
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Transaction blocked by vault policy',
+          policyEvaluation: policyResult,
+        });
+      }
+    }
 
     // Broadcast transaction
     const result = await txService.broadcastAndSave(walletId, signedPsbt, {
-      recipient: recipientOutput?.address || '',
+      recipient: recipientAddress,
       amount,
       fee: psbtInfo.fee,
       label,
@@ -125,13 +196,20 @@ router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), as
       utxos: psbtInfo.inputs.map(i => ({ txid: i.txid, vout: i.vout })),
     });
 
+    // Record policy usage after successful broadcast
+    if (amount > 0) {
+      policyEvaluationEngine.recordUsage(walletId, req.user!.userId, BigInt(amount)).catch(err => {
+        log.warn('Failed to record policy usage', { error: getErrorMessage(err) });
+      });
+    }
+
     // Audit log successful broadcast
     await auditService.logFromRequest(req, AuditAction.TRANSACTION_BROADCAST, AuditCategory.WALLET, {
       success: true,
       details: {
         walletId,
         txid: result.txid,
-        recipient: recipientOutput?.address,
+        recipient: recipientAddress,
         amount,
         fee: psbtInfo.fee,
       },

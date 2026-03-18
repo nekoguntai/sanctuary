@@ -30,6 +30,7 @@ import nodeConfigRouter from './admin/nodeConfig';
 import infrastructureRouter from './admin/infrastructure';
 import monitoringRouter from './admin/monitoring';
 import featuresRouter from './admin/features';
+import policiesRouter from './admin/policies';
 
 const router = Router();
 
@@ -45,5 +46,6 @@ router.use('/electrum-servers', electrumServersRouter);
 router.use('/', nodeConfigRouter);
 router.use('/', infrastructureRouter);
 router.use('/monitoring', monitoringRouter);
+router.use('/policies', policiesRouter);
 
 export default router;

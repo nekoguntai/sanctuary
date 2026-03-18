@@ -9,6 +9,7 @@ import {
   checkWalletAccess,
   checkWalletEditAccess,
   checkWalletOwnerAccess,
+  checkWalletApproveAccess,
   getUserWalletRole,
   WalletRole,
 } from '../services/wallet';
@@ -26,7 +27,7 @@ declare global {
   }
 }
 
-export type AccessLevel = 'view' | 'edit' | 'owner';
+export type AccessLevel = 'view' | 'edit' | 'approve' | 'owner';
 
 /**
  * Middleware factory to require a specific access level to a wallet
@@ -67,6 +68,9 @@ export function requireWalletAccess(level: AccessLevel = 'view') {
       switch (level) {
         case 'owner':
           hasAccess = await checkWalletOwnerAccess(walletId, userId);
+          break;
+        case 'approve':
+          hasAccess = await checkWalletApproveAccess(walletId, userId);
           break;
         case 'edit':
           hasAccess = await checkWalletEditAccess(walletId, userId);

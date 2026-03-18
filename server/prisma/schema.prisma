@@ -57,6 +57,10 @@ model User {
   // Email verification tokens
   emailVerificationTokens EmailVerificationToken[]
 
+  // Vault policies
+  createdPolicies VaultPolicy[] @relation("PolicyCreator")
+  approvalVotes   ApprovalVote[]
+
   @@index([isAdmin]) // For admin user lookups
   @@map("users")
 }
@@ -70,9 +74,10 @@ model Group {
   updatedAt   DateTime @updatedAt
 
   // Relationships
-  members GroupMember[]
-  wallets Wallet[]
-  devices Device[]  // Devices shared with this group
+  members         GroupMember[]
+  wallets         Wallet[]
+  devices         Device[]         // Devices shared with this group
+  defaultPolicies VaultPolicy[]    // Policy templates for this group
 
   @@map("groups")
 }
@@ -136,6 +141,7 @@ model Wallet {
   group             Group?             @relation(fields: [groupId], references: [id])
   draftTransactions DraftTransaction[]
   mobilePermissions MobilePermission[]
+  vaultPolicies     VaultPolicy[]
 
   @@index([groupId])
   @@index([syncInProgress]) // For sync service startup & scheduling
@@ -500,11 +506,19 @@ model DraftTransaction {
   updatedAt DateTime  @updatedAt
   expiresAt DateTime? // Optional auto-cleanup
 
-  wallet    Wallet          @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  user      User            @relation(fields: [userId], references: [id])
-  utxoLocks DraftUtxoLock[]
+  // Policy governance
+  approvalStatus String    @default("not_required") // not_required | pending | approved | rejected | vetoed | expired
+  policySnapshot Json?     // Snapshot of policies evaluated at creation time
+  approvedAt     DateTime?
+  approvedBy     String?   // User who cast the deciding vote
+
+  wallet           Wallet             @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user             User               @relation(fields: [userId], references: [id])
+  utxoLocks        DraftUtxoLock[]
+  approvalRequests ApprovalRequest[]
 
   @@index([walletId, status])
+  @@index([walletId, approvalStatus])
   @@index([userId])
   @@index([expiresAt]) // For hourly maintenance cleanup
   @@map("draft_transactions")
@@ -890,6 +904,10 @@ model MobilePermission {
   canShareWallet       Boolean @default(true)
   canDeleteWallet      Boolean @default(true)
 
+  // Policy governance permissions
+  canApproveTransaction Boolean @default(false)
+  canManagePolicies     Boolean @default(false)
+
   // Owner-set maximum permissions (JSON object of action -> boolean)
   // If set, user cannot exceed these caps even with self-set permissions
   ownerMaxPermissions  Json?
@@ -973,4 +991,167 @@ model EmailVerificationToken {
   @@index([userId])
   @@index([expiresAt]) // For cleanup of expired tokens
   @@map("email_verification_tokens")
+}
+
+// ========================================
+// VAULT POLICIES
+// ========================================
+
+// Spending governance rules attached to wallets, groups, or system-wide
+model VaultPolicy {
+  id          String   @id @default(uuid())
+  walletId    String?  // null = system-wide or group template
+  groupId     String?  // non-null = group default template
+
+  name        String
+  description String?
+  type        String   // spending_limit, approval_required, time_delay, address_control, velocity
+
+  // Type-specific configuration (see vault policy types)
+  config      Json
+
+  priority    Int      @default(0)         // Lower = evaluated first
+  enforcement String   @default("enforce") // enforce | monitor
+  enabled     Boolean  @default(true)
+
+  // Provenance
+  createdBy   String
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Origin tracking for inherited policies
+  sourceType  String   @default("wallet") // system | group | wallet
+  sourceId    String?  // Original policy ID if copied from group/system
+
+  // Relations
+  wallet           Wallet?           @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  group            Group?            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  creator          User              @relation("PolicyCreator", fields: [createdBy], references: [id])
+  approvalRequests ApprovalRequest[]
+  policyEvents     PolicyEvent[]
+  allowedAddresses PolicyAddress[]
+  usageWindows     PolicyUsageWindow[]
+
+  @@index([walletId, enabled])
+  @@index([groupId])
+  @@index([sourceType])
+  @@map("vault_policies")
+}
+
+// Approval request created when a draft triggers an approval_required policy
+model ApprovalRequest {
+  id                 String    @id @default(uuid())
+  draftTransactionId String
+  policyId           String
+
+  status             String    @default("pending") // pending | approved | rejected | expired | vetoed
+  requiredApprovals  Int
+  quorumType         String    @default("any_n")   // any_n | specific | all
+  allowSelfApproval  Boolean   @default(false)
+
+  // Time delay support
+  vetoDeadline       DateTime? // If set, approval enters veto window until this time
+
+  expiresAt          DateTime? // Auto-expire if not resolved
+  resolvedAt         DateTime?
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Relations
+  draftTransaction DraftTransaction @relation(fields: [draftTransactionId], references: [id], onDelete: Cascade)
+  policy           VaultPolicy      @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  votes            ApprovalVote[]
+
+  @@index([draftTransactionId])
+  @@index([policyId])
+  @@index([status])
+  @@map("approval_requests")
+}
+
+// Individual vote on an approval request
+model ApprovalVote {
+  id                String   @id @default(uuid())
+  approvalRequestId String
+  userId            String
+
+  decision          String   // approve | reject | veto
+  reason            String?
+
+  createdAt         DateTime @default(now())
+
+  // Relations
+  approvalRequest ApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id])
+
+  @@unique([approvalRequestId, userId]) // One vote per user per request
+  @@index([approvalRequestId])
+  @@index([userId])
+  @@map("approval_votes")
+}
+
+// Audit trail for policy evaluations and actions
+model PolicyEvent {
+  id                 String   @id @default(uuid())
+  policyId           String?
+  walletId           String
+  draftTransactionId String?
+  userId             String?
+
+  eventType          String   // evaluated | triggered | approved | rejected | vetoed | overridden | expired | violation
+  details            Json     // Type-specific event details
+
+  createdAt          DateTime @default(now())
+
+  // Relations
+  policy VaultPolicy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
+
+  @@index([walletId, createdAt])
+  @@index([policyId])
+  @@index([draftTransactionId])
+  @@map("policy_events")
+}
+
+// Address allowlist/denylist entries for address_control policies
+model PolicyAddress {
+  id       String   @id @default(uuid())
+  policyId String
+  address  String
+  label    String?
+  listType String   // allow | deny
+
+  addedBy   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  policy VaultPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, address])
+  @@index([policyId, listType])
+  @@map("policy_addresses")
+}
+
+// Tracks cumulative spending for limit enforcement
+model PolicyUsageWindow {
+  id        String   @id @default(uuid())
+  policyId  String
+  walletId  String
+  userId    String?  // null for wallet-scoped limits
+
+  windowType  String   // hourly | daily | weekly | monthly
+  windowStart DateTime
+  windowEnd   DateTime
+
+  totalSpent  BigInt   @default(0)  // Satoshis spent in this window
+  txCount     Int      @default(0)  // Transactions in this window
+
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  policy VaultPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, walletId, userId, windowType, windowStart])
+  @@index([walletId, windowType, windowEnd])
+  @@map("policy_usage_windows")
 }

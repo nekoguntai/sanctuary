@@ -17,6 +17,8 @@ import { getErrorMessage } from '../utils/errors';
 import { safeJsonParse, SystemSettingSchemas } from '../utils/safeJson';
 import { DEFAULT_DRAFT_EXPIRATION_DAYS } from '../constants';
 import * as walletService from './wallet';
+import { approvalService } from './vaultPolicy/approvalService';
+import type { PolicyEvaluationResult } from './vaultPolicy/types';
 
 const log = createLogger('DRAFT_SVC');
 const MAX_SIGNATURE_UPDATE_RETRIES = 3;
@@ -47,6 +49,8 @@ export interface CreateDraftInput {
   changeAddress?: string;
   effectiveAmount?: number | string;
   inputPaths?: string[];
+  /** Policy evaluation result from transaction creation — used to create approval requests */
+  policyEvaluation?: PolicyEvaluationResult;
 }
 
 /**
@@ -199,6 +203,23 @@ export async function createDraft(
   }
 
   log.info('Created draft', { draftId: draft.id, walletId, userId, isRBF: data.isRBF ?? false });
+
+  // If policy evaluation indicates approval is required, create approval requests.
+  // This must be awaited to ensure approval records exist before returning the draft.
+  if (data.policyEvaluation?.triggered?.some(t => t.action === 'approval_required')) {
+    try {
+      await approvalService.createApprovalRequestsForDraft(
+        draft.id,
+        walletId,
+        userId,
+        data.policyEvaluation.triggered
+      );
+    } catch (err) {
+      log.error('Failed to create approval requests', { error: getErrorMessage(err), draftId: draft.id });
+      // Don't throw — the draft was created successfully. The approval state
+      // will show as 'not_required' and the user can retry.
+    }
+  }
 
   // Send notifications to other wallet users (async, don't block response)
   notifyNewDraft(walletId, {

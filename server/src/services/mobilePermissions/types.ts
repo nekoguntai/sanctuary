@@ -19,12 +19,14 @@ export type MobileAction =
   | 'manageLabels'
   | 'manageDevices'
   | 'shareWallet'
-  | 'deleteWallet';
+  | 'deleteWallet'
+  | 'approveTransaction'
+  | 'managePolicies';
 
 /**
  * Wallet role types
  */
-export type WalletRole = 'viewer' | 'signer' | 'owner';
+export type WalletRole = 'viewer' | 'signer' | 'approver' | 'owner';
 
 /**
  * Mapping of mobile actions to database field names
@@ -41,6 +43,8 @@ export const ACTION_TO_FIELD: Record<MobileAction, string> = {
   manageDevices: 'canManageDevices',
   shareWallet: 'canShareWallet',
   deleteWallet: 'canDeleteWallet',
+  approveTransaction: 'canApproveTransaction',
+  managePolicies: 'canManagePolicies',
 };
 
 /**
@@ -60,6 +64,8 @@ export const ROLE_CAPABILITIES: Record<WalletRole, Record<MobileAction, boolean>
     manageDevices: false,
     shareWallet: false,
     deleteWallet: false,
+    approveTransaction: false,
+    managePolicies: false,
   },
   signer: {
     viewBalance: true,
@@ -73,6 +79,23 @@ export const ROLE_CAPABILITIES: Record<WalletRole, Record<MobileAction, boolean>
     manageDevices: false,
     shareWallet: false,
     deleteWallet: false,
+    approveTransaction: false,
+    managePolicies: false,
+  },
+  approver: {
+    viewBalance: true,
+    viewTransactions: true,
+    viewUtxos: true,
+    createTransaction: false,
+    broadcast: false,
+    signPsbt: false,
+    generateAddress: false,
+    manageLabels: false,
+    manageDevices: false,
+    shareWallet: false,
+    deleteWallet: false,
+    approveTransaction: true,
+    managePolicies: false,
   },
   owner: {
     viewBalance: true,
@@ -86,6 +109,8 @@ export const ROLE_CAPABILITIES: Record<WalletRole, Record<MobileAction, boolean>
     manageDevices: true,
     shareWallet: true,
     deleteWallet: true,
+    approveTransaction: true,
+    managePolicies: true,
   },
 };
 
@@ -131,6 +156,8 @@ export interface UpdatePermissionsInput {
   manageDevices?: boolean;
   shareWallet?: boolean;
   deleteWallet?: boolean;
+  approveTransaction?: boolean;
+  managePolicies?: boolean;
 }
 
 /**
@@ -148,4 +175,6 @@ export interface OwnerMaxPermissionsInput {
   manageDevices?: boolean;
   shareWallet?: boolean;
   deleteWallet?: boolean;
+  approveTransaction?: boolean;
+  managePolicies?: boolean;
 }

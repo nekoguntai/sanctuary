@@ -105,6 +105,13 @@ export enum AuditAction {
 
   // Address operations
   ADDRESS_GENERATE = 'wallet.address_generate',
+
+  // Vault policy operations
+  POLICY_CREATE = 'wallet.policy_create',
+  POLICY_UPDATE = 'wallet.policy_update',
+  POLICY_DELETE = 'wallet.policy_delete',
+  POLICY_APPROVAL_VOTE = 'wallet.policy_approval_vote',
+  POLICY_OVERRIDE = 'wallet.policy_override',
 }
 
 /**

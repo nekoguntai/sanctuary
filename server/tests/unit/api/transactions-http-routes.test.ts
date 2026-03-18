@@ -16,6 +16,7 @@ const {
   mockEstimateTransaction,
   mockGetPSBTInfo,
   mockFetch,
+  mockEvaluatePolicies,
 } = vi.hoisted(() => ({
   mockGetCachedBlockHeight: vi.fn(),
   mockRecalculateWalletBalances: vi.fn(),
@@ -29,6 +30,7 @@ const {
   mockEstimateTransaction: vi.fn(),
   mockGetPSBTInfo: vi.fn(),
   mockFetch: vi.fn(),
+  mockEvaluatePolicies: vi.fn(),
 }));
 
 vi.mock('../../../src/repositories/db', async () => {
@@ -43,6 +45,7 @@ vi.mock('../../../src/repositories/db', async () => {
 vi.mock('../../../src/middleware/walletAccess', () => ({
   requireWalletAccess: () => (req: any, _res: any, next: () => void) => {
     req.walletId = req.params.walletId || req.params.id;
+    req.user = req.user || { userId: 'test-user-id' };
     next();
   },
 }));
@@ -84,6 +87,13 @@ vi.mock('../../../src/services/bitcoin/transactionService', () => ({
   getPSBTInfo: mockGetPSBTInfo,
 }));
 
+vi.mock('../../../src/services/vaultPolicy', () => ({
+  policyEvaluationEngine: {
+    evaluatePolicies: mockEvaluatePolicies,
+    recordUsage: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 import walletTransactionsRouter from '../../../src/api/transactions/walletTransactions';
 import creationRouter from '../../../src/api/transactions/creation';
 
@@ -111,6 +121,7 @@ describe('Transaction HTTP Routes', () => {
     mockRecalculateWalletBalances.mockResolvedValue(undefined);
     mockWalletCacheGet.mockResolvedValue(null);
     mockWalletCacheSet.mockResolvedValue(undefined);
+    mockEvaluatePolicies.mockResolvedValue({ allowed: true, triggered: [] });
     mockValidateAddress.mockReturnValue({ valid: true });
     mockAuditLogFromRequest.mockResolvedValue(undefined);
     mockCreateTransaction.mockResolvedValue({
@@ -805,6 +816,67 @@ describe('Transaction HTTP Routes', () => {
         memo: 'jan',
       })
     );
+  });
+
+  it('returns 403 when vault policy blocks transaction creation', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ id: walletId, network: 'mainnet' });
+    mockEvaluatePolicies.mockResolvedValueOnce({
+      allowed: false,
+      triggered: [{ policyId: 'p1', policyName: 'Daily Limit', type: 'spending_limit', action: 'blocked', reason: 'Exceeded daily limit' }],
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/create`)
+      .send({
+        recipient: 'tb1qrecipient',
+        amount: 10000,
+        feeRate: 1,
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Forbidden');
+    expect(response.body.policyEvaluation).toBeDefined();
+    expect(response.body.policyEvaluation.triggered).toHaveLength(1);
+    expect(mockCreateTransaction).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when vault policy blocks broadcast', async () => {
+    mockEvaluatePolicies.mockResolvedValueOnce({
+      allowed: false,
+      triggered: [{ policyId: 'p1', policyName: 'Limit', type: 'spending_limit', action: 'blocked', reason: 'Over limit' }],
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/broadcast`)
+      .send({
+        signedPsbtBase64: 'cHNi',
+        recipient: 'tb1qrecipient',
+        amount: 50000,
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body.policyEvaluation).toBeDefined();
+    expect(mockBroadcastAndSave).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when vault policy blocks PSBT broadcast', async () => {
+    mockGetPSBTInfo.mockReturnValue({
+      outputs: [{ address: 'tb1qdest', value: 25000 }, { address: 'tb1qchange', value: 5000 }],
+      inputs: [{ txid: 'f'.repeat(64), vout: 1 }],
+      fee: 450,
+    });
+    mockEvaluatePolicies.mockResolvedValueOnce({
+      allowed: false,
+      triggered: [{ policyId: 'p1', policyName: 'Denylist', type: 'address_control', action: 'blocked', reason: 'Denied address' }],
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/psbt/broadcast`)
+      .send({ signedPsbt: 'cHNi' });
+
+    expect(response.status).toBe(403);
+    expect(response.body.policyEvaluation).toBeDefined();
+    expect(mockBroadcastAndSave).not.toHaveBeenCalled();
   });
 
   it('returns bad request when transaction creation service throws', async () => {

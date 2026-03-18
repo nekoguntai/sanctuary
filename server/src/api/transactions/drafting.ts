@@ -11,6 +11,7 @@ import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { validateAddress } from '../../services/bitcoin/utils';
+import { policyEvaluationEngine } from '../../services/vaultPolicy';
 import { MIN_FEE_RATE } from '../../constants';
 
 const router = Router();
@@ -84,6 +85,22 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
       });
     }
 
+    // Evaluate vault policies BEFORE creating the PSBT
+    const policyResult = await policyEvaluationEngine.evaluatePolicies({
+      walletId,
+      userId: req.user!.userId,
+      recipient,
+      amount: BigInt(amount),
+    });
+
+    if (!policyResult.allowed) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Transaction blocked by vault policy',
+        policyEvaluation: policyResult,
+      });
+    }
+
     // Create transaction
     const txService = await import('../../services/bitcoin/transactionService');
     const txData = await txService.createTransaction(
@@ -118,9 +135,10 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
       changeAmount: txData.changeAmount,
       changeAddress: txData.changeAddress,
       utxos: txData.utxos,
-      inputPaths: txData.inputPaths, // Derivation paths for hardware wallet signing
-      effectiveAmount: txData.effectiveAmount, // The actual amount being sent
-      decoyOutputs: txData.decoyOutputs, // Decoy change outputs (if enabled)
+      inputPaths: txData.inputPaths,
+      effectiveAmount: txData.effectiveAmount,
+      decoyOutputs: txData.decoyOutputs,
+      policyEvaluation: policyResult.triggered.length > 0 ? policyResult : undefined,
     });
   } catch (error) {
     log.error('Create transaction error', { error });
@@ -213,6 +231,27 @@ router.post('/wallets/:walletId/transactions/batch', requireWalletAccess('edit')
       });
     }
 
+    // Evaluate vault policies BEFORE creating the batch PSBT
+    // Note: sendMax outputs have amount=0 here; address control still applies
+    const totalAmount = outputs.reduce(
+      (sum: number, o: { amount?: number }) => sum + (o.amount || 0), 0
+    );
+    const policyResult = await policyEvaluationEngine.evaluatePolicies({
+      walletId,
+      userId: req.user!.userId,
+      recipient: outputs[0].address,
+      amount: BigInt(totalAmount),
+      outputs,
+    });
+
+    if (!policyResult.allowed) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Transaction blocked by vault policy',
+        policyEvaluation: policyResult,
+      });
+    }
+
     // Create batch transaction
     const txService = await import('../../services/bitcoin/transactionService');
     const txData = await txService.createBatchTransaction(
@@ -236,7 +275,8 @@ router.post('/wallets/:walletId/transactions/batch', requireWalletAccess('edit')
       changeAddress: txData.changeAddress,
       utxos: txData.utxos,
       inputPaths: txData.inputPaths,
-      outputs: txData.outputs, // Final outputs with resolved amounts
+      outputs: txData.outputs,
+      policyEvaluation: policyResult.triggered.length > 0 ? policyResult : undefined,
     });
   } catch (error) {
     log.error('Create batch transaction error', { error });
@@ -325,6 +365,22 @@ router.post('/wallets/:walletId/psbt/create', requireWalletAccess('edit'), async
 
     // For now, only support single recipient (can be extended later)
     const { address, amount } = recipients[0];
+
+    // Evaluate vault policies BEFORE creating the PSBT
+    const policyResult = await policyEvaluationEngine.evaluatePolicies({
+      walletId,
+      userId: req.user!.userId,
+      recipient: address,
+      amount: BigInt(amount),
+    });
+
+    if (!policyResult.allowed) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Transaction blocked by vault policy',
+        policyEvaluation: policyResult,
+      });
+    }
 
     // Create PSBT
     const txService = await import('../../services/bitcoin/transactionService');

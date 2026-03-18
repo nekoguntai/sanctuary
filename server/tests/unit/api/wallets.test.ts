@@ -640,7 +640,7 @@ describe('Wallets API', () => {
         .send({ groupId: 'group-1', role: 'admin' });
 
       expect(response.status).toBe(400);
-      expect(response.body.message).toContain('viewer or signer');
+      expect(response.body.message).toContain('viewer, signer, or approver');
     });
 
     it('should reject when user is not group member', async () => {
@@ -752,7 +752,7 @@ describe('Wallets API', () => {
         .send({ targetUserId: 'target-user', role: 'admin' });
 
       expect(response.status).toBe(400);
-      expect(response.body.message).toContain('viewer or signer');
+      expect(response.body.message).toContain('viewer, signer, or approver');
     });
 
     it('should return 404 for non-existent user', async () => {

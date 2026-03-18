@@ -18,6 +18,7 @@ import adminRoutes from './api/admin';
 import syncRoutes from './api/sync';
 import pushRoutes from './api/push';
 import draftRoutes from './api/drafts';
+import approvalRoutes from './api/approvals';
 import payjoinRoutes from './api/payjoin';
 import aiRoutes from './api/ai';
 import aiInternalRoutes from './api/ai-internal';
@@ -65,6 +66,7 @@ const routes: RouteDefinition[] = [
   { method: 'use', path: '/internal/ai', handler: aiInternalRoutes },
   { method: 'use', path: '/internal', handler: mobilePermissionsInternalRoutes },
   // These routes are mounted at /api/v1 without a specific path - must come LAST
+  { method: 'use', path: '/api/v1', handler: approvalRoutes },
   { method: 'use', path: '/api/v1', handler: transactionRoutes },
   { method: 'use', path: '/api/v1', handler: labelRoutes },
   { method: 'use', path: '/api/v1', handler: draftRoutes },

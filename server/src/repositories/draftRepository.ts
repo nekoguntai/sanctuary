@@ -219,6 +219,22 @@ export async function deleteExpired(): Promise<number> {
 }
 
 /**
+ * Update the approval status of a draft
+ */
+export async function updateApprovalStatus(
+  draftId: string,
+  approvalStatus: string
+): Promise<void> {
+  await prisma.draftTransaction.update({
+    where: { id: draftId },
+    data: {
+      approvalStatus,
+      ...(approvalStatus === 'approved' ? { approvedAt: new Date() } : {}),
+    },
+  });
+}
+
+/**
  * Count drafts for a wallet
  */
 export async function countByWalletId(walletId: string): Promise<number> {
@@ -248,6 +264,7 @@ export const draftRepository = {
   findExpired,
   create,
   update,
+  updateApprovalStatus,
   remove,
   deleteExpired,
   countByWalletId,

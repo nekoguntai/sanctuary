@@ -24,10 +24,10 @@ router.post('/:id/share/group', requireWalletAccess('owner'), async (req: Reques
     const { groupId, role = 'viewer' } = req.body;
 
     // Validate role
-    if (role && !['viewer', 'signer'].includes(role)) {
+    if (role && !['viewer', 'signer', 'approver'].includes(role)) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'Invalid role. Must be viewer or signer',
+        message: 'Invalid role. Must be viewer, signer, or approver',
       });
     }
 
@@ -77,10 +77,10 @@ router.post('/:id/share/user', requireWalletAccess('owner'), async (req: Request
       });
     }
 
-    if (!['viewer', 'signer'].includes(role)) {
+    if (!['viewer', 'signer', 'approver'].includes(role)) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'role must be viewer or signer',
+        message: 'role must be viewer, signer, or approver',
       });
     }
 

@@ -41,7 +41,7 @@ export abstract class BasePriceProvider implements IPriceProvider {
     this.priority = config.priority;
     this.supportedCurrencies = config.supportedCurrencies.map(c => c.toUpperCase());
     this.timeoutMs = config.timeoutMs ?? 2000; // Fast fail for better UX
-    this.log = createLogger(`Price:${config.name}`);
+    this.log = createLogger(`PRICE:SVC_${config.name}`);
 
     this.circuit = createCircuitBreaker<PriceData>({
       name: `price-${config.name}`,

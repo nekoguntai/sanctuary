@@ -9,7 +9,7 @@ import { getConfig } from '../config';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 
-const log = createLogger('WorkerHealth');
+const log = createLogger('WORKER_HEALTH:SVC');
 
 type WorkerHealthLevel = 'unknown' | 'healthy' | 'degraded' | 'unreachable';
 

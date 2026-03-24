@@ -15,7 +15,7 @@ import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 import { execSync } from 'child_process';
 
-const log = createLogger('MIGRATION');
+const log = createLogger('MIGRATION:SVC');
 
 /**
  * Migration record from Prisma's internal tracking table

@@ -30,8 +30,6 @@ vi.mock('../../../src/repositories', () => ({
 }));
 
 vi.mock('../../../src/services/accessControl', () => ({
-  requireWalletAccess: vi.fn(),
-  requireWalletEditAccess: vi.fn(),
   requireTransactionAccess: vi.fn(),
   requireTransactionEditAccess: vi.fn(),
   requireAddressAccess: vi.fn(),
@@ -49,8 +47,6 @@ vi.mock('../../../src/utils/logger', () => ({
 
 import { labelRepository } from '../../../src/repositories';
 import {
-  requireWalletAccess,
-  requireWalletEditAccess,
   requireTransactionAccess,
   requireTransactionEditAccess,
   requireAddressAccess,
@@ -80,8 +76,6 @@ describe('LabelService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (requireWalletAccess as Mock).mockResolvedValue(undefined);
-    (requireWalletEditAccess as Mock).mockResolvedValue(undefined);
   });
 
   describe('Label CRUD Operations', () => {
@@ -93,16 +87,10 @@ describe('LabelService', () => {
         ];
         (labelRepository.findByWalletId as Mock).mockResolvedValue(mockLabels);
 
-        const result = await getLabelsForWallet(walletId, userId);
+        const result = await getLabelsForWallet(walletId);
 
-        expect(requireWalletAccess).toHaveBeenCalledWith(walletId, userId);
+        expect(labelRepository.findByWalletId).toHaveBeenCalledWith(walletId);
         expect(result).toEqual(mockLabels);
-      });
-
-      it('should throw if user lacks wallet access', async () => {
-        (requireWalletAccess as Mock).mockRejectedValue(new Error('Access denied'));
-
-        await expect(getLabelsForWallet(walletId, userId)).rejects.toThrow('Access denied');
       });
     });
 
@@ -117,7 +105,7 @@ describe('LabelService', () => {
         };
         (labelRepository.findByIdWithAssociations as Mock).mockResolvedValue(mockLabel);
 
-        const result = await getLabel(walletId, labelId, userId);
+        const result = await getLabel(walletId, labelId);
 
         expect(result).toEqual(mockLabel);
       });
@@ -125,7 +113,7 @@ describe('LabelService', () => {
       it('should throw NotFoundError if label does not exist', async () => {
         (labelRepository.findByIdWithAssociations as Mock).mockResolvedValue(null);
 
-        await expect(getLabel(walletId, labelId, userId)).rejects.toThrow(NotFoundError);
+        await expect(getLabel(walletId, labelId)).rejects.toThrow(NotFoundError);
       });
     });
 
@@ -135,28 +123,27 @@ describe('LabelService', () => {
         (labelRepository.findByNameInWallet as Mock).mockResolvedValue(null);
         (labelRepository.create as Mock).mockResolvedValue(mockLabel);
 
-        const result = await createLabel(walletId, userId, { name: 'Work', color: '#ff0000' });
+        const result = await createLabel(walletId, { name: 'Work', color: '#ff0000' });
 
-        expect(requireWalletEditAccess).toHaveBeenCalledWith(walletId, userId);
         expect(result).toEqual(mockLabel);
       });
 
       it('should throw InvalidInputError for empty name', async () => {
-        await expect(createLabel(walletId, userId, { name: '' })).rejects.toThrow(InvalidInputError);
-        await expect(createLabel(walletId, userId, { name: '   ' })).rejects.toThrow(InvalidInputError);
+        await expect(createLabel(walletId, { name: '' })).rejects.toThrow(InvalidInputError);
+        await expect(createLabel(walletId, { name: '   ' })).rejects.toThrow(InvalidInputError);
       });
 
       it('should throw ConflictError for duplicate name', async () => {
         (labelRepository.findByNameInWallet as Mock).mockResolvedValue({ id: 'existing' });
 
-        await expect(createLabel(walletId, userId, { name: 'Work' })).rejects.toThrow(ConflictError);
+        await expect(createLabel(walletId, { name: 'Work' })).rejects.toThrow(ConflictError);
       });
 
       it('should trim label name', async () => {
         (labelRepository.findByNameInWallet as Mock).mockResolvedValue(null);
         (labelRepository.create as Mock).mockResolvedValue({ id: labelId, name: 'Work' });
 
-        await createLabel(walletId, userId, { name: '  Work  ' });
+        await createLabel(walletId, { name: '  Work  ' });
 
         expect(labelRepository.create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Work' }));
       });
@@ -170,7 +157,7 @@ describe('LabelService', () => {
         (labelRepository.isNameTakenByOther as Mock).mockResolvedValue(false);
         (labelRepository.update as Mock).mockResolvedValue(updatedLabel);
 
-        const result = await updateLabel(walletId, labelId, userId, { name: 'New Name', color: '#ffffff' });
+        const result = await updateLabel(walletId, labelId, { name: 'New Name', color: '#ffffff' });
 
         expect(result).toEqual(updatedLabel);
       });
@@ -178,14 +165,14 @@ describe('LabelService', () => {
       it('should throw NotFoundError if label does not exist', async () => {
         (labelRepository.findByIdInWallet as Mock).mockResolvedValue(null);
 
-        await expect(updateLabel(walletId, labelId, userId, { name: 'New' })).rejects.toThrow(NotFoundError);
+        await expect(updateLabel(walletId, labelId, { name: 'New' })).rejects.toThrow(NotFoundError);
       });
 
       it('should throw ConflictError if new name is taken', async () => {
         (labelRepository.findByIdInWallet as Mock).mockResolvedValue({ id: labelId, name: 'Old' });
         (labelRepository.isNameTakenByOther as Mock).mockResolvedValue(true);
 
-        await expect(updateLabel(walletId, labelId, userId, { name: 'Taken' })).rejects.toThrow(ConflictError);
+        await expect(updateLabel(walletId, labelId, { name: 'Taken' })).rejects.toThrow(ConflictError);
       });
 
       it('should not check for duplicate if name unchanged', async () => {
@@ -193,7 +180,7 @@ describe('LabelService', () => {
         (labelRepository.findByIdInWallet as Mock).mockResolvedValue(existingLabel);
         (labelRepository.update as Mock).mockResolvedValue(existingLabel);
 
-        await updateLabel(walletId, labelId, userId, { name: 'Same Name' });
+        await updateLabel(walletId, labelId, { name: 'Same Name' });
 
         expect(labelRepository.isNameTakenByOther).not.toHaveBeenCalled();
       });
@@ -204,7 +191,7 @@ describe('LabelService', () => {
         (labelRepository.findByIdInWallet as Mock).mockResolvedValue({ id: labelId });
         (labelRepository.remove as Mock).mockResolvedValue(undefined);
 
-        await deleteLabel(walletId, labelId, userId);
+        await deleteLabel(walletId, labelId);
 
         expect(labelRepository.remove).toHaveBeenCalledWith(labelId);
       });
@@ -212,7 +199,7 @@ describe('LabelService', () => {
       it('should throw NotFoundError if label does not exist', async () => {
         (labelRepository.findByIdInWallet as Mock).mockResolvedValue(null);
 
-        await expect(deleteLabel(walletId, labelId, userId)).rejects.toThrow(NotFoundError);
+        await expect(deleteLabel(walletId, labelId)).rejects.toThrow(NotFoundError);
       });
     });
   });

@@ -8,7 +8,7 @@ import type { Worker } from 'bullmq';
 import { createLogger } from '../../utils/logger';
 import { deadLetterQueue, type DeadLetterCategory } from '../../services/deadLetterQueue';
 
-const log = createLogger('WorkerQueue');
+const log = createLogger('WORKER:QUEUE_EVENTS');
 
 /**
  * Map queue name to DLQ category

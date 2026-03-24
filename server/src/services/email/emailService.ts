@@ -12,7 +12,7 @@ import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import type { SmtpConfig, EmailMessage, EmailSendResult } from './types';
 
-const log = createLogger('email-service');
+const log = createLogger('EMAIL:SVC');
 
 // Cache transporter to reuse connections
 let transporter: Transporter | null = null;

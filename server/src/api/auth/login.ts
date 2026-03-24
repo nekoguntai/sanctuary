@@ -4,7 +4,7 @@
  * Public authentication endpoints (registration, login)
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
@@ -14,6 +14,8 @@ import { auditService, AuditAction, AuditCategory, getClientInfo } from '../../s
 import * as refreshTokenService from '../../services/refreshTokenService';
 import { safeJsonParse, SystemSettingSchemas } from '../../utils/safeJson';
 import { isUsingInitialPassword } from './password';
+import { asyncHandler } from '../../errors/errorHandler';
+import { InvalidInputError, ValidationError, ConflictError, ForbiddenError } from '../../errors/ApiError';
 import {
   isVerificationRequired,
   createVerificationToken,
@@ -21,7 +23,7 @@ import {
 } from '../../services/email';
 
 const router = Router();
-const log = createLogger('AUTH:LOGIN');
+const log = createLogger('AUTH_LOGIN:ROUTE');
 
 /**
  * Create the login router with rate limiters
@@ -35,346 +37,304 @@ export function createLoginRouter(
    * GET /api/v1/auth/registration-status
    * Check if public registration is enabled (public endpoint for login page)
    */
-  router.get('/registration-status', async (_req: Request, res: Response) => {
-    try {
-      const setting = await prisma.systemSetting.findUnique({
-        where: { key: 'registrationEnabled' },
-      });
+  router.get('/registration-status', asyncHandler(async (_req, res) => {
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: 'registrationEnabled' },
+    });
 
-      // Default to disabled if setting doesn't exist (admin-only)
-      const enabled = setting
-        ? safeJsonParse(setting.value, SystemSettingSchemas.boolean, false, 'registrationEnabled')
-        : false;
+    // Default to disabled if setting doesn't exist (admin-only)
+    const enabled = setting
+      ? safeJsonParse(setting.value, SystemSettingSchemas.boolean, false, 'registrationEnabled')
+      : false;
 
-      res.json({ enabled });
-    } catch (error) {
-      log.error('Check registration status error', { error });
-      // Default to disabled on error (admin-only)
-      res.json({ enabled: false });
-    }
-  });
+    res.json({ enabled });
+  }));
 
   /**
    * POST /api/v1/auth/register
    * Register a new user
    */
-  router.post('/register', registerLimiter, async (req: Request, res: Response) => {
-    try {
-      // Check if registration is enabled (default: disabled / admin-only)
-      const setting = await prisma.systemSetting.findUnique({
-        where: { key: 'registrationEnabled' },
-      });
+  router.post('/register', registerLimiter, asyncHandler(async (req, res) => {
+    // Check if registration is enabled (default: disabled / admin-only)
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: 'registrationEnabled' },
+    });
 
-      const registrationEnabled = setting
-        ? safeJsonParse(setting.value, SystemSettingSchemas.boolean, false, 'registrationEnabled')
-        : false;
+    const registrationEnabled = setting
+      ? safeJsonParse(setting.value, SystemSettingSchemas.boolean, false, 'registrationEnabled')
+      : false;
 
-      if (!registrationEnabled) {
-        return res.status(403).json({
-          error: 'Forbidden',
-          message: 'Public registration is disabled. Please contact an administrator.',
-        });
-      }
+    if (!registrationEnabled) {
+      throw new ForbiddenError('Public registration is disabled. Please contact an administrator.');
+    }
 
-      const { username, password, email } = req.body;
+    const { username, password, email } = req.body;
 
-      // Validation - email is required for open registration
-      if (!username || !password || !email) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Username, password, and email are required',
-        });
-      }
+    // Validation - email is required for open registration
+    if (!username || !password || !email) {
+      throw new InvalidInputError('Username, password, and email are required');
+    }
 
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Invalid email address format',
-        });
-      }
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new InvalidInputError('Invalid email address format');
+    }
 
-      // SEC-009: Enforce password strength at registration
-      const passwordValidation = validatePasswordStrength(password);
-      if (!passwordValidation.valid) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Password does not meet strength requirements',
-          details: passwordValidation.errors,
-        });
-      }
-
-      // Check if user exists
-      const existingUser = await prisma.user.findUnique({
-        where: { username },
-      });
-
-      if (existingUser) {
-        return res.status(409).json({
-          error: 'Conflict',
-          message: 'Username already exists',
-        });
-      }
-
-      // Check if email is already in use
-      const existingEmail = await prisma.user.findUnique({
-        where: { email: email.toLowerCase() },
-      });
-
-      if (existingEmail) {
-        return res.status(409).json({
-          error: 'Conflict',
-          message: 'Email address is already in use',
-        });
-      }
-
-      // Hash password
-      const hashedPassword = await hashPassword(password);
-
-      // Create user with default preferences
-      const user = await prisma.user.create({
-        data: {
-          username,
-          password: hashedPassword,
-          email: email.toLowerCase(),
-          emailVerified: false,
-          preferences: {
-            darkMode: true,
-            theme: 'sanctuary',
-            background: 'zen',
-            unit: 'sats',
-            fiatCurrency: 'USD',
-            showFiat: true,
-            priceProvider: 'auto',
-            notificationSounds: {
-              enabled: true,
-              volume: 50,
-              confirmation: { enabled: true, sound: 'chime' },
-              receive: { enabled: true, sound: 'coin' },
-              send: { enabled: true, sound: 'success' },
-            },
-          },
-        },
-      });
-
-      // Send verification email if SMTP is configured
-      let emailVerificationRequired = false;
-      let verificationEmailSent = false;
-
-      const verificationRequired = await isVerificationRequired();
-      const smtpConfigured = await isSmtpConfigured();
-
-      if (smtpConfigured) {
-        const verificationResult = await createVerificationToken(
-          user.id,
-          email.toLowerCase(),
-          username
-        );
-        verificationEmailSent = verificationResult.success;
-        if (verificationResult.success) {
-          log.info('Verification email sent for new registration', { userId: user.id, email: email.toLowerCase() });
-        } else {
-          log.warn('Failed to send verification email', { userId: user.id, error: verificationResult.error });
-        }
-      } else {
-        log.warn('SMTP not configured, skipping verification email', { userId: user.id });
-      }
-
-      // Email verification is required if the setting is enabled
-      emailVerificationRequired = verificationRequired;
-
-      // Get device info from request
-      const { ipAddress, userAgent } = getClientInfo(req);
-      const deviceInfo = {
-        userAgent,
-        ipAddress,
-      };
-
-      // SEC-005: Generate access token (1h) and refresh token (7d)
-      const token = generateToken({
-        userId: user.id,
-        username: user.username,
-        isAdmin: user.isAdmin,
-      });
-      const refreshToken = await refreshTokenService.createRefreshToken(user.id, deviceInfo);
-
-      res.status(201).json({
-        token,
-        refreshToken,
-        expiresIn: 3600, // 1 hour in seconds
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          emailVerified: user.emailVerified,
-          isAdmin: user.isAdmin,
-          preferences: user.preferences,
-        },
-        emailVerificationRequired,
-        verificationEmailSent,
-        message: emailVerificationRequired
-          ? 'Registration successful. Please check your email to verify your account.'
-          : 'Registration successful.',
-      });
-    } catch (error) {
-      log.error('Register error', { error });
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Failed to register user',
+    // SEC-009: Enforce password strength at registration
+    const passwordValidation = validatePasswordStrength(password);
+    if (!passwordValidation.valid) {
+      throw new ValidationError('Password does not meet strength requirements', undefined, {
+        errors: passwordValidation.errors as unknown as Record<string, unknown>,
       });
     }
-  });
+
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { username },
+    });
+
+    if (existingUser) {
+      throw new ConflictError('Username already exists');
+    }
+
+    // Check if email is already in use
+    const existingEmail = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
+    if (existingEmail) {
+      throw new ConflictError('Email address is already in use');
+    }
+
+    // Hash password
+    const hashedPassword = await hashPassword(password);
+
+    // Create user with default preferences
+    const user = await prisma.user.create({
+      data: {
+        username,
+        password: hashedPassword,
+        email: email.toLowerCase(),
+        emailVerified: false,
+        preferences: {
+          darkMode: true,
+          theme: 'sanctuary',
+          background: 'zen',
+          unit: 'sats',
+          fiatCurrency: 'USD',
+          showFiat: true,
+          priceProvider: 'auto',
+          notificationSounds: {
+            enabled: true,
+            volume: 50,
+            confirmation: { enabled: true, sound: 'chime' },
+            receive: { enabled: true, sound: 'coin' },
+            send: { enabled: true, sound: 'success' },
+          },
+        },
+      },
+    });
+
+    // Send verification email if SMTP is configured
+    let emailVerificationRequired = false;
+    let verificationEmailSent = false;
+
+    const verificationRequired = await isVerificationRequired();
+    const smtpConfigured = await isSmtpConfigured();
+
+    if (smtpConfigured) {
+      const verificationResult = await createVerificationToken(
+        user.id,
+        email.toLowerCase(),
+        username
+      );
+      verificationEmailSent = verificationResult.success;
+      if (verificationResult.success) {
+        log.info('Verification email sent for new registration', { userId: user.id, email: email.toLowerCase() });
+      } else {
+        log.warn('Failed to send verification email', { userId: user.id, error: verificationResult.error });
+      }
+    } else {
+      log.warn('SMTP not configured, skipping verification email', { userId: user.id });
+    }
+
+    // Email verification is required if the setting is enabled
+    emailVerificationRequired = verificationRequired;
+
+    // Get device info from request
+    const { ipAddress, userAgent } = getClientInfo(req);
+    const deviceInfo = {
+      userAgent,
+      ipAddress,
+    };
+
+    // SEC-005: Generate access token (1h) and refresh token (7d)
+    const token = generateToken({
+      userId: user.id,
+      username: user.username,
+      isAdmin: user.isAdmin,
+    });
+    const refreshToken = await refreshTokenService.createRefreshToken(user.id, deviceInfo);
+
+    res.status(201).json({
+      token,
+      refreshToken,
+      expiresIn: 3600, // 1 hour in seconds
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        emailVerified: user.emailVerified,
+        isAdmin: user.isAdmin,
+        preferences: user.preferences,
+      },
+      emailVerificationRequired,
+      verificationEmailSent,
+      message: emailVerificationRequired
+        ? 'Registration successful. Please check your email to verify your account.'
+        : 'Registration successful.',
+    });
+  }));
 
   /**
    * POST /api/v1/auth/login
    * Login existing user
    */
-  router.post('/login', loginLimiter, async (req: Request, res: Response) => {
-    try {
-      const { username, password } = req.body;
+  router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
+    const { username, password } = req.body;
 
-      // Validation
-      if (!username || !password) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Username and password are required',
-        });
-      }
+    // Validation
+    if (!username || !password) {
+      throw new InvalidInputError('Username and password are required');
+    }
 
-      // Find user
-      const user = await prisma.user.findUnique({
-        where: { username },
-      });
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { username },
+    });
 
-      if (!user) {
-        // Audit failed login (user not found)
-        const { ipAddress, userAgent } = getClientInfo(req);
-        await auditService.log({
-          username,
-          action: AuditAction.LOGIN_FAILED,
-          category: AuditCategory.AUTH,
-          ipAddress,
-          userAgent,
-          success: false,
-          errorMsg: 'User not found',
-        });
-
-        return res.status(401).json({
-          error: 'Unauthorized',
-          message: 'Invalid username or password',
-        });
-      }
-
-      // Verify password
-      const isValid = await verifyPassword(password, user.password);
-
-      if (!isValid) {
-        // Audit failed login (wrong password)
-        const { ipAddress, userAgent } = getClientInfo(req);
-        await auditService.log({
-          userId: user.id,
-          username: user.username,
-          action: AuditAction.LOGIN_FAILED,
-          category: AuditCategory.AUTH,
-          ipAddress,
-          userAgent,
-          success: false,
-          errorMsg: 'Invalid password',
-        });
-
-        return res.status(401).json({
-          error: 'Unauthorized',
-          message: 'Invalid username or password',
-        });
-      }
-
-      // Check email verification status if required
-      const verificationRequired = await isVerificationRequired();
-      if (verificationRequired && user.email && !user.emailVerified) {
-        // User has email but hasn't verified - block login
-        log.info('Login blocked - email not verified', { userId: user.id, email: user.email });
-
-        return res.status(403).json({
-          error: 'Email Not Verified',
-          message: 'Please verify your email address before logging in.',
-          emailVerificationRequired: true,
-          email: user.email,
-          canResend: true,
-        });
-      }
-
-      // Check if 2FA is enabled
-      if (user.twoFactorEnabled && user.twoFactorSecret) {
-        // Check if using initial password before creating temp token
-        const usingDefaultPassword = await isUsingInitialPassword(user.id);
-
-        // SEC-006: Generate a 2FA temp token with distinct audience claim
-        const tempToken = generate2FAToken({
-          userId: user.id,
-          username: user.username,
-          isAdmin: user.isAdmin,
-          usingDefaultPassword, // Pass through for after 2FA verification
-        });
-
-        return res.json({
-          requires2FA: true,
-          tempToken,
-        });
-      }
-
-      // Get device info from request
+    if (!user) {
+      // Audit failed login (user not found)
       const { ipAddress, userAgent } = getClientInfo(req);
-      const deviceInfo = {
-        userAgent,
-        ipAddress,
-      };
-
-      // SEC-005: Generate access token (1h) and refresh token (7d) with DB persistence
-      const token = generateToken({
-        userId: user.id,
-        username: user.username,
-        isAdmin: user.isAdmin,
-      });
-      const refreshToken = await refreshTokenService.createRefreshToken(user.id, deviceInfo);
-
-      // Audit successful login
       await auditService.log({
-        userId: user.id,
-        username: user.username,
-        action: AuditAction.LOGIN,
+        username,
+        action: AuditAction.LOGIN_FAILED,
         category: AuditCategory.AUTH,
         ipAddress,
         userAgent,
-        success: true,
+        success: false,
+        errorMsg: 'User not found',
       });
 
-      // Check if using initial password (for admin user warning)
-      const usingDefaultPassword = await isUsingInitialPassword(user.id);
-
-      res.json({
-        token,
-        refreshToken,
-        expiresIn: 3600, // 1 hour in seconds
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          emailVerified: user.emailVerified,
-          isAdmin: user.isAdmin,
-          preferences: user.preferences,
-          twoFactorEnabled: user.twoFactorEnabled,
-          usingDefaultPassword,
-        },
-      });
-    } catch (error) {
-      log.error('Login error', { error });
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Failed to login',
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Invalid username or password',
       });
     }
-  });
+
+    // Verify password
+    const isValid = await verifyPassword(password, user.password);
+
+    if (!isValid) {
+      // Audit failed login (wrong password)
+      const { ipAddress, userAgent } = getClientInfo(req);
+      await auditService.log({
+        userId: user.id,
+        username: user.username,
+        action: AuditAction.LOGIN_FAILED,
+        category: AuditCategory.AUTH,
+        ipAddress,
+        userAgent,
+        success: false,
+        errorMsg: 'Invalid password',
+      });
+
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Invalid username or password',
+      });
+    }
+
+    // Check email verification status if required
+    const verificationRequired = await isVerificationRequired();
+    if (verificationRequired && user.email && !user.emailVerified) {
+      // User has email but hasn't verified - block login
+      log.info('Login blocked - email not verified', { userId: user.id, email: user.email });
+
+      return res.status(403).json({
+        error: 'Email Not Verified',
+        message: 'Please verify your email address before logging in.',
+        emailVerificationRequired: true,
+        email: user.email,
+        canResend: true,
+      });
+    }
+
+    // Check if 2FA is enabled
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      // Check if using initial password before creating temp token
+      const usingDefaultPassword = await isUsingInitialPassword(user.id);
+
+      // SEC-006: Generate a 2FA temp token with distinct audience claim
+      const tempToken = generate2FAToken({
+        userId: user.id,
+        username: user.username,
+        isAdmin: user.isAdmin,
+        usingDefaultPassword, // Pass through for after 2FA verification
+      });
+
+      return res.json({
+        requires2FA: true,
+        tempToken,
+      });
+    }
+
+    // Get device info from request
+    const { ipAddress, userAgent } = getClientInfo(req);
+    const deviceInfo = {
+      userAgent,
+      ipAddress,
+    };
+
+    // SEC-005: Generate access token (1h) and refresh token (7d) with DB persistence
+    const token = generateToken({
+      userId: user.id,
+      username: user.username,
+      isAdmin: user.isAdmin,
+    });
+    const refreshToken = await refreshTokenService.createRefreshToken(user.id, deviceInfo);
+
+    // Audit successful login
+    await auditService.log({
+      userId: user.id,
+      username: user.username,
+      action: AuditAction.LOGIN,
+      category: AuditCategory.AUTH,
+      ipAddress,
+      userAgent,
+      success: true,
+    });
+
+    // Check if using initial password (for admin user warning)
+    const usingDefaultPassword = await isUsingInitialPassword(user.id);
+
+    res.json({
+      token,
+      refreshToken,
+      expiresIn: 3600, // 1 hour in seconds
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        emailVerified: user.emailVerified,
+        isAdmin: user.isAdmin,
+        preferences: user.preferences,
+        twoFactorEnabled: user.twoFactorEnabled,
+        usingDefaultPassword,
+      },
+    });
+  }));
 
   return router;
 }

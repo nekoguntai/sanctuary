@@ -32,11 +32,6 @@ vi.mock('../../../src/repositories', () => ({
   },
 }));
 
-vi.mock('../../../src/services/accessControl', () => ({
-  requireWalletAccess: vi.fn(),
-  checkWalletAccess: vi.fn(),
-}));
-
 vi.mock('../../../src/services/draftLockService', () => ({
   lockUtxosForDraft: vi.fn(),
   resolveUtxoIds: vi.fn(),
@@ -46,9 +41,7 @@ vi.mock('../../../src/services/notifications/notificationService', () => ({
   notifyNewDraft: vi.fn(),
 }));
 
-vi.mock('../../../src/services/wallet', () => ({
-  getWalletById: vi.fn(),
-}));
+// walletService no longer used — access control handled by route middleware
 
 vi.mock('../../../src/services/vaultPolicy/approvalService', () => ({
   approvalService: {
@@ -73,9 +66,8 @@ import prisma from '../../../src/models/prisma';
 import { draftRepository } from '../../../src/repositories';
 import { lockUtxosForDraft, resolveUtxoIds } from '../../../src/services/draftLockService';
 import { notifyNewDraft } from '../../../src/services/notifications/notificationService';
-import * as walletService from '../../../src/services/wallet';
 import * as bitcoin from 'bitcoinjs-lib';
-import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError, WalletNotFoundError } from '../../../src/errors';
+import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError } from '../../../src/errors';
 import {
   getDraftsForWallet,
   getDraft,
@@ -89,12 +81,6 @@ describe('DraftService', () => {
   const userId = 'user-123';
   const walletId = 'wallet-456';
   const draftId = 'draft-789';
-
-  const mockWallet = {
-    id: walletId,
-    name: 'Test Wallet',
-    userRole: 'owner',
-  };
 
   const mockDraft = {
     id: draftId,
@@ -114,7 +100,6 @@ describe('DraftService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (walletService.getWalletById as Mock).mockResolvedValue(mockWallet);
     (notifyNewDraft as Mock).mockResolvedValue(undefined);
   });
 
@@ -123,16 +108,10 @@ describe('DraftService', () => {
       const mockDrafts = [mockDraft, { ...mockDraft, id: 'draft-2' }];
       (draftRepository.findByWalletId as Mock).mockResolvedValue(mockDrafts);
 
-      const result = await getDraftsForWallet(walletId, userId);
+      const result = await getDraftsForWallet(walletId);
 
-      expect(walletService.getWalletById).toHaveBeenCalledWith(walletId, userId);
+      expect(draftRepository.findByWalletId).toHaveBeenCalledWith(walletId);
       expect(result).toEqual(mockDrafts);
-    });
-
-    it('should throw NotFoundError if wallet not found', async () => {
-      (walletService.getWalletById as Mock).mockResolvedValue(null);
-
-      await expect(getDraftsForWallet(walletId, userId)).rejects.toThrow(NotFoundError);
     });
   });
 
@@ -140,21 +119,15 @@ describe('DraftService', () => {
     it('should return a specific draft', async () => {
       (draftRepository.findByIdInWallet as Mock).mockResolvedValue(mockDraft);
 
-      const result = await getDraft(walletId, draftId, userId);
+      const result = await getDraft(walletId, draftId);
 
       expect(result).toEqual(mockDraft);
-    });
-
-    it('should throw NotFoundError if wallet not found', async () => {
-      (walletService.getWalletById as Mock).mockResolvedValue(null);
-
-      await expect(getDraft(walletId, draftId, userId)).rejects.toThrow(NotFoundError);
     });
 
     it('should throw NotFoundError if draft not found', async () => {
       (draftRepository.findByIdInWallet as Mock).mockResolvedValue(null);
 
-      await expect(getDraft(walletId, draftId, userId)).rejects.toThrow(NotFoundError);
+      await expect(getDraft(walletId, draftId)).rejects.toThrow(NotFoundError);
     });
   });
 
@@ -209,17 +182,6 @@ describe('DraftService', () => {
       await createDraft(walletId, userId, { ...validInput, isRBF: true });
 
       expect(lockUtxosForDraft).not.toHaveBeenCalled();
-    });
-
-    it('should throw ForbiddenError for viewers', async () => {
-      (walletService.getWalletById as Mock).mockResolvedValue({ ...mockWallet, userRole: 'viewer' });
-
-      await expect(createDraft(walletId, userId, validInput)).rejects.toThrow(ForbiddenError);
-    });
-
-    it('throws WalletNotFoundError when wallet does not exist', async () => {
-      (walletService.getWalletById as Mock).mockResolvedValue(null);
-      await expect(createDraft(walletId, userId, validInput)).rejects.toThrow(WalletNotFoundError);
     });
 
     it('should throw InvalidInputError for missing required fields', async () => {
@@ -286,14 +248,6 @@ describe('DraftService', () => {
       );
     });
 
-    it('should allow signers to create drafts', async () => {
-      (walletService.getWalletById as Mock).mockResolvedValue({ ...mockWallet, userRole: 'signer' });
-
-      const result = await createDraft(walletId, userId, validInput);
-
-      expect(result).toEqual(mockDraft);
-    });
-
     it('creates approval requests when policy evaluation has approval_required triggers', async () => {
       const { approvalService } = await import('../../../src/services/vaultPolicy/approvalService');
 
@@ -357,14 +311,14 @@ describe('DraftService', () => {
     });
 
     it('should update draft status', async () => {
-      const result = await updateDraft(walletId, draftId, userId, { status: 'partial' });
+      const result = await updateDraft(walletId, draftId,{ status: 'partial' });
 
       expect(draftRepository.update).toHaveBeenCalledWith(draftId, { status: 'partial' });
       expect(result.status).toBe('partial');
     });
 
     it('should add signed device ID', async () => {
-      await updateDraft(walletId, draftId, userId, { signedDeviceId: 'device-1' });
+      await updateDraft(walletId, draftId,{ signedDeviceId: 'device-1' });
 
       expect(draftRepository.update).toHaveBeenCalledWith(draftId, expect.objectContaining({
         signedDeviceIds: ['device-1'],
@@ -377,7 +331,7 @@ describe('DraftService', () => {
         signedDeviceIds: undefined,
       });
 
-      await updateDraft(walletId, draftId, userId, { signedDeviceId: 'device-first' });
+      await updateDraft(walletId, draftId,{ signedDeviceId: 'device-first' });
 
       expect(draftRepository.update).toHaveBeenCalledWith(
         draftId,
@@ -393,41 +347,30 @@ describe('DraftService', () => {
         signedDeviceIds: ['device-1'],
       });
 
-      await updateDraft(walletId, draftId, userId, { signedDeviceId: 'device-1' });
+      await updateDraft(walletId, draftId,{ signedDeviceId: 'device-1' });
 
       expect(draftRepository.update).toHaveBeenCalledWith(draftId, expect.not.objectContaining({
         signedDeviceIds: expect.anything(),
       }));
     });
 
-    it('should throw ForbiddenError for viewers', async () => {
-      (walletService.getWalletById as Mock).mockResolvedValue({ ...mockWallet, userRole: 'viewer' });
-
-      await expect(updateDraft(walletId, draftId, userId, { status: 'signed' })).rejects.toThrow(ForbiddenError);
-    });
-
     it('should throw NotFoundError if draft not found', async () => {
       (draftRepository.findByIdInWallet as Mock).mockResolvedValue(null);
 
-      await expect(updateDraft(walletId, draftId, userId, {})).rejects.toThrow(NotFoundError);
+      await expect(updateDraft(walletId, draftId,{})).rejects.toThrow(NotFoundError);
     });
 
     it('should throw InvalidInputError for invalid status', async () => {
-      await expect(updateDraft(walletId, draftId, userId, { status: 'invalid' as any })).rejects.toThrow(InvalidInputError);
+      await expect(updateDraft(walletId, draftId,{ status: 'invalid' as any })).rejects.toThrow(InvalidInputError);
     });
 
     it('should update label and memo', async () => {
-      await updateDraft(walletId, draftId, userId, { label: 'Test', memo: 'Note' });
+      await updateDraft(walletId, draftId,{ label: 'Test', memo: 'Note' });
 
       expect(draftRepository.update).toHaveBeenCalledWith(draftId, expect.objectContaining({
         label: 'Test',
         memo: 'Note',
       }));
-    });
-
-    it('throws WalletNotFoundError when wallet is missing', async () => {
-      (walletService.getWalletById as Mock).mockResolvedValue(null);
-      await expect(updateDraft(walletId, draftId, userId, {})).rejects.toThrow(WalletNotFoundError);
     });
 
     it('combines existing and new PSBT signatures when signedPsbtBase64 is provided', async () => {
@@ -461,7 +404,7 @@ describe('DraftService', () => {
         .mockReturnValueOnce(existingPsbtObj as any)
         .mockReturnValueOnce(newPsbtObj as any);
 
-      await updateDraft(walletId, draftId, userId, { signedPsbtBase64: 'new-psbt' });
+      await updateDraft(walletId, draftId,{ signedPsbtBase64: 'new-psbt' });
 
       expect(existingPsbtObj.combine).toHaveBeenCalledWith(newPsbtObj);
       expect(draftRepository.update).toHaveBeenCalledWith(
@@ -497,7 +440,7 @@ describe('DraftService', () => {
         .mockReturnValueOnce(existingPsbtObj as any)
         .mockReturnValueOnce(newPsbtObj as any);
 
-      await updateDraft(walletId, draftId, userId, { signedPsbtBase64: 'new-psbt-no-partials' });
+      await updateDraft(walletId, draftId,{ signedPsbtBase64: 'new-psbt-no-partials' });
 
       expect(draftRepository.update).toHaveBeenCalledWith(
         draftId,
@@ -523,7 +466,7 @@ describe('DraftService', () => {
         .mockReturnValueOnce(existingPsbtObj as any)
         .mockReturnValueOnce(newPsbtObj as any);
 
-      await updateDraft(walletId, draftId, userId, { signedPsbtBase64: 'fallback-psbt' });
+      await updateDraft(walletId, draftId,{ signedPsbtBase64: 'fallback-psbt' });
 
       expect(draftRepository.update).toHaveBeenCalledWith(
         draftId,
@@ -546,7 +489,7 @@ describe('DraftService', () => {
         .mockResolvedValueOnce(mockDraft)
         .mockResolvedValueOnce(refreshedDraft);
 
-      const result = await updateDraft(walletId, draftId, userId, {
+      const result = await updateDraft(walletId, draftId,{
         signedDeviceId: 'device-retry',
       });
 
@@ -574,7 +517,7 @@ describe('DraftService', () => {
       (draftRepository.findByIdInWallet as Mock).mockResolvedValue(mockDraft);
 
       await expect(
-        updateDraft(walletId, draftId, userId, { signedDeviceId: 'device-fail' })
+        updateDraft(walletId, draftId,{ signedDeviceId: 'device-fail' })
       ).rejects.toThrow(ConflictError);
     });
 
@@ -585,14 +528,14 @@ describe('DraftService', () => {
         .mockResolvedValueOnce(null);
 
       await expect(
-        updateDraft(walletId, draftId, userId, { signedDeviceId: 'device-missing' })
+        updateDraft(walletId, draftId,{ signedDeviceId: 'device-missing' })
       ).rejects.toThrow(NotFoundError);
     });
 
     it('rethrows non-conflict update errors without retry', async () => {
       (draftRepository.update as Mock).mockRejectedValueOnce(new Error('db down'));
       await expect(
-        updateDraft(walletId, draftId, userId, { signedDeviceId: 'device-err' })
+        updateDraft(walletId, draftId,{ signedDeviceId: 'device-err' })
       ).rejects.toThrow('db down');
     });
   });
@@ -604,7 +547,7 @@ describe('DraftService', () => {
     });
 
     it('should delete draft as creator', async () => {
-      await deleteDraft(walletId, draftId, userId);
+      await deleteDraft(walletId, draftId, userId, 'signer');
 
       expect(draftRepository.remove).toHaveBeenCalledWith(draftId);
     });
@@ -616,7 +559,7 @@ describe('DraftService', () => {
         userId: 'original-creator',
       });
 
-      await deleteDraft(walletId, draftId, differentUser);
+      await deleteDraft(walletId, draftId, differentUser, 'owner');
 
       expect(draftRepository.remove).toHaveBeenCalledWith(draftId);
     });
@@ -626,21 +569,14 @@ describe('DraftService', () => {
         ...mockDraft,
         userId: 'original-creator',
       });
-      (walletService.getWalletById as Mock).mockResolvedValue({ ...mockWallet, userRole: 'signer' });
 
-      await expect(deleteDraft(walletId, draftId, 'other-user')).rejects.toThrow(ForbiddenError);
-    });
-
-    it('should throw NotFoundError if wallet not found', async () => {
-      (walletService.getWalletById as Mock).mockResolvedValue(null);
-
-      await expect(deleteDraft(walletId, draftId, userId)).rejects.toThrow(NotFoundError);
+      await expect(deleteDraft(walletId, draftId, 'other-user', 'signer')).rejects.toThrow(ForbiddenError);
     });
 
     it('should throw NotFoundError if draft not found', async () => {
       (draftRepository.findByIdInWallet as Mock).mockResolvedValue(null);
 
-      await expect(deleteDraft(walletId, draftId, userId)).rejects.toThrow(NotFoundError);
+      await expect(deleteDraft(walletId, draftId, userId, 'owner')).rejects.toThrow(NotFoundError);
     });
   });
 

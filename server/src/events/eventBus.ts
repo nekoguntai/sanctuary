@@ -42,7 +42,7 @@ export type {
   EventHandler,
 } from './types';
 
-const log = createLogger('EventBus');
+const log = createLogger('INFRA:EVENT_BUS');
 
 // =============================================================================
 // Event Bus Implementation

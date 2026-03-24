@@ -32,7 +32,7 @@ import { RedisRateLimiter } from './redisRateLimiter';
 import { MemoryRateLimiter } from './memoryRateLimiter';
 import { RATE_LIMIT_POLICIES } from './policies';
 
-const log = createLogger('RateLimit');
+const log = createLogger('RATE_LIMIT:SVC');
 
 class RateLimitService implements IRateLimitService {
   private redisLimiter: RedisRateLimiter | null = null;

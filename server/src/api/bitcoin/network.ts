@@ -12,11 +12,13 @@ import * as mempool from '../../services/bitcoin/mempool';
 import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
+import { asyncHandler } from '../../errors/errorHandler';
+import { ValidationError } from '../../errors/ApiError';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD } from '../../constants';
 import { safeJsonParse, SystemSettingSchemas } from '../../utils/safeJson';
 
 const router = Router();
-const log = createLogger('BITCOIN:NETWORK');
+const log = createLogger('BITCOIN_NETWORK:ROUTE');
 
 // Simple cache for mempool data to avoid hammering external APIs
 let mempoolCache: { data: any; timestamp: number; } | null = null;
@@ -26,6 +28,9 @@ const MEMPOOL_STALE_TTL = 300000; // 5 minutes for stale fallback
 /**
  * GET /api/v1/bitcoin/status
  * Get Bitcoin network status
+ *
+ * NOTE: Intentionally keeps try/catch for graceful degradation -
+ * returns { connected: false } instead of a 500 error.
  */
 router.get('/status', async (_req: Request, res: Response) => {
   try {
@@ -132,6 +137,9 @@ router.get('/status', async (_req: Request, res: Response) => {
 /**
  * GET /api/v1/bitcoin/mempool
  * Get mempool and recent blocks data for visualization
+ *
+ * NOTE: Intentionally keeps try/catch for stale cache fallback -
+ * returns stale data instead of a 500 error when fresh fetch fails.
  */
 router.get('/mempool', async (_req: Request, res: Response) => {
   const now = Date.now();
@@ -165,52 +173,33 @@ router.get('/mempool', async (_req: Request, res: Response) => {
  * GET /api/v1/bitcoin/blocks/recent
  * Get recent confirmed blocks
  */
-router.get('/blocks/recent', async (req: Request, res: Response) => {
-  try {
-    const count = parseInt(req.query.count as string, 10) || 10;
-    const blocks = await mempool.getRecentBlocks(count);
+router.get('/blocks/recent', asyncHandler(async (req: Request, res: Response) => {
+  const count = parseInt(req.query.count as string, 10) || 10;
+  const blocks = await mempool.getRecentBlocks(count);
 
-    res.json(blocks);
-  } catch (error) {
-    log.error('Get recent blocks error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch recent blocks',
-    });
-  }
-});
+  res.json(blocks);
+}));
 
 /**
  * GET /api/v1/bitcoin/block/:height
  * Get block information
  */
-router.get('/block/:height', async (req: Request, res: Response) => {
-  try {
-    const height = parseInt(req.params.height, 10);
+router.get('/block/:height', asyncHandler(async (req: Request, res: Response) => {
+  const height = parseInt(req.params.height, 10);
 
-    if (isNaN(height) || height < 0) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Invalid block height',
-      });
-    }
-
-    const client = getElectrumClient();
-
-    if (!client.isConnected()) {
-      await client.connect();
-    }
-
-    const header = await client.getBlockHeader(height);
-
-    res.json(header);
-  } catch (error) {
-    log.error('Get block error', { error: String(error) });
-    res.status(404).json({
-      error: 'Not Found',
-      message: 'Block not found',
-    });
+  if (isNaN(height) || height < 0) {
+    throw new ValidationError('Invalid block height');
   }
-});
+
+  const client = getElectrumClient();
+
+  if (!client.isConnected()) {
+    await client.connect();
+  }
+
+  const header = await client.getBlockHeader(height);
+
+  res.json(header);
+}));
 
 export default router;

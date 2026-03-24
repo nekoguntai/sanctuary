@@ -15,7 +15,7 @@ import type {
   NotificationResult,
 } from './types';
 
-const log = createLogger('NOTIFY:TELEGRAM');
+const log = createLogger('NOTIFY:SVC_TELEGRAM');
 
 export const telegramChannelHandler: NotificationChannelHandler = {
   id: 'telegram',

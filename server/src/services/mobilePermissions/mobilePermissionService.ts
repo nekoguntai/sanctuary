@@ -48,7 +48,7 @@ import {
   ALL_MOBILE_ACTIONS,
 } from './types';
 
-const log = createLogger('MobilePermission');
+const log = createLogger('MOBILE_PERM:SVC');
 
 // =============================================================================
 // Permission Resolution

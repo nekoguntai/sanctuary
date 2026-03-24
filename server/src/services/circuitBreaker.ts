@@ -13,7 +13,7 @@
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 
-const log = createLogger('CIRCUIT');
+const log = createLogger('CIRCUIT_BREAKER:SVC');
 
 export type CircuitState = 'closed' | 'open' | 'half-open';
 

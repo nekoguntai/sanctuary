@@ -8,15 +8,14 @@
  * - WRITE (POST, PATCH, DELETE): Only owner or signer roles
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
+import { requireWalletAccess } from '../middleware/walletAccess';
 import { draftService } from '../services/draftService';
-import { ApiError } from '../errors';
 import { serializeDraftTransaction, serializeDraftTransactions } from '../utils/serialization';
-import { createLogger } from '../utils/logger';
+import { asyncHandler } from '../errors/errorHandler';
 
 const router = Router();
-const log = createLogger('DRAFTS');
 
 // All routes require authentication
 router.use(authenticate);
@@ -25,171 +24,113 @@ router.use(authenticate);
  * GET /api/v1/wallets/:walletId/drafts
  * Get all draft transactions for a wallet
  */
-router.get('/wallets/:walletId/drafts', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
+router.get('/wallets/:walletId/drafts', requireWalletAccess('view'), asyncHandler(async (req, res) => {
+  const { walletId } = req.params;
 
-    const drafts = await draftService.getDraftsForWallet(walletId, userId);
-    res.json(serializeDraftTransactions(drafts));
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Get drafts error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch drafts',
-    });
-  }
-});
+  const drafts = await draftService.getDraftsForWallet(walletId);
+  res.json(serializeDraftTransactions(drafts));
+}));
 
 /**
  * GET /api/v1/wallets/:walletId/drafts/:draftId
  * Get a specific draft transaction
  */
-router.get('/wallets/:walletId/drafts/:draftId', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { walletId, draftId } = req.params;
+router.get('/wallets/:walletId/drafts/:draftId', requireWalletAccess('view'), asyncHandler(async (req, res) => {
+  const { walletId, draftId } = req.params;
 
-    const draft = await draftService.getDraft(walletId, draftId, userId);
-    res.json(serializeDraftTransaction(draft));
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Get draft error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch draft',
-    });
-  }
-});
+  const draft = await draftService.getDraft(walletId, draftId);
+  res.json(serializeDraftTransaction(draft));
+}));
 
 /**
  * POST /api/v1/wallets/:walletId/drafts
  * Create a new draft transaction
  */
-router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
-    const {
-      recipient,
-      amount,
-      feeRate,
-      selectedUtxoIds,
-      enableRBF,
-      subtractFees,
-      sendMax,
-      outputs,
-      inputs,
-      decoyOutputs,
-      payjoinUrl,
-      isRBF,
-      label,
-      memo,
-      psbtBase64,
-      fee,
-      totalInput,
-      totalOutput,
-      changeAmount,
-      changeAddress,
-      effectiveAmount,
-      inputPaths,
-    } = req.body;
+router.post('/wallets/:walletId/drafts', requireWalletAccess('edit'), asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { walletId } = req.params;
+  const {
+    recipient,
+    amount,
+    feeRate,
+    selectedUtxoIds,
+    enableRBF,
+    subtractFees,
+    sendMax,
+    outputs,
+    inputs,
+    decoyOutputs,
+    payjoinUrl,
+    isRBF,
+    label,
+    memo,
+    psbtBase64,
+    fee,
+    totalInput,
+    totalOutput,
+    changeAmount,
+    changeAddress,
+    effectiveAmount,
+    inputPaths,
+  } = req.body;
 
-    const draft = await draftService.createDraft(walletId, userId, {
-      recipient,
-      amount,
-      feeRate,
-      selectedUtxoIds,
-      enableRBF,
-      subtractFees,
-      sendMax,
-      outputs,
-      inputs,
-      decoyOutputs,
-      payjoinUrl,
-      isRBF,
-      label,
-      memo,
-      psbtBase64,
-      fee,
-      totalInput,
-      totalOutput,
-      changeAmount,
-      changeAddress,
-      effectiveAmount,
-      inputPaths,
-    });
+  const draft = await draftService.createDraft(walletId, userId, {
+    recipient,
+    amount,
+    feeRate,
+    selectedUtxoIds,
+    enableRBF,
+    subtractFees,
+    sendMax,
+    outputs,
+    inputs,
+    decoyOutputs,
+    payjoinUrl,
+    isRBF,
+    label,
+    memo,
+    psbtBase64,
+    fee,
+    totalInput,
+    totalOutput,
+    changeAmount,
+    changeAddress,
+    effectiveAmount,
+    inputPaths,
+  });
 
-    res.status(201).json(serializeDraftTransaction(draft));
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Create draft error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to create draft',
-    });
-  }
-});
+  res.status(201).json(serializeDraftTransaction(draft));
+}));
 
 /**
  * PATCH /api/v1/wallets/:walletId/drafts/:draftId
  * Update a draft transaction (e.g., add signature)
  */
-router.patch('/wallets/:walletId/drafts/:draftId', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { walletId, draftId } = req.params;
-    const { signedPsbtBase64, signedDeviceId, status, label, memo } = req.body;
+router.patch('/wallets/:walletId/drafts/:draftId', requireWalletAccess('edit'), asyncHandler(async (req, res) => {
+  const { walletId, draftId } = req.params;
+  const { signedPsbtBase64, signedDeviceId, status, label, memo } = req.body;
 
-    const draft = await draftService.updateDraft(walletId, draftId, userId, {
-      signedPsbtBase64,
-      signedDeviceId,
-      status,
-      label,
-      memo,
-    });
+  const draft = await draftService.updateDraft(walletId, draftId, {
+    signedPsbtBase64,
+    signedDeviceId,
+    status,
+    label,
+    memo,
+  });
 
-    res.json(serializeDraftTransaction(draft));
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Update draft error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to update draft',
-    });
-  }
-});
+  res.json(serializeDraftTransaction(draft));
+}));
 
 /**
  * DELETE /api/v1/wallets/:walletId/drafts/:draftId
- * Delete a draft transaction
+ * Delete a draft transaction (creator or wallet owner only)
  */
-router.delete('/wallets/:walletId/drafts/:draftId', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { walletId, draftId } = req.params;
+router.delete('/wallets/:walletId/drafts/:draftId', requireWalletAccess('view'), asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { walletId, draftId } = req.params;
 
-    await draftService.deleteDraft(walletId, draftId, userId);
-    res.status(204).send();
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Delete draft error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to delete draft',
-    });
-  }
-});
+  await draftService.deleteDraft(walletId, draftId, userId, req.walletRole);
+  res.status(204).send();
+}));
 
 export default router;

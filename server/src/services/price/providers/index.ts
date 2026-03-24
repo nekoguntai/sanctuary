@@ -24,7 +24,7 @@ import { KrakenPriceProvider } from './kraken';
 import { CoinbasePriceProvider } from './coinbase';
 import { BinancePriceProvider } from './binance';
 
-const log = createLogger('PriceProviders');
+const log = createLogger('PRICE:SVC_PROVIDERS');
 
 /**
  * Supported currencies by provider (for backward compatibility with tests)

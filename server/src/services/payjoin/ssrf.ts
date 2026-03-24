@@ -9,7 +9,7 @@ import dns from 'dns';
 import { promisify } from 'util';
 import { createLogger } from '../../utils/logger';
 
-const log = createLogger('PAYJOIN:SSRF');
+const log = createLogger('PAYJOIN:SVC_SSRF');
 
 const dnsLookup = promisify(dns.lookup);
 

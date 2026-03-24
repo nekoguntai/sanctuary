@@ -89,6 +89,8 @@ vi.mock('../../../src/middleware/auth', () => ({
 
 // Import router and mocked modules
 import nodeRouter from '../../../src/api/node';
+import { errorHandler } from '../../../src/errors/errorHandler';
+import { ApiError, InternalError } from '../../../src/errors/ApiError';
 import net from 'net';
 import tls from 'tls';
 
@@ -192,7 +194,13 @@ class RequestBuilder {
 
       nodeRouter.handle(req, res, (err?: Error) => {
         if (err) {
-          reject(err);
+          // Simulate errorHandler behavior for ApiError instances
+          if (err instanceof ApiError) {
+            resolve({ status: err.statusCode, headers: res.headers, body: err.toResponse() });
+          } else {
+            const internalError = new InternalError();
+            resolve({ status: 500, headers: res.headers, body: internalError.toResponse() });
+          }
           return;
         }
         reject(new Error(`Route not handled: ${this.method} ${normalizedUrl}`));
@@ -218,6 +226,7 @@ describe('Node API Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/node', nodeRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -597,8 +606,7 @@ describe('Node API Routes', () => {
 
         expect(response.status).toBe(500);
         expect(response.body).toMatchObject({
-          error: 'Internal Server Error',
-          message: 'Failed to test node connection',
+          code: 'INTERNAL_ERROR',
         });
       });
     });

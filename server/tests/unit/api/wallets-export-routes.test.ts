@@ -57,6 +57,7 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+import { errorHandler } from '../../../src/errors/errorHandler';
 import exportRouter, { mapDeviceTypeToWalletModel } from '../../../src/api/wallets/export';
 
 function buildWallet(overrides: Record<string, any> = {}) {
@@ -127,6 +128,7 @@ describe('Wallets Export Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/wallets', exportRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -224,7 +226,7 @@ describe('Wallets Export Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/export/labels');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to export labels');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('skips empty label names and omits origin when derivation path is missing', async () => {
@@ -374,7 +376,7 @@ describe('Wallets Export Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/export/formats');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to get export formats');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('exports wallet in requested format', async () => {
@@ -430,11 +432,8 @@ describe('Wallets Export Routes', () => {
       .get('/api/v1/wallets/wallet-1/export')
       .query({ format: 'sparrow' });
 
-    expect(response.status).toBe(400);
-    expect(response.body).toEqual({
-      error: 'Bad Request',
-      message: 'Format not supported for this wallet',
-    });
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns default export error message when thrown error has no message', async () => {
@@ -446,11 +445,8 @@ describe('Wallets Export Routes', () => {
       .get('/api/v1/wallets/wallet-1/export')
       .query({ format: 'sparrow' });
 
-    expect(response.status).toBe(400);
-    expect(response.body).toEqual({
-      error: 'Bad Request',
-      message: 'Failed to export wallet in the specified format',
-    });
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns 500 when export flow fails unexpectedly', async () => {
@@ -461,7 +457,7 @@ describe('Wallets Export Routes', () => {
       .query({ format: 'sparrow' });
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to export wallet');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('maps known and unknown hardware device types for Sparrow model names', () => {

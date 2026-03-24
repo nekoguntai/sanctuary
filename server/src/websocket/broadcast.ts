@@ -28,7 +28,7 @@ import type {
 import { EventBuilders } from './events';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('WS_BROADCAST');
+const log = createLogger('WS:BROADCAST');
 
 // =============================================================================
 // Internal Helpers

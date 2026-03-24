@@ -5,13 +5,12 @@
  * POST /ai/query - Execute a natural language query
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
+import { asyncHandler } from '../../errors/errorHandler';
+import { InvalidInputError } from '../../errors/ApiError';
 import { aiService } from '../../services/aiService';
-import { createLogger } from '../../utils/logger';
 import type { RequestHandler } from 'express';
-
-const log = createLogger('AI-API');
 
 export function createFeaturesRouter(aiRateLimiter: RequestHandler): Router {
   const router = Router();
@@ -26,49 +25,38 @@ export function createFeaturesRouter(aiRateLimiter: RequestHandler): Router {
    * The AI container fetches sanitized transaction data internally.
    * This ensures no sensitive data (addresses, txids) is exposed.
    */
-  router.post('/suggest-label', authenticate, aiRateLimiter, async (req: Request, res: Response) => {
-    try {
-      const { transactionId } = req.body;
+  router.post('/suggest-label', authenticate, aiRateLimiter, asyncHandler(async (req, res) => {
+    const { transactionId } = req.body;
 
-      // Validation
-      if (!transactionId) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'transactionId is required',
-        });
-      }
+    // Validation
+    if (!transactionId) {
+      throw new InvalidInputError('transactionId is required');
+    }
 
-      const enabled = await aiService.isEnabled();
-      if (!enabled) {
-        return res.status(503).json({
-          error: 'Service Unavailable',
-          message: 'AI is not enabled or configured',
-        });
-      }
-
-      // Get auth token to pass to AI container
-      const authToken = req.headers.authorization?.replace('Bearer ', '') || '';
-
-      const suggestion = await aiService.suggestTransactionLabel(transactionId, authToken);
-
-      if (!suggestion) {
-        return res.status(503).json({
-          error: 'Service Unavailable',
-          message: 'AI endpoint is not available or returned no suggestion',
-        });
-      }
-
-      res.json({
-        suggestion,
-      });
-    } catch (error) {
-      log.error('AI label suggestion failed', { error: String(error) });
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Failed to generate label suggestion',
+    const enabled = await aiService.isEnabled();
+    if (!enabled) {
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'AI is not enabled or configured',
       });
     }
-  });
+
+    // Get auth token to pass to AI container
+    const authToken = req.headers.authorization?.replace('Bearer ', '') || '';
+
+    const suggestion = await aiService.suggestTransactionLabel(transactionId, authToken);
+
+    if (!suggestion) {
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'AI endpoint is not available or returned no suggestion',
+      });
+    }
+
+    res.json({
+      suggestion,
+    });
+  }));
 
   /**
    * POST /api/v1/ai/query
@@ -80,47 +68,36 @@ export function createFeaturesRouter(aiRateLimiter: RequestHandler): Router {
    *
    * Returns a structured query that the frontend can execute.
    */
-  router.post('/query', authenticate, aiRateLimiter, async (req: Request, res: Response) => {
-    try {
-      const { query, walletId } = req.body;
+  router.post('/query', authenticate, aiRateLimiter, asyncHandler(async (req, res) => {
+    const { query, walletId } = req.body;
 
-      // Validation
-      if (!query || !walletId) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Query and walletId are required',
-        });
-      }
+    // Validation
+    if (!query || !walletId) {
+      throw new InvalidInputError('Query and walletId are required');
+    }
 
-      const enabled = await aiService.isEnabled();
-      if (!enabled) {
-        return res.status(503).json({
-          error: 'Service Unavailable',
-          message: 'AI is not enabled or configured',
-        });
-      }
-
-      // Get auth token to pass to AI container
-      const authToken = req.headers.authorization?.replace('Bearer ', '') || '';
-
-      const result = await aiService.executeNaturalQuery(query, walletId, authToken);
-
-      if (!result) {
-        return res.status(503).json({
-          error: 'Service Unavailable',
-          message: 'AI endpoint is not available or could not process query',
-        });
-      }
-
-      res.json(result);
-    } catch (error) {
-      log.error('AI natural query failed', { error: String(error) });
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Failed to execute natural language query',
+    const enabled = await aiService.isEnabled();
+    if (!enabled) {
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'AI is not enabled or configured',
       });
     }
-  });
+
+    // Get auth token to pass to AI container
+    const authToken = req.headers.authorization?.replace('Bearer ', '') || '';
+
+    const result = await aiService.executeNaturalQuery(query, walletId, authToken);
+
+    if (!result) {
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'AI endpoint is not available or could not process query',
+      });
+    }
+
+    res.json(result);
+  }));
 
   return router;
 }

@@ -12,7 +12,7 @@ import { getRecentBlocks, getMempoolInfo, getRecommendedFees, getProjectedMempoo
 import { formatConfirmedBlocks, formatFeeRate } from './formatting';
 import { getBlocksAndMempoolSimple } from './simpleEstimator';
 
-const log = createLogger('MEMPOOL');
+const log = createLogger('BITCOIN:SVC_MEMPOOL_DASH');
 
 /**
  * Get blocks and mempool data for dashboard visualization

@@ -11,7 +11,7 @@ import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import type { BitcoinNetwork, NetworkState, ElectrumManagerCallbacks } from './types';
 
-const log = createLogger('ElectrumMgr');
+const log = createLogger('WORKER:ELECTRUM_NET');
 
 /**
  * Connect to a specific network's Electrum server.

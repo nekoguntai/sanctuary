@@ -6,7 +6,7 @@
 
 import { createLogger } from '../../../utils/logger';
 
-const log = createLogger('DESCRIPTOR');
+const log = createLogger('BITCOIN:SVC_DESCRIPTOR');
 
 /**
  * Descriptor checksum character set (BIP-380)

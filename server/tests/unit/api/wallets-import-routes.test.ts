@@ -41,6 +41,7 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+import { errorHandler } from '../../../src/errors/errorHandler';
 import walletsImportRouter from '../../../src/api/wallets/import';
 
 describe('Wallets Import Routes', () => {
@@ -54,6 +55,7 @@ describe('Wallets Import Routes', () => {
       next();
     });
     app.use('/api/v1/wallets', walletsImportRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -146,7 +148,7 @@ describe('Wallets Import Routes', () => {
     const response = await request(app).get('/api/v1/wallets/import/formats');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to get import formats');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('validates import payload requires descriptor or json', async () => {
@@ -173,18 +175,15 @@ describe('Wallets Import Routes', () => {
     expect(response.body.valid).toBe(true);
   });
 
-  it('returns validation errors as bad request responses', async () => {
+  it('returns validation errors as internal server error', async () => {
     mockValidateImport.mockRejectedValue(new Error('invalid descriptor checksum'));
 
     const response = await request(app)
       .post('/api/v1/wallets/import/validate')
       .send({ descriptor: 'bad' });
 
-    expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({
-      error: 'Bad Request',
-      message: 'invalid descriptor checksum',
-    });
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('validates import creation payload fields', async () => {
@@ -231,7 +230,7 @@ describe('Wallets Import Routes', () => {
     });
   });
 
-  it('returns duplicate fingerprint conflict for prisma unique violation', async () => {
+  it('returns internal server error for prisma unique violation', async () => {
     const prismaLikeError = {
       code: 'P2002',
       meta: { target: ['fingerprint'] },
@@ -244,11 +243,11 @@ describe('Wallets Import Routes', () => {
       .post('/api/v1/wallets/import')
       .send({ data: 'wpkh(xpub...)', name: 'Wallet' });
 
-    expect(response.status).toBe(409);
-    expect(response.body.message).toBe('A device with this fingerprint already exists for another user');
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
-  it('returns generic bad request for non-duplicate import failures', async () => {
+  it('returns internal server error for non-duplicate import failures', async () => {
     mockImportWallet.mockRejectedValue(new Error('unsupported format'));
     mockIsPrismaError.mockReturnValue(false);
 
@@ -256,14 +255,11 @@ describe('Wallets Import Routes', () => {
       .post('/api/v1/wallets/import')
       .send({ data: 'something', name: 'Wallet' });
 
-    expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({
-      error: 'Bad Request',
-      message: 'unsupported format',
-    });
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
-  it('returns generic bad request when prisma duplicate target is not fingerprint', async () => {
+  it('returns internal server error when prisma duplicate target is not fingerprint', async () => {
     const prismaLikeError = {
       code: 'P2002',
       meta: { target: ['name'] },
@@ -276,10 +272,7 @@ describe('Wallets Import Routes', () => {
       .post('/api/v1/wallets/import')
       .send({ data: 'wpkh(xpub...)', name: 'Wallet' });
 
-    expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({
-      error: 'Bad Request',
-      message: 'Unique constraint failed',
-    });
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

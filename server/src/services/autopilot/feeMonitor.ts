@@ -11,7 +11,7 @@ import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import type { FeeSnapshot } from './types';
 
-const log = createLogger('AUTOPILOT:FEES');
+const log = createLogger('AUTOPILOT:SVC_FEES');
 
 const REDIS_KEY = 'autopilot:fees';
 /** Keep ~24h of snapshots at 10-min intervals */

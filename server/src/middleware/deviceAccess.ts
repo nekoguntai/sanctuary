@@ -13,7 +13,7 @@ import {
 } from '../services/deviceAccess';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('DEVICE_ACCESS');
+const log = createLogger('MW:DEVICE_ACCESS');
 
 // Extend Express Request type to include device info
 declare global {

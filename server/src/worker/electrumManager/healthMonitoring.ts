@@ -11,7 +11,7 @@ import { getErrorMessage } from '../../utils/errors';
 import { subscribeAddressBatch } from './addressSubscriptions';
 import type { BitcoinNetwork, NetworkState } from './types';
 
-const log = createLogger('ElectrumMgr');
+const log = createLogger('WORKER:ELECTRUM_HEALTH');
 
 /**
  * Check health of all connections and reconnect if needed.

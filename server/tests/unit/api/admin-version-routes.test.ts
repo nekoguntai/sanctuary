@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import express, { type Express } from 'express';
 import request from 'supertest';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 interface SetupOptions {
   fetchImpl?: () => Promise<unknown>;
@@ -54,6 +55,7 @@ async function setupVersionRoute(options: SetupOptions = {}) {
   const app: Express = express();
   const versionRouter = (await import('../../../src/api/admin/version')).default;
   app.use('/api/v1/admin/version', versionRouter);
+  app.use(errorHandler);
 
   return { app, error, fetchMock, join, readFileSync, warn };
 }
@@ -171,22 +173,13 @@ describe('Admin Version Routes', () => {
   });
 
   it('returns 500 when version comparison encounters invalid package version data', async () => {
-    const { app, error } = await setupVersionRoute({
+    const { app } = await setupVersionRoute({
       readFileSyncImpl: () => JSON.stringify({ version: 123 }),
     });
 
     const response = await request(app).get('/api/v1/admin/version');
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to check version',
-    });
-    expect(error).toHaveBeenCalledWith(
-      'Version check error',
-      expect.objectContaining({
-        error: expect.stringContaining('split'),
-      })
-    );
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

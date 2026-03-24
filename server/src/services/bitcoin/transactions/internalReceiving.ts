@@ -11,7 +11,7 @@ import { createLogger } from '../../../utils/logger';
 import { isUniqueConstraintError } from './helpers';
 import type { PrismaTxClient } from './types';
 
-const log = createLogger('TX-BROADCAST');
+const log = createLogger('BITCOIN:SVC_TX_INTERNAL');
 
 /**
  * Check if any output addresses belong to other wallets in the app.

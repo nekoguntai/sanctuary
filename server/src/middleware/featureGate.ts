@@ -20,7 +20,7 @@ import type { FeatureFlagKey, FeatureFlags, ExperimentalFeatures } from '../conf
 import { createLogger } from '../utils/logger';
 import { featureFlagService } from '../services/featureFlagService';
 
-const log = createLogger('FEATURE');
+const log = createLogger('MW:FEATURE_GATE');
 
 /**
  * Get the value of a feature flag by key (sync fallback for config)

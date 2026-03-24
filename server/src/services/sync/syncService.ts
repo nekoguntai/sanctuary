@@ -41,7 +41,7 @@ import {
   stopSubscriptionLockRefresh as doStopSubscriptionLockRefresh,
 } from './subscriptionManager';
 
-const log = createLogger('SYNC');
+const log = createLogger('SYNC:SVC');
 
 class SyncService {
   private static instance: SyncService;

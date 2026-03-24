@@ -41,7 +41,7 @@ import { EventEmitter } from 'events';
 import { createLogger } from '../utils/logger';
 import type { EventName, EventTypes, EventHandler } from './eventBus';
 
-const log = createLogger('RedisEventBus');
+const log = createLogger('INFRA:REDIS_EVENT_BUS');
 
 const CHANNEL_PREFIX = 'sanctuary:events:';
 

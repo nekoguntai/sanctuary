@@ -11,7 +11,7 @@
 
 import { createLogger } from '../logger';
 
-const log = createLogger('OTEL');
+const log = createLogger('UTIL:OTEL');
 
 // Check if tracing is enabled before importing heavy OTEL packages
 const isTracingEnabled = process.env.OTEL_TRACING_ENABLED === 'true';

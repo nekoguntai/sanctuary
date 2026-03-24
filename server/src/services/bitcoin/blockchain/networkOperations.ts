@@ -12,7 +12,7 @@ import { createLogger } from '../../../utils/logger';
 import { getErrorMessage } from '../../../utils/errors';
 import type { FeeEstimates, CheckAddressResult } from './types';
 
-const log = createLogger('BLOCKCHAIN');
+const log = createLogger('BITCOIN:SVC_BLOCKCHAIN');
 
 /**
  * Broadcast a transaction to the network

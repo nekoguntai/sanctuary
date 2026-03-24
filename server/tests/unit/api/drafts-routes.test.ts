@@ -27,6 +27,14 @@ vi.mock('../../../src/middleware/auth', () => ({
   },
 }));
 
+vi.mock('../../../src/middleware/walletAccess', () => ({
+  requireWalletAccess: () => (req: any, _res: any, next: () => void) => {
+    req.walletId = req.params.walletId || req.params.id;
+    req.walletRole = 'owner';
+    next();
+  },
+}));
+
 vi.mock('../../../src/services/draftService', () => ({
   draftService: {
     getDraftsForWallet: mockGetDraftsForWallet,
@@ -51,8 +59,14 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+vi.mock('../../../src/utils/requestContext', () => ({
+  requestContext: {
+    getRequestId: () => 'test-request-id',
+  },
+}));
+
 import draftsRouter from '../../../src/api/drafts';
-import { ApiError, ErrorCodes } from '../../../src/errors';
+import { ApiError, ErrorCodes, errorHandler } from '../../../src/errors';
 
 describe('Draft Routes', () => {
   let app: Express;
@@ -61,6 +75,7 @@ describe('Draft Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1', draftsRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -85,7 +100,7 @@ describe('Draft Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/drafts');
 
     expect(response.status).toBe(200);
-    expect(mockGetDraftsForWallet).toHaveBeenCalledWith('wallet-1', 'user-1');
+    expect(mockGetDraftsForWallet).toHaveBeenCalledWith('wallet-1');
     expect(mockSerializeDraftTransactions).toHaveBeenCalledWith([{ id: 'draft-1' }, { id: 'draft-2' }]);
     expect(response.body).toEqual([
       { id: 'draft-1', serialized: true },
@@ -101,8 +116,8 @@ describe('Draft Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/drafts');
 
     expect(response.status).toBe(403);
-    expect(response.body).toEqual({
-      error: ErrorCodes.FORBIDDEN,
+    expect(response.body).toMatchObject({
+      code: ErrorCodes.FORBIDDEN,
       message: 'Forbidden to view drafts',
     });
   });
@@ -114,8 +129,7 @@ describe('Draft Routes', () => {
 
     expect(response.status).toBe(500);
     expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch drafts',
+      message: 'An unexpected error occurred',
     });
   });
 
@@ -123,7 +137,7 @@ describe('Draft Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/drafts/draft-1');
 
     expect(response.status).toBe(200);
-    expect(mockGetDraft).toHaveBeenCalledWith('wallet-1', 'draft-1', 'user-1');
+    expect(mockGetDraft).toHaveBeenCalledWith('wallet-1', 'draft-1');
     expect(mockSerializeDraftTransaction).toHaveBeenCalledWith({ id: 'draft-1' });
     expect(response.body).toEqual({ id: 'draft-1', serialized: true });
   });
@@ -136,8 +150,8 @@ describe('Draft Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/drafts/missing');
 
     expect(response.status).toBe(404);
-    expect(response.body).toEqual({
-      error: ErrorCodes.NOT_FOUND,
+    expect(response.body).toMatchObject({
+      code: ErrorCodes.NOT_FOUND,
       message: 'Draft not found',
     });
   });
@@ -148,7 +162,7 @@ describe('Draft Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/drafts/draft-1');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to fetch draft');
+    expect(response.body.message).toBe('An unexpected error occurred');
   });
 
   it('creates a draft with full payload mapping', async () => {
@@ -196,8 +210,8 @@ describe('Draft Routes', () => {
       .send({ recipient: 'tb1q', amount: 1 });
 
     expect(response.status).toBe(403);
-    expect(response.body).toEqual({
-      error: ErrorCodes.FORBIDDEN,
+    expect(response.body).toMatchObject({
+      code: ErrorCodes.FORBIDDEN,
       message: 'Viewers cannot create draft transactions',
     });
   });
@@ -210,7 +224,7 @@ describe('Draft Routes', () => {
       .send({ recipient: 'tb1q', amount: 1 });
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to create draft');
+    expect(response.body.message).toBe('An unexpected error occurred');
   });
 
   it('updates a draft', async () => {
@@ -227,7 +241,7 @@ describe('Draft Routes', () => {
       .send(patch);
 
     expect(response.status).toBe(200);
-    expect(mockUpdateDraft).toHaveBeenCalledWith('wallet-1', 'draft-1', 'user-1', patch);
+    expect(mockUpdateDraft).toHaveBeenCalledWith('wallet-1', 'draft-1', patch);
     expect(response.body).toEqual({ id: 'draft-updated', serialized: true });
   });
 
@@ -241,8 +255,8 @@ describe('Draft Routes', () => {
       .send({ label: 'x' });
 
     expect(response.status).toBe(404);
-    expect(response.body).toEqual({
-      error: ErrorCodes.NOT_FOUND,
+    expect(response.body).toMatchObject({
+      code: ErrorCodes.NOT_FOUND,
       message: 'Draft not found',
     });
   });
@@ -255,7 +269,7 @@ describe('Draft Routes', () => {
       .send({ memo: 'x' });
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to update draft');
+    expect(response.body.message).toBe('An unexpected error occurred');
   });
 
   it('deletes a draft and returns 204', async () => {
@@ -263,7 +277,7 @@ describe('Draft Routes', () => {
       .delete('/api/v1/wallets/wallet-1/drafts/draft-1');
 
     expect(response.status).toBe(204);
-    expect(mockDeleteDraft).toHaveBeenCalledWith('wallet-1', 'draft-1', 'user-1');
+    expect(mockDeleteDraft).toHaveBeenCalledWith('wallet-1', 'draft-1', 'user-1', 'owner');
   });
 
   it('returns ApiError responses for delete draft', async () => {
@@ -275,8 +289,8 @@ describe('Draft Routes', () => {
       .delete('/api/v1/wallets/wallet-1/drafts/missing');
 
     expect(response.status).toBe(404);
-    expect(response.body).toEqual({
-      error: ErrorCodes.NOT_FOUND,
+    expect(response.body).toMatchObject({
+      code: ErrorCodes.NOT_FOUND,
       message: 'Draft not found',
     });
   });
@@ -288,6 +302,6 @@ describe('Draft Routes', () => {
       .delete('/api/v1/wallets/wallet-1/drafts/draft-1');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to delete draft');
+    expect(response.body.message).toBe('An unexpected error occurred');
   });
 });

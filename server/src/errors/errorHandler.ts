@@ -11,7 +11,7 @@ import { ApiError, InternalError, ConflictError, NotFoundError, ValidationError,
 import { createLogger } from '../utils/logger';
 import { requestContext } from '../utils/requestContext';
 
-const log = createLogger('ErrorHandler');
+const log = createLogger('MW:ERROR_HANDLER');
 
 /**
  * Map Prisma errors to API errors

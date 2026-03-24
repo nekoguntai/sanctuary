@@ -11,7 +11,7 @@ import { INITIAL_ADDRESS_COUNT } from '../../constants';
 import { hookRegistry, Operations } from '../hooks';
 import { InvalidInputError, WalletNotFoundError } from '../../errors';
 
-const log = createLogger('WALLET:ADDRESS');
+const log = createLogger('WALLET:SVC_ADDRESS');
 
 /**
  * Generate initial receive and change addresses for a wallet descriptor.

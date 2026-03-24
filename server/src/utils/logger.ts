@@ -28,7 +28,7 @@
  *
  *   // Import and create a module-specific logger
  *   import { createLogger } from '../utils/logger';
- *   const log = createLogger('WALLETS');
+ *   const log = createLogger('WALLET:ROUTE');
  *
  *   // Basic logging
  *   log.debug('Processing wallet request');
@@ -48,15 +48,15 @@
  *   [ISO_TIMESTAMP] LEVEL [PREFIX] [REQ_ID] Message key=value key=value
  *
  *   Example:
- *   [2024-01-15T10:30:45.123Z] INFO  [WALLETS] [a1b2c3d4] Wallet synced walletId=123 txCount=45
+ *   [2024-01-15T10:30:45.123Z] INFO  [WALLET:ROUTE] [a1b2c3d4] Wallet synced walletId=123 txCount=45
  *
  * REQUEST CONTEXT:
  *   When running within a request context (set up by requestLogger middleware),
  *   the request ID is automatically included in all log entries for correlation.
  *
  * BEST PRACTICES:
- *   1. Create a module-specific logger with createLogger('MODULE_NAME')
- *   2. Use UPPERCASE for module names (e.g., 'WALLETS', 'SYNC', 'AUTH')
+ *   1. Create a module-specific logger with createLogger('DOMAIN:LAYER')
+ *   2. Use UPPERCASE DOMAIN:LAYER format (e.g., 'WALLET:ROUTE', 'SYNC:SVC', 'MW:AUTH')
  *   3. Use debug() for detailed tracing during development
  *   4. Use info() for normal operational events
  *   5. Use warn() for issues that don't stop execution but need attention
@@ -228,11 +228,11 @@ const log = (
 /**
  * Create a logger instance with a specific prefix/module name
  *
- * @param prefix - Module identifier shown in log output (e.g., 'WALLETS', 'SYNC')
+ * @param prefix - Module identifier in DOMAIN:LAYER format (e.g., 'WALLET:ROUTE', 'SYNC:SVC', 'MW:AUTH')
  * @returns Logger instance with debug, info, warn, error methods
  *
  * @example
- * const log = createLogger('WALLETS');
+ * const log = createLogger('WALLET:ROUTE');
  * log.info('Wallet created', { walletId: '123' });
  */
 export const createLogger = (prefix: string): Logger => {

@@ -12,7 +12,7 @@ import { createLogger } from '../../../utils/logger';
 import { createCircuitBreaker, type CircuitBreaker } from '../../circuitBreaker';
 import type { PushMessage, PushResult } from '../types';
 
-const log = createLogger('APNS');
+const log = createLogger('PUSH:SVC_APNS');
 
 const APNS_HOST_PRODUCTION = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';

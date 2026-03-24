@@ -3,10 +3,11 @@
  *
  * Centralized error handling using the notification system.
  * Replaces scattered alert() calls with consistent toast notifications.
+ * Built on top of useNotify for unified notification access.
  */
 
 import { useCallback } from 'react';
-import { useNotifications } from '../contexts/NotificationContext';
+import { useNotify } from './useNotify';
 import { ApiError } from '../src/api/client';
 
 interface ErrorHandlerOptions {
@@ -28,7 +29,7 @@ interface ErrorHandlerOptions {
  * }
  */
 export const useErrorHandler = (options: ErrorHandlerOptions = {}) => {
-  const { addNotification } = useNotifications();
+  const notify = useNotify();
   const { defaultTitle = 'Error', defaultDuration = 5000 } = options;
 
   /**
@@ -47,14 +48,9 @@ export const useErrorHandler = (options: ErrorHandlerOptions = {}) => {
         message = error;
       }
 
-      addNotification({
-        type: 'error',
-        title: customTitle || defaultTitle,
-        message,
-        duration: defaultDuration,
-      });
+      notify.error(customTitle || defaultTitle, message, defaultDuration);
     },
-    [addNotification, defaultTitle, defaultDuration]
+    [notify, defaultTitle, defaultDuration]
   );
 
   /**
@@ -62,14 +58,9 @@ export const useErrorHandler = (options: ErrorHandlerOptions = {}) => {
    */
   const showSuccess = useCallback(
     (message: string, title = 'Success') => {
-      addNotification({
-        type: 'success',
-        title,
-        message,
-        duration: 3000,
-      });
+      notify.success(title, message, 3000);
     },
-    [addNotification]
+    [notify]
   );
 
   /**
@@ -77,14 +68,9 @@ export const useErrorHandler = (options: ErrorHandlerOptions = {}) => {
    */
   const showInfo = useCallback(
     (message: string, title = 'Info') => {
-      addNotification({
-        type: 'info',
-        title,
-        message,
-        duration: 4000,
-      });
+      notify.info(title, message, 4000);
     },
-    [addNotification]
+    [notify]
   );
 
   return { handleError, showSuccess, showInfo };

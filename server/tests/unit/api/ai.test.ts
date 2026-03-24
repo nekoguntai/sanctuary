@@ -9,6 +9,8 @@ import { vi, Mock } from 'vitest';
  */
 
 import express, { Express, Request, Response, NextFunction } from 'express';
+import { errorHandler } from '../../../src/errors/errorHandler';
+import { ApiError, InternalError } from '../../../src/errors/ApiError';
 import * as os from 'os';
 
 // Mock Prisma
@@ -112,6 +114,7 @@ describe('AI API Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/ai', aiRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -186,9 +189,16 @@ describe('AI API Routes', () => {
           },
         };
 
-        aiRouter.handle(req, res, (err?: Error) => {
+        aiRouter.handle(req, res, (err?: any) => {
           if (err) {
-            reject(err);
+            // Simulate errorHandler: ApiErrors get their status code, generic errors get 500
+            const statusCode = err.statusCode || 500;
+            const body = err.toResponse
+              ? err.toResponse()
+              : { error: 'Internal', code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' };
+            res.statusCode = statusCode;
+            res.body = body;
+            resolve({ status: statusCode, headers: res.headers, body });
             return;
           }
           reject(new Error(`Route not handled: ${this.method} ${normalizedUrl}`));
@@ -263,8 +273,8 @@ describe('AI API Routes', () => {
         .set('Authorization', 'Bearer test-token');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
-      expect(response.body.message).toBe('Failed to check AI status');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
+      expect(response.body.message).toBe('An unexpected error occurred');
     });
 
     it('should require authentication', async () => {
@@ -297,7 +307,7 @@ describe('AI API Routes', () => {
         .send({});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Bad Request');
+      expect(response.body.code).toBe('INVALID_INPUT');
       expect(response.body.message).toBe('transactionId is required');
     });
 
@@ -338,8 +348,8 @@ describe('AI API Routes', () => {
         .send({ transactionId: 'tx-123' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
-      expect(response.body.message).toBe('Failed to generate label suggestion');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
+      expect(response.body.message).toBe('An unexpected error occurred');
     });
 
     it('should forward empty auth token when bearer prefix has no token', async () => {
@@ -389,7 +399,7 @@ describe('AI API Routes', () => {
         .send({ walletId: 'wallet-123' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Bad Request');
+      expect(response.body.code).toBe('INVALID_INPUT');
       expect(response.body.message).toBe('Query and walletId are required');
     });
 
@@ -400,7 +410,7 @@ describe('AI API Routes', () => {
         .send({ query: 'Show transactions' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Bad Request');
+      expect(response.body.code).toBe('INVALID_INPUT');
       expect(response.body.message).toBe('Query and walletId are required');
     });
 
@@ -439,7 +449,7 @@ describe('AI API Routes', () => {
         .send({ query: 'Show transactions', walletId: 'wallet-123' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should forward empty auth token when bearer prefix has no token', async () => {
@@ -497,8 +507,8 @@ describe('AI API Routes', () => {
         .set('Authorization', 'Bearer test-token');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
-      expect(response.body.message).toBe('Failed to detect Ollama');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
+      expect(response.body.message).toBe('An unexpected error occurred');
     });
   });
 
@@ -543,8 +553,8 @@ describe('AI API Routes', () => {
         .set('Authorization', 'Bearer test-token');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
-      expect(response.body.message).toBe('Failed to list models');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
+      expect(response.body.message).toBe('An unexpected error occurred');
     });
   });
 
@@ -585,7 +595,7 @@ describe('AI API Routes', () => {
         .send({});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Bad Request');
+      expect(response.body.code).toBe('INVALID_INPUT');
       expect(response.body.message).toBe('Model name is required');
     });
 
@@ -616,8 +626,8 @@ describe('AI API Routes', () => {
         .send({ model: 'llama2' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
-      expect(response.body.message).toBe('Failed to pull model');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
+      expect(response.body.message).toBe('An unexpected error occurred');
     });
 
     it('should use default pull failure message when service omits error', async () => {
@@ -670,7 +680,7 @@ describe('AI API Routes', () => {
         .send({});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Bad Request');
+      expect(response.body.code).toBe('INVALID_INPUT');
       expect(response.body.message).toBe('Model name is required');
     });
 
@@ -700,8 +710,8 @@ describe('AI API Routes', () => {
         .send({ model: 'llama2' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
-      expect(response.body.message).toBe('Failed to delete model');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
+      expect(response.body.message).toBe('An unexpected error occurred');
     });
 
     it('should use default delete failure message when service omits error', async () => {
@@ -761,7 +771,7 @@ describe('AI API Routes', () => {
           .set('Authorization', 'Bearer test-token');
 
         expect(response.status).toBe(500);
-        expect(response.body.error).toBe('Internal Server Error');
+        expect(response.body.code).toBe('INTERNAL_ERROR');
       });
     });
 
@@ -802,7 +812,7 @@ describe('AI API Routes', () => {
           .set('Authorization', 'Bearer test-token');
 
         expect(response.status).toBe(500);
-        expect(response.body.error).toBe('Internal Server Error');
+        expect(response.body.code).toBe('INTERNAL_ERROR');
       });
     });
 
@@ -843,7 +853,7 @@ describe('AI API Routes', () => {
           .set('Authorization', 'Bearer test-token');
 
         expect(response.status).toBe(500);
-        expect(response.body.error).toBe('Internal Server Error');
+        expect(response.body.code).toBe('INTERNAL_ERROR');
       });
     });
   });
@@ -901,7 +911,7 @@ describe('AI API Routes', () => {
         .set('Authorization', 'Bearer test-token');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should fall back to zero disk values when df numeric fields are invalid', async () => {

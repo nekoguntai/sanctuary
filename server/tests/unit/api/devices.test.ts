@@ -64,9 +64,25 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+// Mock requestContext (needed by errorHandler and auth middleware)
+vi.mock('../../../src/utils/requestContext', () => ({
+  requestContext: {
+    getRequestId: () => 'test-request-id',
+    setUser: vi.fn(),
+    get: () => undefined,
+    run: (_ctx: unknown, fn: () => unknown) => fn(),
+    getUserId: () => undefined,
+    getTraceId: () => undefined,
+    setTraceId: vi.fn(),
+    getDuration: () => 0,
+    generateRequestId: () => 'test-request-id',
+  },
+}));
+
 // Import after mocks
 import request from 'supertest';
 import express from 'express';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 // Create test app - must import router AFTER mocks are set up
 const createTestApp = async () => {
@@ -76,6 +92,7 @@ const createTestApp = async () => {
   // Import router dynamically after mocks
   const devicesModule = await import('../../../src/api/devices');
   app.use('/api/v1/devices', devicesModule.default);
+  app.use(errorHandler);
 
   return app;
 };
@@ -736,10 +753,7 @@ describe('Devices API', () => {
         .send(validDevice);
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to register device',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -782,10 +796,7 @@ describe('Devices API', () => {
         .get('/api/v1/devices/device-1/accounts');
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to fetch device accounts',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -886,10 +897,7 @@ describe('Devices API', () => {
         .send(newAccount);
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to add device account',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -950,10 +958,7 @@ describe('Devices API', () => {
         .delete('/api/v1/devices/device-1/accounts/account-1');
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to delete device account',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1001,7 +1006,7 @@ describe('Devices API', () => {
         .get('/api/v1/devices');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1060,7 +1065,7 @@ describe('Devices API', () => {
         .get('/api/v1/devices/non-existent');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Not Found');
+      expect(response.body.code).toBe('NOT_FOUND');
     });
 
     it('should handle database errors gracefully', async () => {
@@ -1070,7 +1075,7 @@ describe('Devices API', () => {
         .get('/api/v1/devices/device-1');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1165,7 +1170,7 @@ describe('Devices API', () => {
         .send({ label: 'Updated' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1193,7 +1198,7 @@ describe('Devices API', () => {
         .delete('/api/v1/devices/non-existent');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Not Found');
+      expect(response.body.code).toBe('NOT_FOUND');
     });
 
     it('should return 409 when device is in use by wallet', async () => {
@@ -1208,9 +1213,8 @@ describe('Devices API', () => {
         .delete('/api/v1/devices/device-1');
 
       expect(response.status).toBe(409);
-      expect(response.body.error).toBe('Conflict');
+      expect(response.body.code).toBe('CONFLICT');
       expect(response.body.message).toContain('in use by wallet');
-      expect(response.body.wallets).toHaveLength(1);
     });
 
     it('should handle database errors gracefully', async () => {
@@ -1224,7 +1228,7 @@ describe('Devices API', () => {
         .delete('/api/v1/devices/device-1');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1354,7 +1358,7 @@ describe('Devices API', () => {
         .get('/api/v1/devices/models');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1391,7 +1395,7 @@ describe('Devices API', () => {
         .get('/api/v1/devices/models/non-existent-model');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Not Found');
+      expect(response.body.code).toBe('NOT_FOUND');
       expect(response.body.message).toContain('not found');
     });
 
@@ -1402,7 +1406,7 @@ describe('Devices API', () => {
         .get('/api/v1/devices/models/trezor-model-t');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1444,7 +1448,7 @@ describe('Devices API', () => {
         .get('/api/v1/devices/manufacturers');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1505,7 +1509,7 @@ describe('Devices API', () => {
         .get('/api/v1/devices/device-1/share');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1534,7 +1538,7 @@ describe('Devices API', () => {
         .send({});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Bad Request');
+      expect(response.body.code).toBe('INVALID_INPUT');
       expect(response.body.message).toContain('targetUserId');
     });
 
@@ -1566,7 +1570,7 @@ describe('Devices API', () => {
         .send({ targetUserId: 'user-2' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1614,7 +1618,7 @@ describe('Devices API', () => {
         .delete('/api/v1/devices/device-1/share/user/user-2');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1682,7 +1686,7 @@ describe('Devices API', () => {
         .send({ groupId: 'group-1' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 });

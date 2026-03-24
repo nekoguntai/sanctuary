@@ -24,7 +24,7 @@ import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { rateLimitService, type RateLimitResult } from '../services/rateLimiting';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('RateLimitMW');
+const log = createLogger('MW:RATE_LIMIT');
 
 /**
  * Set rate limit headers on response

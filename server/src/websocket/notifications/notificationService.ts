@@ -40,7 +40,7 @@ import type {
   LogLevel,
 } from './types';
 
-const log = createLogger('NOTIFY');
+const log = createLogger('WS:NOTIFY_SVC');
 
 export class NotificationService {
   private subscribedAddresses: Set<string> = new Set();

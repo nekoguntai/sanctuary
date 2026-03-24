@@ -13,7 +13,7 @@ import { storeTransactionInputs, storeTransactionOutputs } from './storeTransact
 import { createInternalReceivingTransactions } from './internalReceiving';
 import type { TransactionInputMetadata, TransactionOutputMetadata } from './types';
 
-const log = createLogger('TX-BROADCAST');
+const log = createLogger('BITCOIN:SVC_TX_PERSIST');
 
 /**
  * Persist a broadcast transaction to the database within a Prisma transaction.

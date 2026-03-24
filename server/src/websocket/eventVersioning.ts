@@ -12,7 +12,7 @@
 
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('WS_VERSION');
+const log = createLogger('WS:VERSION');
 
 export type EventVersion = 'v1' | 'v2';
 

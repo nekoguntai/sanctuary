@@ -26,7 +26,7 @@ import type {
 } from './types';
 import { vaultPolicyService } from './vaultPolicyService';
 
-const log = createLogger('POLICY_ENGINE');
+const log = createLogger('VAULT_POLICY:SVC_ENGINE');
 
 /**
  * Evaluate all active policies for a transaction.

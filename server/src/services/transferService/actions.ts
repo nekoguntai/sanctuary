@@ -12,7 +12,7 @@ import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError } from 
 import { isExpired, formatTransfer } from './helpers';
 import type { Transfer } from './types';
 
-const log = createLogger('TRANSFER');
+const log = createLogger('TRANSFER:SVC');
 
 /**
  * Accept a pending transfer (recipient action)

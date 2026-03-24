@@ -16,7 +16,7 @@ import { parseMultisigScript, finalizeMultisigInput } from '../psbtBuilder';
 import { persistTransaction } from './persistTransaction';
 import type { TransactionInputMetadata, TransactionOutputMetadata, BroadcastResult } from './types';
 
-const log = createLogger('TX-BROADCAST');
+const log = createLogger('BITCOIN:SVC_TX_BROADCAST');
 
 /**
  * Broadcast a signed transaction and save to database.

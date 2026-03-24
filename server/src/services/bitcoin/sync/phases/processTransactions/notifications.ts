@@ -7,7 +7,7 @@
 import { createLogger } from '../../../../../utils/logger';
 import type { TransactionCreateData } from '../../types';
 
-const log = createLogger('SYNC-TX');
+const log = createLogger('BITCOIN:SVC_SYNC_TX');
 
 /**
  * Send notifications for new transactions

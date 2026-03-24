@@ -40,6 +40,7 @@ vi.mock('../../../src/utils/logger', () => ({
 }));
 
 import electrumServersRouter from '../../../src/api/admin/electrumServers';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 function buildNodeConfig(overrides: Record<string, unknown> = {}) {
   return {
@@ -78,6 +79,7 @@ describe('admin electrum servers router', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/admin/electrum-servers', electrumServersRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -140,7 +142,7 @@ describe('admin electrum servers router', () => {
     const response = await request(app).get('/api/v1/admin/electrum-servers');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toContain('Failed to get Electrum servers');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('POST /test-connection validates required params', async () => {
@@ -191,10 +193,7 @@ describe('admin electrum servers router', () => {
       .send({ host: 'electrum.example.com', port: '50002', useSsl: true });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      success: false,
-      message: 'Failed to test Electrum connection',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('PUT /reorder validates serverIds payload', async () => {
@@ -228,7 +227,7 @@ describe('admin electrum servers router', () => {
       .send({ serverIds: ['srv-1'] });
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toContain('Failed to reorder Electrum servers');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('GET /:network rejects invalid networks', async () => {
@@ -272,7 +271,7 @@ describe('admin electrum servers router', () => {
     const response = await request(app).get('/api/v1/admin/electrum-servers/mainnet');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toContain('Failed to get Electrum servers');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('POST / validates required fields', async () => {
@@ -425,7 +424,7 @@ describe('admin electrum servers router', () => {
       });
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toContain('Failed to add Electrum server');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('PUT /:id returns 404 for unknown server', async () => {
@@ -523,7 +522,7 @@ describe('admin electrum servers router', () => {
       .send({ label: 'Updated Label' });
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toContain('Failed to update Electrum server');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('DELETE /:id returns 404 for unknown server', async () => {
@@ -556,7 +555,7 @@ describe('admin electrum servers router', () => {
     const response = await request(app).delete('/api/v1/admin/electrum-servers/srv-1');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toContain('Failed to delete Electrum server');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('POST /:id/test returns 404 for unknown server', async () => {
@@ -652,6 +651,6 @@ describe('admin electrum servers router', () => {
     const response = await request(app).post('/api/v1/admin/electrum-servers/srv-1/test');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toContain('Failed to test Electrum server');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

@@ -72,8 +72,24 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+// Mock requestContext (needed by errorHandler and auth middleware)
+vi.mock('../../../src/utils/requestContext', () => ({
+  requestContext: {
+    getRequestId: () => 'test-request-id',
+    setUser: vi.fn(),
+    get: () => undefined,
+    run: (_ctx: unknown, fn: () => unknown) => fn(),
+    getUserId: () => undefined,
+    getTraceId: () => undefined,
+    setTraceId: vi.fn(),
+    getDuration: () => 0,
+    generateRequestId: () => 'test-request-id',
+  },
+}));
+
 // Import router after mocks
 import priceRouter from '../../../src/api/price';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 describe('Price API Routes', () => {
   let app: Express;
@@ -89,6 +105,7 @@ describe('Price API Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/price', priceRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -134,14 +151,14 @@ describe('Price API Routes', () => {
       expect(mockPriceService.getPrice).toHaveBeenCalledWith('USD', false);
     });
 
-    it('should return 400 on error', async () => {
+    it('should return 500 on error', async () => {
       mockPriceService.getPrice.mockRejectedValue(new Error('Provider unavailable'));
 
       const response = await request(app)
         .get('/api/v1/price');
 
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Bad Request');
+      expect(response.status).toBe(500);
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -201,13 +218,13 @@ describe('Price API Routes', () => {
       expect(mockPriceService.getPriceFrom).toHaveBeenCalledWith('kraken', 'EUR');
     });
 
-    it('should return 400 on invalid provider', async () => {
+    it('should return 500 on invalid provider', async () => {
       mockPriceService.getPriceFrom.mockRejectedValue(new Error('Unknown provider'));
 
       const response = await request(app)
         .get('/api/v1/price/from/invalid');
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(500);
     });
   });
 
@@ -252,14 +269,14 @@ describe('Price API Routes', () => {
       expect(response.body.message).toContain('sats must be a number');
     });
 
-    it('should return 400 on conversion error', async () => {
+    it('should return 500 on conversion error', async () => {
       mockPriceService.convertToFiat.mockRejectedValue(new Error('Conversion failed'));
 
       const response = await request(app)
         .post('/api/v1/price/convert/to-fiat')
         .send({ sats: 100000 });
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(500);
     });
   });
 
@@ -300,14 +317,14 @@ describe('Price API Routes', () => {
       expect(response.body.message).toContain('amount must be a number');
     });
 
-    it('should return 400 on conversion error', async () => {
+    it('should return 500 on conversion error', async () => {
       mockPriceService.convertToSats.mockRejectedValue(new Error('Conversion failed'));
 
       const response = await request(app)
         .post('/api/v1/price/convert/to-sats')
         .send({ amount: 45 });
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(500);
     });
   });
 
@@ -361,7 +378,7 @@ describe('Price API Routes', () => {
         .get('/api/v1/price/health');
 
       expect(response.status).toBe(500);
-      expect(response.body.healthy).toBe(false);
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -530,13 +547,13 @@ describe('Price API Routes', () => {
       expect(response.body.message).toContain('cannot be in the future');
     });
 
-    it('should return 400 on service error', async () => {
+    it('should return 500 on service error', async () => {
       mockPriceService.getHistoricalPrice.mockRejectedValue(new Error('Data not available'));
 
       const response = await request(app)
         .get('/api/v1/price/historical?date=2023-01-15');
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(500);
     });
   });
 
@@ -598,13 +615,13 @@ describe('Price API Routes', () => {
       expect(response.status).toBe(400);
     });
 
-    it('should return 400 on service error', async () => {
+    it('should return 500 on service error', async () => {
       mockPriceService.getPriceHistory.mockRejectedValue(new Error('Data not available'));
 
       const response = await request(app)
         .get('/api/v1/price/history');
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(500);
     });
   });
 });

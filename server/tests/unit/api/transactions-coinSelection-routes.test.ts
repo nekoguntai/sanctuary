@@ -44,6 +44,7 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+import { errorHandler } from '../../../src/errors/errorHandler';
 import coinSelectionRouter from '../../../src/api/transactions/coinSelection';
 
 describe('Transactions Coin Selection Routes', () => {
@@ -53,6 +54,7 @@ describe('Transactions Coin Selection Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1', coinSelectionRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -164,7 +166,7 @@ describe('Transactions Coin Selection Routes', () => {
 
     expect(response.status).toBe(500);
     expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
+      code: 'INTERNAL_ERROR',
       message: 'An unexpected error occurred',
     });
   });

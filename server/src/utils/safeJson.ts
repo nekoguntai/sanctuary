@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { createLogger } from './logger';
 import { getErrorMessage } from './errors';
 
-const log = createLogger('SafeJson');
+const log = createLogger('UTIL:SAFE_JSON');
 
 /**
  * Safely parse a JSON string with Zod schema validation.

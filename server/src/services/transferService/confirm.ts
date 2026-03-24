@@ -13,7 +13,7 @@ import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError } from 
 import { isExpired, formatTransfer } from './helpers';
 import type { PrismaTx, Transfer } from './types';
 
-const log = createLogger('TRANSFER');
+const log = createLogger('TRANSFER:SVC');
 
 /**
  * Confirm and execute transfer (owner action)

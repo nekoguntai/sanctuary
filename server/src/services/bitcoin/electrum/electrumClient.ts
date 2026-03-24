@@ -26,7 +26,7 @@ import type {
   PendingRequest,
 } from './types';
 
-const log = createLogger('ELECTRUM');
+const log = createLogger('ELECTRUM:SVC_CLIENT');
 
 class ElectrumClient extends EventEmitter {
   private socket: net.Socket | tls.TLSSocket | null = null;

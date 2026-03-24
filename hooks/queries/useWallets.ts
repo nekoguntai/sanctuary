@@ -2,64 +2,44 @@ import { useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import * as walletsApi from '../../src/api/wallets';
 import * as transactionsApi from '../../src/api/transactions';
+import { createQueryKeys, createListQuery, createMutation, createInvalidateAll } from './factory';
 
 // Stable empty arrays to prevent re-renders when data is loading
 const EMPTY_TRANSACTIONS: Awaited<ReturnType<typeof transactionsApi.getTransactions>> = [];
 const EMPTY_PENDING: Awaited<ReturnType<typeof transactionsApi.getPendingTransactions>> = [];
 
+// Base keys from factory, extended with wallet-specific sub-resources
+const baseKeys = createQueryKeys('wallets');
+
 // Query key factory for wallet-related queries
 // Note: Params are spread into the key array to ensure stable references
 export const walletKeys = {
-  all: ['wallets'] as const,
-  lists: () => [...walletKeys.all, 'list'] as const,
-  detail: (id: string) => [...walletKeys.all, 'detail', id] as const,
-  utxos: (id: string) => [...walletKeys.all, 'utxos', id] as const,
-  addresses: (id: string) => [...walletKeys.all, 'addresses', id] as const,
+  ...baseKeys,
+  utxos: (id: string) => [...baseKeys.all, 'utxos', id] as const,
+  addresses: (id: string) => [...baseKeys.all, 'addresses', id] as const,
   transactions: (id: string, params?: { page?: number; limit?: number; offset?: number }) =>
-    [...walletKeys.all, 'transactions', id, params?.page, params?.limit, params?.offset] as const,
-  balance: (id: string) => [...walletKeys.all, 'balance', id] as const,
+    [...baseKeys.all, 'transactions', id, params?.page, params?.limit, params?.offset] as const,
+  balance: (id: string) => [...baseKeys.all, 'balance', id] as const,
 };
 
 /**
  * Hook to fetch all wallets for the current user
  */
-export function useWallets() {
-  return useQuery({
-    queryKey: walletKeys.lists(),
-    queryFn: walletsApi.getWallets,
-    placeholderData: keepPreviousData,
-  });
-}
+export const useWallets = createListQuery(walletKeys, walletsApi.getWallets);
 
 /**
  * Hook to create a new wallet
  */
-export function useCreateWallet() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: walletsApi.createWallet,
-    onSuccess: () => {
-      // Invalidate wallet list to refetch
-      queryClient.invalidateQueries({ queryKey: walletKeys.lists() });
-    },
-  });
-}
+export const useCreateWallet = createMutation(walletsApi.createWallet, {
+  invalidateKeys: [walletKeys.lists()],
+});
 
 /**
  * Hook to import a wallet
  */
-export function useImportWallet() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: walletsApi.importWallet,
-    onSuccess: () => {
-      // Invalidate wallet list to refetch
-      queryClient.invalidateQueries({ queryKey: walletKeys.lists() });
-    },
-  });
-}
+export const useImportWallet = createMutation(walletsApi.importWallet, {
+  invalidateKeys: [walletKeys.lists()],
+});
 
 /**
  * Hook to fetch recent transactions across all wallets
@@ -130,18 +110,11 @@ export function usePendingTransactions(walletIds: string[]) {
  * Helper to invalidate all wallets data
  * Returns a stable function reference to prevent re-renders
  */
-export function useInvalidateAllWallets() {
-  const queryClient = useQueryClient();
-
-  return useCallback(() => {
-    // Wallet-level data
-    queryClient.invalidateQueries({ queryKey: walletKeys.all });
-    // Dashboard aggregate data that depends on wallet/transaction changes
-    queryClient.invalidateQueries({ queryKey: ['recentTransactions'] });
-    queryClient.invalidateQueries({ queryKey: ['pendingTransactions'] });
-    queryClient.invalidateQueries({ queryKey: ['balanceHistory'] });
-  }, [queryClient]);
-}
+export const useInvalidateAllWallets = createInvalidateAll(walletKeys, [
+  ['recentTransactions'],
+  ['pendingTransactions'],
+  ['balanceHistory'],
+]);
 
 /**
  * Helper to directly update wallet sync status in cache
@@ -222,6 +195,7 @@ export function useBalanceHistory(
 
 /**
  * Hook to update a wallet
+ * Uses manual mutation because it needs dynamic detail key invalidation based on walletId
  */
 export function useUpdateWallet() {
   const queryClient = useQueryClient();

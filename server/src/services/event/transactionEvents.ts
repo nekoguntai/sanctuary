@@ -9,7 +9,7 @@ import { broadcastTransaction, broadcastConfirmation } from '../../websocket/bro
 import { createLogger } from '../../utils/logger';
 import type { TransactionBroadcastResult, TransactionReceivedData, TransactionConfirmationData } from './types';
 
-const log = createLogger('EVENT_SVC');
+const log = createLogger('EVENT:SVC_TX');
 
 /**
  * Emit transaction sent (broadcast) event

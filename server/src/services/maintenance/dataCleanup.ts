@@ -12,7 +12,7 @@ import { auditService, AuditCategory } from '../auditService';
 import { expireOldTransfers } from '../transferService';
 import type { MaintenanceServiceConfig } from './types';
 
-const log = createLogger('MAINTENANCE');
+const log = createLogger('MAINTENANCE:SVC');
 
 /**
  * Clean up old audit logs

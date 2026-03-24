@@ -15,7 +15,7 @@ import {
 } from '../../../../../shared/utils/bitcoin';
 import type { Bip32DerivationEntry } from './types';
 
-const log = createLogger('PSBT-BUILDER');
+const log = createLogger('BITCOIN:SVC_PSBT_DERIV');
 
 // Initialize BIP32 for key derivation
 const bip32 = BIP32Factory(ecc);

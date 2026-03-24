@@ -28,7 +28,7 @@ import {
   WebSocketEvent,
 } from './types';
 
-const log = createLogger('WS-GATEWAY');
+const log = createLogger('WS:GATEWAY');
 
 /**
  * Gateway WebSocket Server

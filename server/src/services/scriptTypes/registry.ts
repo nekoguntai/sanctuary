@@ -14,7 +14,7 @@ import type {
   MultiSigBuildOptions,
 } from './types';
 
-const log = createLogger('SCRIPT_TYPES:REGISTRY');
+const log = createLogger('SCRIPT_TYPE:SVC_REGISTRY');
 
 /**
  * Script Type Registry

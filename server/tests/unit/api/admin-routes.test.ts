@@ -8,6 +8,7 @@
 import { vi, Mock } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 const {
   mockEncrypt,
@@ -177,6 +178,7 @@ const createTestApp = async () => {
   app.use(express.json());
   const adminModule = await import('../../../src/api/admin');
   app.use('/api/v1/admin', adminModule.default);
+  app.use(errorHandler);
   return app;
 };
 
@@ -257,7 +259,7 @@ describe('Admin Routes', () => {
       const response = await request(app).get('/api/v1/admin/users');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -429,7 +431,7 @@ describe('Admin Routes', () => {
         });
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('Failed to create user');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -719,7 +721,7 @@ describe('Admin Routes', () => {
         .send({ isAdmin: false });
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('Failed to update user');
+      expect(response.body.error).toBe('Internal');
     });
 
     // Note: Email format is NOT validated on update in the admin endpoint
@@ -1198,7 +1200,7 @@ describe('Admin Routes', () => {
       const response = await request(app).delete('/api/v1/admin/users/user-to-delete');
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('Failed to delete user');
+      expect(response.body.error).toBe('Internal');
     });
   });
 

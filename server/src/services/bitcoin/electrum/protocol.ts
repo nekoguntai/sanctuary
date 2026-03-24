@@ -8,7 +8,7 @@
 import { createLogger } from '../../../utils/logger';
 import type { ElectrumResponse, ElectrumRequest, PendingRequest } from './types';
 
-const log = createLogger('ELECTRUM');
+const log = createLogger('ELECTRUM:SVC_PROTOCOL');
 
 /**
  * Parse incoming data buffer into complete JSON-RPC response lines.

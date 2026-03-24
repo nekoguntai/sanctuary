@@ -31,7 +31,7 @@
 import { createLogger } from '../../utils/logger';
 import { cacheOperationsTotal } from '../../observability/metrics';
 
-const log = createLogger('Cache');
+const log = createLogger('CACHE:SVC');
 
 // =============================================================================
 // Types

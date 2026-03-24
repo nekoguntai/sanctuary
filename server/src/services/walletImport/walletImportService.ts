@@ -27,7 +27,7 @@ import type {
   ImportedDeviceInfo,
 } from './types';
 
-const log = createLogger('IMPORT');
+const log = createLogger('WALLET_IMPORT:SVC');
 
 /** Input parameters for the shared wallet creation transaction */
 interface CreateWalletTransactionInput {

@@ -14,7 +14,7 @@ import type {
   NotificationResult,
 } from './types';
 
-const log = createLogger('NOTIFY:REGISTRY');
+const log = createLogger('NOTIFY:SVC_REGISTRY');
 
 /**
  * Notification Channel Registry

@@ -7,7 +7,7 @@
 import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('DEVICE:ACCESS');
+const log = createLogger('DEVICE_ACCESS:SVC');
 
 // ========================================
 // TYPES

@@ -12,7 +12,7 @@ import { isColdcardExportFormat, parseColdcardExport } from './coldcardParser';
 import { isBlueWalletTextFormat, parseBlueWalletText, parseBlueWalletTextImport } from './bluewalletParser';
 import type { ParsedDescriptor, ScriptType, JsonImportConfig, JsonImportDevice } from './types';
 
-const log = createLogger('DESCRIPTOR');
+const log = createLogger('BITCOIN:SVC_DESCRIPTOR');
 
 /**
  * Attempt to parse input as descriptor, JSON, or BlueWallet text format

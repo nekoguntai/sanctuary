@@ -21,7 +21,7 @@ import {
 
 export { extractErrorMessage, isAbortError, isNetworkError, isTimeoutError };
 
-const log = createLogger('ErrorHandler');
+const log = createLogger('UTIL:ERROR');
 
 /**
  * Standard API error response structure

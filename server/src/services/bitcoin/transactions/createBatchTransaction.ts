@@ -27,7 +27,7 @@ import {
 } from './psbtConstruction';
 import type { TransactionOutput, CreateBatchTransactionResult } from './types';
 
-const log = createLogger('BATCH-TX');
+const log = createLogger('BITCOIN:SVC_TX_BATCH');
 
 /**
  * Create a batch transaction with multiple outputs

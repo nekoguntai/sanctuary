@@ -9,7 +9,7 @@ import type { SystemSetting } from '@prisma/client';
 import { safeJsonParseUntyped } from '../utils/safeJson';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('SystemSettingRepo');
+const log = createLogger('SYSTEM_SETTING:REPO');
 
 /**
  * Well-known system setting keys

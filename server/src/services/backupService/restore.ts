@@ -14,7 +14,7 @@ import { migrateBackup } from './migration';
 import { TABLE_ORDER, CACHE_TABLES } from './constants';
 import type { BackupRecord, SanctuaryBackup, RestoreResult } from './types';
 
-const log = createLogger('BACKUP');
+const log = createLogger('BACKUP:SVC');
 
 /**
  * Restore database from backup

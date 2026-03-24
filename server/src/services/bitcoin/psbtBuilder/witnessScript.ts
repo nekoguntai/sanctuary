@@ -11,7 +11,7 @@ import { convertToStandardXpub, MultisigKeyInfo } from '../addressDerivation';
 import { createLogger } from '../../../utils/logger';
 import { extractChangeAndAddressIndex } from '../../../../../shared/utils/bitcoin';
 
-const log = createLogger('PSBT-BUILDER');
+const log = createLogger('BITCOIN:SVC_PSBT_WITNESS');
 
 // Initialize BIP32 for key derivation
 const bip32 = BIP32Factory(ecc);

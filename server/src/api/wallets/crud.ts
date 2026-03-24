@@ -4,172 +4,119 @@
  * Core wallet lifecycle operations (create, read, update, delete)
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
-import { createLogger } from '../../utils/logger';
-import { getErrorMessage } from '../../utils/errors';
+import { asyncHandler } from '../../errors/errorHandler';
+import { InvalidInputError, NotFoundError } from '../../errors/ApiError';
 import * as walletService from '../../services/wallet';
 import { isValidScriptType, scriptTypeRegistry } from '../../services/scriptTypes';
 
 const router = Router();
-const log = createLogger('WALLETS:CRUD');
 
 /**
  * GET /api/v1/wallets
  * Get all wallets for authenticated user
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const wallets = await walletService.getUserWallets(userId);
+router.get('/', asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const wallets = await walletService.getUserWallets(userId);
 
-    res.json(wallets);
-  } catch (error) {
-    log.error('Get wallets error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch wallets',
-    });
-  }
-});
+  res.json(wallets);
+}));
 
 /**
  * POST /api/v1/wallets
  * Create a new wallet
  */
-router.post('/', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const {
-      name,
-      type,
-      scriptType,
-      network,
-      quorum,
-      totalSigners,
-      descriptor,
-      fingerprint,
-      groupId,
-      deviceIds,
-    } = req.body;
+router.post('/', asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const {
+    name,
+    type,
+    scriptType,
+    network,
+    quorum,
+    totalSigners,
+    descriptor,
+    fingerprint,
+    groupId,
+    deviceIds,
+  } = req.body;
 
-    // Validation
-    if (!name || !type || !scriptType) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'name, type, and scriptType are required',
-      });
-    }
-
-    if (!['single_sig', 'multi_sig'].includes(type)) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'type must be single_sig or multi_sig',
-      });
-    }
-
-    if (!isValidScriptType(scriptType)) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: `Invalid scriptType. Valid types: ${scriptTypeRegistry.getIds().join(', ')}`,
-      });
-    }
-
-    const wallet = await walletService.createWallet(userId, {
-      name,
-      type,
-      scriptType,
-      network,
-      quorum,
-      totalSigners,
-      descriptor,
-      fingerprint,
-      groupId,
-      deviceIds,
-    });
-
-    res.status(201).json(wallet);
-  } catch (error) {
-    log.error('Create wallet error', { error });
-    res.status(400).json({
-      error: 'Bad Request',
-      message: getErrorMessage(error, 'Failed to create wallet'),
-    });
+  // Validation
+  if (!name || !type || !scriptType) {
+    throw new InvalidInputError('name, type, and scriptType are required');
   }
-});
+
+  if (!['single_sig', 'multi_sig'].includes(type)) {
+    throw new InvalidInputError('type must be single_sig or multi_sig');
+  }
+
+  if (!isValidScriptType(scriptType)) {
+    throw new InvalidInputError(`Invalid scriptType. Valid types: ${scriptTypeRegistry.getIds().join(', ')}`);
+  }
+
+  const wallet = await walletService.createWallet(userId, {
+    name,
+    type,
+    scriptType,
+    network,
+    quorum,
+    totalSigners,
+    descriptor,
+    fingerprint,
+    groupId,
+    deviceIds,
+  });
+
+  res.status(201).json(wallet);
+}));
 
 /**
  * GET /api/v1/wallets/:id
  * Get a specific wallet by ID
  */
-router.get('/:id', requireWalletAccess('view'), async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const walletId = req.walletId!;
+router.get('/:id', requireWalletAccess('view'), asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const walletId = req.walletId!;
 
-    const wallet = await walletService.getWalletById(walletId, userId);
+  const wallet = await walletService.getWalletById(walletId, userId);
 
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
-      });
-    }
-
-    res.json(wallet);
-  } catch (error) {
-    log.error('Get wallet error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch wallet',
-    });
+  if (!wallet) {
+    throw new NotFoundError('Wallet not found');
   }
-});
+
+  res.json(wallet);
+}));
 
 /**
  * PATCH /api/v1/wallets/:id
  * Update a wallet (owner only)
  */
-router.patch('/:id', requireWalletAccess('owner'), async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const walletId = req.walletId!;
-    const { name, descriptor } = req.body;
+router.patch('/:id', requireWalletAccess('owner'), asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const walletId = req.walletId!;
+  const { name, descriptor } = req.body;
 
-    const wallet = await walletService.updateWallet(walletId, userId, {
-      name,
-      descriptor,
-    });
+  const wallet = await walletService.updateWallet(walletId, userId, {
+    name,
+    descriptor,
+  });
 
-    res.json(wallet);
-  } catch (error) {
-    log.error('Update wallet error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to update wallet',
-    });
-  }
-});
+  res.json(wallet);
+}));
 
 /**
  * DELETE /api/v1/wallets/:id
  * Delete a wallet (owner only)
  */
-router.delete('/:id', requireWalletAccess('owner'), async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const walletId = req.walletId!;
+router.delete('/:id', requireWalletAccess('owner'), asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const walletId = req.walletId!;
 
-    await walletService.deleteWallet(walletId, userId);
+  await walletService.deleteWallet(walletId, userId);
 
-    res.status(204).send();
-  } catch (error) {
-    log.error('Delete wallet error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to delete wallet',
-    });
-  }
-});
+  res.status(204).send();
+}));
 
 export default router;

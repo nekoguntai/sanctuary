@@ -6,7 +6,7 @@
 
 import { createLogger } from '../../utils/logger';
 
-const log = createLogger('AI');
+const log = createLogger('AI:VALIDATION');
 
 /**
  * Validate AI container response

@@ -20,7 +20,7 @@ import { fetchBlockHeightsFromHistory, fetchTransactionDetails, fetchPreviousTra
 import { processTransactionUpdates } from './processUpdates';
 import type { ConfirmationUpdate, PopulateFieldsResult } from './types';
 
-const log = createLogger('CONFIRMATIONS');
+const log = createLogger('BITCOIN:SVC_CONFIRMATIONS');
 
 /**
  * Populate missing transaction fields (blockHeight, addressId, blockTime, fee) from blockchain

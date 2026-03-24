@@ -28,7 +28,7 @@ import { createHmac, createHash, timingSafeEqual } from 'crypto';
 import config from '../config';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('GATEWAY_AUTH');
+const log = createLogger('MW:GATEWAY_AUTH');
 
 /**
  * Maximum age for request signatures (5 minutes)

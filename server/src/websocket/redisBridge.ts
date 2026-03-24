@@ -23,7 +23,7 @@ import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 import { getRedisClient, isRedisConnected } from '../infrastructure/redis';
 
-const log = createLogger('WS_REDIS_BRIDGE');
+const log = createLogger('WS:REDIS_BRIDGE');
 
 // Channel for WebSocket broadcasts
 const WS_BROADCAST_CHANNEL = 'sanctuary:ws:broadcast';

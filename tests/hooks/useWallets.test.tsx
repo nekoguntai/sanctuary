@@ -18,6 +18,8 @@ vi.mock('../../src/api/transactions', () => ({
 vi.mock('../../src/api/wallets', () => ({
   getWallets: vi.fn(),
   getWallet: vi.fn(),
+  createWallet: vi.fn(),
+  importWallet: vi.fn(),
 }));
 
 import * as transactionsApi from '../../src/api/transactions';

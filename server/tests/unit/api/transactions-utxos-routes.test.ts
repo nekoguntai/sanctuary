@@ -36,6 +36,7 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+import { errorHandler } from '../../../src/errors/errorHandler';
 import utxosRouter from '../../../src/api/transactions/utxos';
 
 describe('Transactions UTXO Routes', () => {
@@ -49,6 +50,7 @@ describe('Transactions UTXO Routes', () => {
       next();
     });
     app.use('/api/v1', utxosRouter);
+    app.use(errorHandler);
   });
 
   afterAll(() => {
@@ -226,10 +228,7 @@ describe('Transactions UTXO Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/utxos');
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch UTXOs',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('rejects freeze requests with non-boolean frozen value', async () => {
@@ -325,9 +324,6 @@ describe('Transactions UTXO Routes', () => {
       .send({ frozen: true });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to update UTXO frozen status',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

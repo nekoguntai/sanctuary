@@ -12,7 +12,7 @@ import { auditService, AuditCategory } from '../../services/auditService';
 import { expireOldTransfers } from '../../services/transferService';
 import { createLogger } from '../../utils/logger';
 
-const log = createLogger('MaintenanceJobs');
+const log = createLogger('JOB:MAINTENANCE');
 
 // =============================================================================
 // Job Data Types

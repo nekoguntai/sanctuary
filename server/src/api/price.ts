@@ -7,146 +7,98 @@
 import { Router, Request, Response } from 'express';
 import { getPriceService } from '../services/price';
 import { createLogger } from '../utils/logger';
-import { getErrorMessage } from '../utils/errors';
 import { authenticate, requireAdmin } from '../middleware/auth';
+import { asyncHandler } from '../errors/errorHandler';
+import { InvalidInputError } from '../errors/ApiError';
 
 const router = Router();
-const log = createLogger('PRICE');
+const log = createLogger('PRICE:ROUTE');
 const priceService = getPriceService();
 
 /**
  * GET /api/v1/price
  * Get current Bitcoin price
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
-    const { currency = 'USD', useCache = 'true' } = req.query;
+router.get('/', asyncHandler(async (req, res) => {
+  const { currency = 'USD', useCache = 'true' } = req.query;
 
-    const price = await priceService.getPrice(
-      currency as string,
-      useCache === 'true'
-    );
+  const price = await priceService.getPrice(
+    currency as string,
+    useCache === 'true'
+  );
 
-    res.json(price);
-  } catch (error) {
-    log.error('[PRICE] Get price error', { error: String(error) });
-    res.status(400).json({
-      error: 'Bad Request',
-      message: getErrorMessage(error, 'Failed to fetch price'),
-    });
-  }
-});
+  res.json(price);
+}));
 
 /**
  * GET /api/v1/price/multiple
  * Get prices for multiple currencies
  */
-router.get('/multiple', async (req: Request, res: Response) => {
-  try {
-    const { currencies } = req.query;
+router.get('/multiple', asyncHandler(async (req, res) => {
+  const { currencies } = req.query;
 
-    if (!currencies) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'currencies parameter is required (comma-separated)',
-      });
-    }
-
-    const currencyList = (currencies as string).split(',').map((c) => c.trim());
-    const prices = await priceService.getPrices(currencyList);
-
-    res.json(prices);
-  } catch (error) {
-    log.error('[PRICE] Get multiple prices error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch prices',
-    });
+  if (!currencies) {
+    throw new InvalidInputError('currencies parameter is required (comma-separated)');
   }
-});
+
+  const currencyList = (currencies as string).split(',').map((c) => c.trim());
+  const prices = await priceService.getPrices(currencyList);
+
+  res.json(prices);
+}));
 
 /**
  * GET /api/v1/price/from/:provider
  * Get price from specific provider
  */
-router.get('/from/:provider', async (req: Request, res: Response) => {
-  try {
-    const { provider } = req.params;
-    const { currency = 'USD' } = req.query;
+router.get('/from/:provider', asyncHandler(async (req, res) => {
+  const { provider } = req.params;
+  const { currency = 'USD' } = req.query;
 
-    const price = await priceService.getPriceFrom(provider, currency as string);
+  const price = await priceService.getPriceFrom(provider, currency as string);
 
-    res.json(price);
-  } catch (error) {
-    log.error('[PRICE] Get price from provider error', { error: String(error) });
-    res.status(400).json({
-      error: 'Bad Request',
-      message: getErrorMessage(error, 'Failed to fetch price from provider'),
-    });
-  }
-});
+  res.json(price);
+}));
 
 /**
  * POST /api/v1/price/convert/to-fiat
  * Convert satoshis to fiat
  */
-router.post('/convert/to-fiat', async (req: Request, res: Response) => {
-  try {
-    const { sats, currency = 'USD' } = req.body;
+router.post('/convert/to-fiat', asyncHandler(async (req, res) => {
+  const { sats, currency = 'USD' } = req.body;
 
-    if (typeof sats !== 'number') {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'sats must be a number',
-      });
-    }
-
-    const fiatAmount = await priceService.convertToFiat(sats, currency);
-
-    res.json({
-      sats,
-      fiatAmount,
-      currency,
-    });
-  } catch (error) {
-    log.error('[PRICE] Convert to fiat error', { error: String(error) });
-    res.status(400).json({
-      error: 'Bad Request',
-      message: getErrorMessage(error, 'Failed to convert to fiat'),
-    });
+  if (typeof sats !== 'number') {
+    throw new InvalidInputError('sats must be a number');
   }
-});
+
+  const fiatAmount = await priceService.convertToFiat(sats, currency);
+
+  res.json({
+    sats,
+    fiatAmount,
+    currency,
+  });
+}));
 
 /**
  * POST /api/v1/price/convert/to-sats
  * Convert fiat to satoshis
  */
-router.post('/convert/to-sats', async (req: Request, res: Response) => {
-  try {
-    const { amount, currency = 'USD' } = req.body;
+router.post('/convert/to-sats', asyncHandler(async (req, res) => {
+  const { amount, currency = 'USD' } = req.body;
 
-    if (typeof amount !== 'number') {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'amount must be a number',
-      });
-    }
-
-    const sats = await priceService.convertToSats(amount, currency);
-
-    res.json({
-      amount,
-      currency,
-      sats,
-    });
-  } catch (error) {
-    log.error('[PRICE] Convert to sats error', { error: String(error) });
-    res.status(400).json({
-      error: 'Bad Request',
-      message: getErrorMessage(error, 'Failed to convert to sats'),
-    });
+  if (typeof amount !== 'number') {
+    throw new InvalidInputError('amount must be a number');
   }
-});
+
+  const sats = await priceService.convertToSats(amount, currency);
+
+  res.json({
+    amount,
+    currency,
+    sats,
+  });
+}));
 
 /**
  * GET /api/v1/price/currencies
@@ -176,18 +128,10 @@ router.get('/providers', (_req: Request, res: Response) => {
  * GET /api/v1/price/health
  * Health check for price providers
  */
-router.get('/health', async (_req: Request, res: Response) => {
-  try {
-    const health = await priceService.healthCheck();
-    res.json(health);
-  } catch (error) {
-    log.error('[PRICE] Health check error', { error: String(error) });
-    res.status(500).json({
-      healthy: false,
-      error: 'Failed to perform health check',
-    });
-  }
-});
+router.get('/health', asyncHandler(async (_req, res) => {
+  const health = await priceService.healthCheck();
+  res.json(health);
+}));
 
 /**
  * GET /api/v1/price/cache/stats
@@ -202,13 +146,13 @@ router.get('/cache/stats', authenticate, requireAdmin, (_req: Request, res: Resp
  * POST /api/v1/price/cache/clear
  * Clear price cache (admin only)
  */
-router.post('/cache/clear', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.post('/cache/clear', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   log.info('Cache cleared by admin', { userId: (req as any).user?.id });
   await priceService.clearCache();
   res.json({
     message: 'Cache cleared successfully',
   });
-});
+}));
 
 /**
  * POST /api/v1/price/cache/duration
@@ -237,88 +181,60 @@ router.post('/cache/duration', authenticate, requireAdmin, (req: Request, res: R
  * GET /api/v1/price/historical
  * Get historical Bitcoin price for a specific date
  */
-router.get('/historical', async (req: Request, res: Response) => {
-  try {
-    const { date, currency = 'USD' } = req.query;
+router.get('/historical', asyncHandler(async (req, res) => {
+  const { date, currency = 'USD' } = req.query;
 
-    if (!date) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'date parameter is required (YYYY-MM-DD or ISO format)',
-      });
-    }
-
-    // Parse date
-    const parsedDate = new Date(date as string);
-
-    if (isNaN(parsedDate.getTime())) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Invalid date format. Use YYYY-MM-DD or ISO format',
-      });
-    }
-
-    // Check if date is in the future
-    if (parsedDate > new Date()) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Date cannot be in the future',
-      });
-    }
-
-    const price = await priceService.getHistoricalPrice(currency as string, parsedDate);
-
-    res.json({
-      date: parsedDate.toISOString(),
-      currency: currency,
-      price,
-      provider: 'coingecko',
-    });
-  } catch (error) {
-    log.error('[PRICE] Get historical price error', { error: String(error) });
-    res.status(400).json({
-      error: 'Bad Request',
-      message: getErrorMessage(error, 'Failed to fetch historical price'),
-    });
+  if (!date) {
+    throw new InvalidInputError('date parameter is required (YYYY-MM-DD or ISO format)');
   }
-});
+
+  // Parse date
+  const parsedDate = new Date(date as string);
+
+  if (isNaN(parsedDate.getTime())) {
+    throw new InvalidInputError('Invalid date format. Use YYYY-MM-DD or ISO format');
+  }
+
+  // Check if date is in the future
+  if (parsedDate > new Date()) {
+    throw new InvalidInputError('Date cannot be in the future');
+  }
+
+  const price = await priceService.getHistoricalPrice(currency as string, parsedDate);
+
+  res.json({
+    date: parsedDate.toISOString(),
+    currency: currency,
+    price,
+    provider: 'coingecko',
+  });
+}));
 
 /**
  * GET /api/v1/price/history
  * Get price history over a date range
  */
-router.get('/history', async (req: Request, res: Response) => {
-  try {
-    const { days = '30', currency = 'USD' } = req.query;
+router.get('/history', asyncHandler(async (req, res) => {
+  const { days = '30', currency = 'USD' } = req.query;
 
-    const daysNum = parseInt(days as string, 10);
+  const daysNum = parseInt(days as string, 10);
 
-    if (isNaN(daysNum) || daysNum < 1 || daysNum > 365) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'days must be a number between 1 and 365',
-      });
-    }
-
-    const history = await priceService.getPriceHistory(currency as string, daysNum);
-
-    res.json({
-      currency,
-      days: daysNum,
-      dataPoints: history.length,
-      history: history.map(({ timestamp, price }) => ({
-        timestamp: timestamp.toISOString(),
-        price,
-      })),
-      provider: 'coingecko',
-    });
-  } catch (error) {
-    log.error('[PRICE] Get price history error', { error: String(error) });
-    res.status(400).json({
-      error: 'Bad Request',
-      message: getErrorMessage(error, 'Failed to fetch price history'),
-    });
+  if (isNaN(daysNum) || daysNum < 1 || daysNum > 365) {
+    throw new InvalidInputError('days must be a number between 1 and 365');
   }
-});
+
+  const history = await priceService.getPriceHistory(currency as string, daysNum);
+
+  res.json({
+    currency,
+    days: daysNum,
+    dataPoints: history.length,
+    history: history.map(({ timestamp, price }) => ({
+      timestamp: timestamp.toISOString(),
+      price,
+    })),
+    provider: 'coingecko',
+  });
+}));
 
 export default router;

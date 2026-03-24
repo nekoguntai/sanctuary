@@ -9,7 +9,7 @@ import { createLogger } from '../../utils/logger';
 import { MIGRATIONS } from './constants';
 import type { SanctuaryBackup } from './types';
 
-const log = createLogger('BACKUP');
+const log = createLogger('BACKUP:SVC');
 
 /**
  * Apply migrations to upgrade backup to current schema version

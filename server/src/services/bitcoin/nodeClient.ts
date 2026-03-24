@@ -17,7 +17,7 @@ import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 
-const log = createLogger('NODE_CLIENT');
+const log = createLogger('BITCOIN:SVC_NODE_CLIENT');
 
 export interface NodeConfig {
   host: string;

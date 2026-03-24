@@ -14,7 +14,7 @@ import type {
   ExportResult,
 } from './types';
 
-const log = createLogger('EXPORT:REGISTRY');
+const log = createLogger('EXPORT:SVC_REGISTRY');
 
 /**
  * Export Format Registry

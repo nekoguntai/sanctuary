@@ -11,7 +11,7 @@ import { createLogger } from '../../../utils/logger';
 import { generateDecoyAmounts } from '../psbtBuilder';
 import type { PendingOutput, UtxoSelection } from './types';
 
-const log = createLogger('CREATE-TX');
+const log = createLogger('BITCOIN:SVC_TX_OUTPUT');
 
 /**
  * Build all outputs (recipient, change, decoys) and add them to the PSBT in shuffled order.

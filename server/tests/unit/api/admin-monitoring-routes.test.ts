@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import express, { type Express } from 'express';
 import request from 'supertest';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 const {
   mockGetConfig,
@@ -72,6 +73,7 @@ describe('Admin Monitoring Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/admin/monitoring', monitoringRouter);
+    app.use(errorHandler);
   });
 
   afterAll(() => {
@@ -226,10 +228,7 @@ describe('Admin Monitoring Routes', () => {
     const response = await request(app).get('/api/v1/admin/monitoring/services');
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to get monitoring services',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('rejects updates for unknown monitoring services', async () => {
@@ -272,10 +271,7 @@ describe('Admin Monitoring Routes', () => {
       .send({ customUrl: 'https://jaeger.local' });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to update monitoring service',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns grafana credentials and anonymous setting with explicit password source', async () => {
@@ -328,10 +324,7 @@ describe('Admin Monitoring Routes', () => {
     const response = await request(app).get('/api/v1/admin/monitoring/grafana');
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to get Grafana configuration',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('updates grafana anonymous access when boolean is provided', async () => {
@@ -364,9 +357,6 @@ describe('Admin Monitoring Routes', () => {
       .send({ anonymousAccess: false });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to update Grafana configuration',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

@@ -22,7 +22,7 @@ import type {
   SyncPipelineError,
 } from './types';
 
-const log = createLogger('SYNC-PIPELINE');
+const log = createLogger('BITCOIN:SVC_SYNC_PIPELINE');
 
 /**
  * Execute a sync pipeline with the given phases

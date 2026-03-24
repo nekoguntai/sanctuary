@@ -4,9 +4,11 @@
  * Endpoints for password management
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { db as prisma } from '../../repositories/db';
+import { asyncHandler } from '../../errors/errorHandler';
+import { InvalidInputError, NotFoundError, UnauthorizedError } from '../../errors/ApiError';
 import { createLogger } from '../../utils/logger';
 import { hashPassword, verifyPassword, validatePasswordStrength } from '../../utils/password';
 import { auditService, AuditAction, AuditCategory } from '../../services/auditService';
@@ -14,7 +16,7 @@ import { revokeAllUserTokens } from '../../services/tokenRevocation';
 import { getErrorMessage } from '../../utils/errors';
 
 const router = Router();
-const log = createLogger('AUTH:PASSWORD');
+const log = createLogger('AUTH_PASSWORD:ROUTE');
 
 /**
  * Check if user is still using the initial generated password
@@ -73,83 +75,62 @@ export function createPasswordRouter(passwordChangeLimiter: RequestHandler): Rou
    * POST /api/v1/auth/me/change-password
    * Change user password
    */
-  router.post('/me/change-password', passwordChangeLimiter, async (req: Request, res: Response) => {
-    try {
-      const { currentPassword, newPassword } = req.body;
+  router.post('/me/change-password', passwordChangeLimiter, asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
 
-      // Validation
-      if (!currentPassword || !newPassword) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Current password and new password are required',
-        });
-      }
-
-      // Validate new password strength (same requirements as registration)
-      const passwordValidation = validatePasswordStrength(newPassword);
-      if (!passwordValidation.valid) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Password does not meet requirements',
-          details: passwordValidation.errors,
-        });
-      }
-
-      // Get user
-      const user = await prisma.user.findUnique({
-        where: { id: req.user!.userId },
-      });
-
-      if (!user) {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: 'User not found',
-        });
-      }
-
-      // Verify current password
-      const isValid = await verifyPassword(currentPassword, user.password);
-
-      if (!isValid) {
-        return res.status(401).json({
-          error: 'Unauthorized',
-          message: 'Current password is incorrect',
-        });
-      }
-
-      // Hash new password
-      const hashedPassword = await hashPassword(newPassword);
-
-      // Update password
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          password: hashedPassword,
-        },
-      });
-
-      // Clear the initial password marker since user has changed their password
-      await clearInitialPasswordMarker(user.id);
-
-      // Invalidate all existing sessions (security: prevent stolen tokens from persisting)
-      await revokeAllUserTokens(user.id, 'password_change');
-
-      // Audit password change
-      await auditService.logFromRequest(req, AuditAction.PASSWORD_CHANGE, AuditCategory.AUTH, {
-        details: { userId: user.id },
-      });
-
-      res.json({
-        message: 'Password changed successfully',
-      });
-    } catch (error) {
-      log.error('Change password error', { error: getErrorMessage(error) });
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Failed to change password',
-      });
+    // Validation
+    if (!currentPassword || !newPassword) {
+      throw new InvalidInputError('Current password and new password are required');
     }
-  });
+
+    // Validate new password strength (same requirements as registration)
+    const passwordValidation = validatePasswordStrength(newPassword);
+    if (!passwordValidation.valid) {
+      throw new InvalidInputError('Password does not meet requirements');
+    }
+
+    // Get user
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+    });
+
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    // Verify current password
+    const isValid = await verifyPassword(currentPassword, user.password);
+
+    if (!isValid) {
+      throw new UnauthorizedError('Current password is incorrect');
+    }
+
+    // Hash new password
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update password
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+      },
+    });
+
+    // Clear the initial password marker since user has changed their password
+    await clearInitialPasswordMarker(user.id);
+
+    // Invalidate all existing sessions (security: prevent stolen tokens from persisting)
+    await revokeAllUserTokens(user.id, 'password_change');
+
+    // Audit password change
+    await auditService.logFromRequest(req, AuditAction.PASSWORD_CHANGE, AuditCategory.AUTH, {
+      details: { userId: user.id },
+    });
+
+    res.json({
+      message: 'Password changed successfully',
+    });
+  }));
 
   return router;
 }

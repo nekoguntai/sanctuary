@@ -62,7 +62,7 @@ export class ProviderRegistry<T extends IProvider> implements IProviderRegistry<
   private readonly options: Required<RegistryOptions>;
 
   constructor(options: RegistryOptions) {
-    this.log = createLogger(`ProviderRegistry:${options.name}`);
+    this.log = createLogger(`PROVIDER:${options.name}`);
     this.options = {
       name: options.name,
       healthCheckIntervalMs: options.healthCheckIntervalMs ?? 60000,

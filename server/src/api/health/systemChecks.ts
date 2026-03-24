@@ -11,7 +11,7 @@ import { getErrorMessage } from '../../utils/errors';
 import config from '../../config';
 import type { ComponentHealth, HealthStatus } from './types';
 
-const log = createLogger('HEALTH');
+const log = createLogger('HEALTH:SYSTEM');
 
 /**
  * Check database connectivity

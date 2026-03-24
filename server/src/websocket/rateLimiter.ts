@@ -21,7 +21,7 @@ import {
   AuthenticatedWebSocket,
 } from './types';
 
-const log = createLogger('WS_RATE_LIMIT');
+const log = createLogger('WS:RATE_LIMIT');
 
 // ============================================================================
 // Rate Limit Event Tracking

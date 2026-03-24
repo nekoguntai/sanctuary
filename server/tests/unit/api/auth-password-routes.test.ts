@@ -52,6 +52,7 @@ vi.mock('../../../src/utils/logger', () => ({
 }));
 
 import { createPasswordRouter } from '../../../src/api/auth/password';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 describe('auth password routes', () => {
   let app: Express;
@@ -64,6 +65,7 @@ describe('auth password routes', () => {
       next();
     });
     app.use('/api/v1/auth', createPasswordRouter((_req: any, _res: any, next: any) => next()));
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -129,9 +131,6 @@ describe('auth password routes', () => {
       });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to change password',
-    });
+    expect(response.body.error).toBe('Internal');
   });
 });

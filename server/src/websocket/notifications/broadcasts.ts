@@ -19,7 +19,7 @@ import type {
   ConfirmationUpdate,
 } from './types';
 
-const log = createLogger('NOTIFY');
+const log = createLogger('WS:NOTIFY_BROADCAST');
 
 /**
  * Broadcast transaction notification

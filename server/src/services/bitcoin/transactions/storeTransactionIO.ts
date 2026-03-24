@@ -10,7 +10,7 @@ import { getNetwork } from '../utils';
 import { createLogger } from '../../../utils/logger';
 import type { PrismaTxClient, TransactionInputMetadata, TransactionOutputMetadata } from './types';
 
-const log = createLogger('TX-BROADCAST');
+const log = createLogger('BITCOIN:SVC_TX_IO');
 
 /**
  * Store transaction inputs, either from provided metadata or by looking up UTXO records.

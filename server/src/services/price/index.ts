@@ -28,7 +28,7 @@ import type {
 } from './types';
 import { hasHistoricalSupport } from './types';
 
-const log = createLogger('PRICE');
+const log = createLogger('PRICE:SVC');
 
 /**
  * Stale TTL multiplier: stale fallback entries live 10x longer than fresh entries.

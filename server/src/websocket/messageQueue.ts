@@ -18,7 +18,7 @@ import {
 } from './types';
 import { recordRateLimitEvent, incrementDroppedMessages } from './rateLimiter';
 
-const log = createLogger('WS_QUEUE');
+const log = createLogger('WS:QUEUE');
 
 /**
  * Send message to specific client with bounded queue.

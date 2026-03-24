@@ -5,15 +5,13 @@
  * All endpoints gated behind the treasuryAutopilot feature flag.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
 import { requireFeature } from '../../middleware/featureGate';
-import { createLogger } from '../../utils/logger';
-import { getErrorMessage } from '../../utils/errors';
+import { asyncHandler } from '../../errors/errorHandler';
 import { DEFAULT_AUTOPILOT_SETTINGS } from '../../services/autopilot/types';
 
 const router = Router();
-const log = createLogger('WALLETS:AUTOPILOT');
 
 /**
  * GET /api/v1/wallets/:id/autopilot
@@ -23,25 +21,17 @@ router.get(
   '/:id/autopilot',
   requireFeature('treasuryAutopilot'),
   requireWalletAccess('view'),
-  async (req: Request, res: Response) => {
-    try {
-      const walletId = req.walletId!;
-      const userId = req.user!.userId;
+  asyncHandler(async (req, res) => {
+    const walletId = req.walletId!;
+    const userId = req.user!.userId;
 
-      const { getWalletAutopilotSettings } = await import('../../services/autopilot/settings');
-      const settings = await getWalletAutopilotSettings(userId, walletId);
+    const { getWalletAutopilotSettings } = await import('../../services/autopilot/settings');
+    const settings = await getWalletAutopilotSettings(userId, walletId);
 
-      res.json({
-        settings: settings || DEFAULT_AUTOPILOT_SETTINGS,
-      });
-    } catch (error) {
-      log.error('Get autopilot settings error', { error: getErrorMessage(error) });
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Failed to get autopilot settings',
-      });
-    }
-  }
+    res.json({
+      settings: settings || DEFAULT_AUTOPILOT_SETTINGS,
+    });
+  })
 );
 
 /**
@@ -52,47 +42,39 @@ router.patch(
   '/:id/autopilot',
   requireFeature('treasuryAutopilot'),
   requireWalletAccess('view'),
-  async (req: Request, res: Response) => {
-    try {
-      const walletId = req.walletId!;
-      const userId = req.user!.userId;
-      const {
-        enabled,
-        maxFeeRate,
-        minUtxoCount,
-        dustThreshold,
-        cooldownHours,
-        notifyTelegram,
-        notifyPush,
-        minDustCount,
-        maxUtxoSize,
-      } = req.body;
+  asyncHandler(async (req, res) => {
+    const walletId = req.walletId!;
+    const userId = req.user!.userId;
+    const {
+      enabled,
+      maxFeeRate,
+      minUtxoCount,
+      dustThreshold,
+      cooldownHours,
+      notifyTelegram,
+      notifyPush,
+      minDustCount,
+      maxUtxoSize,
+    } = req.body;
 
-      const { updateWalletAutopilotSettings } = await import('../../services/autopilot/settings');
-      await updateWalletAutopilotSettings(userId, walletId, {
-        enabled: enabled ?? DEFAULT_AUTOPILOT_SETTINGS.enabled,
-        maxFeeRate: maxFeeRate ?? DEFAULT_AUTOPILOT_SETTINGS.maxFeeRate,
-        minUtxoCount: minUtxoCount ?? DEFAULT_AUTOPILOT_SETTINGS.minUtxoCount,
-        dustThreshold: dustThreshold ?? DEFAULT_AUTOPILOT_SETTINGS.dustThreshold,
-        cooldownHours: cooldownHours ?? DEFAULT_AUTOPILOT_SETTINGS.cooldownHours,
-        notifyTelegram: notifyTelegram ?? DEFAULT_AUTOPILOT_SETTINGS.notifyTelegram,
-        notifyPush: notifyPush ?? DEFAULT_AUTOPILOT_SETTINGS.notifyPush,
-        minDustCount: minDustCount ?? DEFAULT_AUTOPILOT_SETTINGS.minDustCount,
-        maxUtxoSize: maxUtxoSize ?? DEFAULT_AUTOPILOT_SETTINGS.maxUtxoSize,
-      });
+    const { updateWalletAutopilotSettings } = await import('../../services/autopilot/settings');
+    await updateWalletAutopilotSettings(userId, walletId, {
+      enabled: enabled ?? DEFAULT_AUTOPILOT_SETTINGS.enabled,
+      maxFeeRate: maxFeeRate ?? DEFAULT_AUTOPILOT_SETTINGS.maxFeeRate,
+      minUtxoCount: minUtxoCount ?? DEFAULT_AUTOPILOT_SETTINGS.minUtxoCount,
+      dustThreshold: dustThreshold ?? DEFAULT_AUTOPILOT_SETTINGS.dustThreshold,
+      cooldownHours: cooldownHours ?? DEFAULT_AUTOPILOT_SETTINGS.cooldownHours,
+      notifyTelegram: notifyTelegram ?? DEFAULT_AUTOPILOT_SETTINGS.notifyTelegram,
+      notifyPush: notifyPush ?? DEFAULT_AUTOPILOT_SETTINGS.notifyPush,
+      minDustCount: minDustCount ?? DEFAULT_AUTOPILOT_SETTINGS.minDustCount,
+      maxUtxoSize: maxUtxoSize ?? DEFAULT_AUTOPILOT_SETTINGS.maxUtxoSize,
+    });
 
-      res.json({
-        success: true,
-        message: 'Autopilot settings updated',
-      });
-    } catch (error) {
-      log.error('Update autopilot settings error', { error: getErrorMessage(error) });
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Failed to update autopilot settings',
-      });
-    }
-  }
+    res.json({
+      success: true,
+      message: 'Autopilot settings updated',
+    });
+  })
 );
 
 /**
@@ -103,47 +85,39 @@ router.get(
   '/:id/autopilot/status',
   requireFeature('treasuryAutopilot'),
   requireWalletAccess('view'),
-  async (req: Request, res: Response) => {
-    try {
-      const walletId = req.walletId!;
-      const userId = req.user!.userId;
+  asyncHandler(async (req, res) => {
+    const walletId = req.walletId!;
+    const userId = req.user!.userId;
 
-      const { getWalletAutopilotSettings } = await import('../../services/autopilot/settings');
-      const { getUtxoHealthProfile } = await import('../../services/autopilot/utxoHealth');
-      const { getLatestFeeSnapshot } = await import('../../services/autopilot/feeMonitor');
+    const { getWalletAutopilotSettings } = await import('../../services/autopilot/settings');
+    const { getUtxoHealthProfile } = await import('../../services/autopilot/utxoHealth');
+    const { getLatestFeeSnapshot } = await import('../../services/autopilot/feeMonitor');
 
-      const settings = await getWalletAutopilotSettings(userId, walletId);
-      const dustThreshold = settings?.dustThreshold ?? DEFAULT_AUTOPILOT_SETTINGS.dustThreshold;
-      const maxUtxoSize = settings?.maxUtxoSize ?? DEFAULT_AUTOPILOT_SETTINGS.maxUtxoSize;
+    const settings = await getWalletAutopilotSettings(userId, walletId);
+    const dustThreshold = settings?.dustThreshold ?? DEFAULT_AUTOPILOT_SETTINGS.dustThreshold;
+    const maxUtxoSize = settings?.maxUtxoSize ?? DEFAULT_AUTOPILOT_SETTINGS.maxUtxoSize;
 
-      const [health, feeSnapshot] = await Promise.all([
-        getUtxoHealthProfile(walletId, dustThreshold, maxUtxoSize),
-        getLatestFeeSnapshot(),
-      ]);
+    const [health, feeSnapshot] = await Promise.all([
+      getUtxoHealthProfile(walletId, dustThreshold, maxUtxoSize),
+      getLatestFeeSnapshot(),
+    ]);
 
-      // Serialize BigInt values to strings for JSON
-      res.json({
-        utxoHealth: {
-          totalUtxos: health.totalUtxos,
-          dustCount: health.dustCount,
-          dustValue: health.dustValue.toString(),
-          totalValue: health.totalValue.toString(),
-          avgUtxoSize: health.avgUtxoSize.toString(),
-          smallestUtxo: health.smallestUtxo.toString(),
-          largestUtxo: health.largestUtxo.toString(),
-          consolidationCandidates: health.consolidationCandidates,
-        },
-        feeSnapshot,
-        settings: settings || DEFAULT_AUTOPILOT_SETTINGS,
-      });
-    } catch (error) {
-      log.error('Get autopilot status error', { error: getErrorMessage(error) });
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Failed to get autopilot status',
-      });
-    }
-  }
+    // Serialize BigInt values to strings for JSON
+    res.json({
+      utxoHealth: {
+        totalUtxos: health.totalUtxos,
+        dustCount: health.dustCount,
+        dustValue: health.dustValue.toString(),
+        totalValue: health.totalValue.toString(),
+        avgUtxoSize: health.avgUtxoSize.toString(),
+        smallestUtxo: health.smallestUtxo.toString(),
+        largestUtxo: health.largestUtxo.toString(),
+        consolidationCandidates: health.consolidationCandidates,
+      },
+      feeSnapshot,
+      settings: settings || DEFAULT_AUTOPILOT_SETTINGS,
+    });
+  })
 );
 
 export default router;

@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, HashRouter } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Login } from './components/Login';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Lazy-loaded routes for code splitting
 // These are loaded on-demand to reduce initial bundle size
@@ -27,14 +28,10 @@ const AISettings = lazy(() => import('./components/AISettings'));
 const Monitoring = lazy(() => import('./components/Monitoring'));
 const FeatureFlags = lazy(() => import('./components/FeatureFlags').then(m => ({ default: m.FeatureFlags })));
 const AnimatedBackground = lazy(() => import('./components/AnimatedBackground').then(m => ({ default: m.AnimatedBackground })));
-import { CurrencyProvider } from './contexts/CurrencyContext';
-import { UserProvider, useUser } from './contexts/UserContext';
-import { NotificationProvider } from './contexts/NotificationContext';
-import { AppNotificationProvider } from './contexts/AppNotificationContext';
-import { SidebarProvider } from './contexts/SidebarContext';
+import { useUser } from './contexts/UserContext';
 import { NotificationContainer } from './components/NotificationToast';
 import { useNotifications } from './contexts/NotificationContext';
-import { QueryProvider } from './providers/QueryProvider';
+import { AppProviders } from './providers/AppProviders';
 import { useWebSocketQueryInvalidation } from './hooks/websocket';
 import * as authApi from './src/api/auth';
 import { createLogger } from './utils/logger';
@@ -100,30 +97,30 @@ const AppRoutes: React.FC = () => {
       <Layout darkMode={isDarkMode} toggleTheme={toggleTheme} onLogout={logout}>
         <Routes>
           {/* Core routes with page-specific skeletons */}
-          <Route path="/" element={<Suspense fallback={<DashboardSkeleton />}><Dashboard /></Suspense>} />
-          <Route path="/wallets" element={<Suspense fallback={<ListSkeleton />}><WalletList /></Suspense>} />
-          <Route path="/wallets/:id" element={<Suspense fallback={<WalletDetailSkeleton />}><WalletDetail /></Suspense>} />
+          <Route path="/" element={<ErrorBoundary><Suspense fallback={<DashboardSkeleton />}><Dashboard /></Suspense></ErrorBoundary>} />
+          <Route path="/wallets" element={<ErrorBoundary><Suspense fallback={<ListSkeleton />}><WalletList /></Suspense></ErrorBoundary>} />
+          <Route path="/wallets/:id" element={<ErrorBoundary><Suspense fallback={<WalletDetailSkeleton />}><WalletDetail /></Suspense></ErrorBoundary>} />
 
           {/* Lazy-loaded routes */}
-          <Route path="/wallets/create" element={<Suspense fallback={<SettingsSkeleton />}><CreateWallet /></Suspense>} />
-          <Route path="/wallets/import" element={<Suspense fallback={<SettingsSkeleton />}><ImportWallet /></Suspense>} />
-          <Route path="/wallets/:id/send" element={<Suspense fallback={<SettingsSkeleton />}><SendTransactionPage /></Suspense>} />
-          <Route path="/devices" element={<Suspense fallback={<ListSkeleton />}><DeviceList /></Suspense>} />
-          <Route path="/devices/connect" element={<Suspense fallback={<SettingsSkeleton />}><ConnectDevice /></Suspense>} />
-          <Route path="/devices/:id" element={<Suspense fallback={<WalletDetailSkeleton />}><DeviceDetail /></Suspense>} />
-          <Route path="/account" element={<Suspense fallback={<SettingsSkeleton />}><Account /></Suspense>} />
-          <Route path="/settings" element={<Suspense fallback={<SettingsSkeleton />}><Settings /></Suspense>} />
+          <Route path="/wallets/create" element={<ErrorBoundary><Suspense fallback={<SettingsSkeleton />}><CreateWallet /></Suspense></ErrorBoundary>} />
+          <Route path="/wallets/import" element={<ErrorBoundary><Suspense fallback={<SettingsSkeleton />}><ImportWallet /></Suspense></ErrorBoundary>} />
+          <Route path="/wallets/:id/send" element={<ErrorBoundary><Suspense fallback={<SettingsSkeleton />}><SendTransactionPage /></Suspense></ErrorBoundary>} />
+          <Route path="/devices" element={<ErrorBoundary><Suspense fallback={<ListSkeleton />}><DeviceList /></Suspense></ErrorBoundary>} />
+          <Route path="/devices/connect" element={<ErrorBoundary><Suspense fallback={<SettingsSkeleton />}><ConnectDevice /></Suspense></ErrorBoundary>} />
+          <Route path="/devices/:id" element={<ErrorBoundary><Suspense fallback={<WalletDetailSkeleton />}><DeviceDetail /></Suspense></ErrorBoundary>} />
+          <Route path="/account" element={<ErrorBoundary><Suspense fallback={<SettingsSkeleton />}><Account /></Suspense></ErrorBoundary>} />
+          <Route path="/settings" element={<ErrorBoundary><Suspense fallback={<SettingsSkeleton />}><Settings /></Suspense></ErrorBoundary>} />
 
           {/* Admin routes - lazy-loaded */}
-          <Route path="/admin/node-config" element={<Suspense fallback={<SettingsSkeleton />}><NodeConfig /></Suspense>} />
-          <Route path="/admin/users-groups" element={<Suspense fallback={<ListSkeleton />}><UsersGroups /></Suspense>} />
-          <Route path="/admin/settings" element={<Suspense fallback={<SettingsSkeleton />}><SystemSettings /></Suspense>} />
-          <Route path="/admin/variables" element={<Suspense fallback={<SettingsSkeleton />}><Variables /></Suspense>} />
-          <Route path="/admin/backup" element={<Suspense fallback={<SettingsSkeleton />}><BackupRestore /></Suspense>} />
-          <Route path="/admin/audit-logs" element={<Suspense fallback={<ListSkeleton />}><AuditLogs /></Suspense>} />
-          <Route path="/admin/ai" element={<Suspense fallback={<SettingsSkeleton />}><AISettings /></Suspense>} />
-          <Route path="/admin/monitoring" element={<Suspense fallback={<DashboardSkeleton />}><Monitoring /></Suspense>} />
-          <Route path="/admin/feature-flags" element={<Suspense fallback={<ListSkeleton />}><FeatureFlags /></Suspense>} />
+          <Route path="/admin/node-config" element={<ErrorBoundary><Suspense fallback={<SettingsSkeleton />}><NodeConfig /></Suspense></ErrorBoundary>} />
+          <Route path="/admin/users-groups" element={<ErrorBoundary><Suspense fallback={<ListSkeleton />}><UsersGroups /></Suspense></ErrorBoundary>} />
+          <Route path="/admin/settings" element={<ErrorBoundary><Suspense fallback={<SettingsSkeleton />}><SystemSettings /></Suspense></ErrorBoundary>} />
+          <Route path="/admin/variables" element={<ErrorBoundary><Suspense fallback={<SettingsSkeleton />}><Variables /></Suspense></ErrorBoundary>} />
+          <Route path="/admin/backup" element={<ErrorBoundary><Suspense fallback={<SettingsSkeleton />}><BackupRestore /></Suspense></ErrorBoundary>} />
+          <Route path="/admin/audit-logs" element={<ErrorBoundary><Suspense fallback={<ListSkeleton />}><AuditLogs /></Suspense></ErrorBoundary>} />
+          <Route path="/admin/ai" element={<ErrorBoundary><Suspense fallback={<SettingsSkeleton />}><AISettings /></Suspense></ErrorBoundary>} />
+          <Route path="/admin/monitoring" element={<ErrorBoundary><Suspense fallback={<DashboardSkeleton />}><Monitoring /></Suspense></ErrorBoundary>} />
+          <Route path="/admin/feature-flags" element={<ErrorBoundary><Suspense fallback={<ListSkeleton />}><FeatureFlags /></Suspense></ErrorBoundary>} />
           <Route path="/admin" element={<Navigate to="/admin/settings" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -139,19 +136,9 @@ const AppRoutes: React.FC = () => {
 const App: React.FC = () => {
   return (
     <HashRouter>
-      <QueryProvider>
-        <UserProvider>
-          <CurrencyProvider>
-            <NotificationProvider>
-              <AppNotificationProvider>
-                <SidebarProvider>
-                  <AppRoutes />
-                </SidebarProvider>
-              </AppNotificationProvider>
-            </NotificationProvider>
-          </CurrencyProvider>
-        </UserProvider>
-      </QueryProvider>
+      <AppProviders>
+        <AppRoutes />
+      </AppProviders>
     </HashRouter>
   );
 };

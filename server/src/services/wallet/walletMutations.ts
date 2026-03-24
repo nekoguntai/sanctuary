@@ -10,7 +10,7 @@ import { hookRegistry, Operations } from '../hooks';
 import { ForbiddenError } from '../../errors';
 import type { WalletWithBalance } from './types';
 
-const log = createLogger('WALLET');
+const log = createLogger('WALLET:SVC');
 
 /**
  * Update wallet

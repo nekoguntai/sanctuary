@@ -14,7 +14,7 @@ import { getErrorMessage } from '../../../utils/errors';
 import * as methods from './methods';
 import type { TransactionDetails, BitcoinNetwork } from './types';
 
-const log = createLogger('ELECTRUM');
+const log = createLogger('ELECTRUM:SVC_API');
 
 /** Callback type for single requests */
 export type RequestFn = (method: string, params?: unknown[]) => Promise<unknown>;

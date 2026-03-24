@@ -9,7 +9,7 @@
 import { z } from 'zod';
 import { createLogger } from '../../../utils/logger';
 
-const log = createLogger('ELECTRUM');
+const log = createLogger('ELECTRUM:SVC');
 
 // ==============================================================================
 // ZOD SCHEMAS FOR ELECTRUM RESPONSE VALIDATION

@@ -14,7 +14,7 @@ import {
   WALLET_LOG_CLEANUP_INTERVAL_MS,
 } from '../constants';
 
-const log = createLogger('WALLET_LOG_BUFFER');
+const log = createLogger('WALLET_LOG:SVC');
 
 class WalletLogBuffer {
   private buffers: Map<string, WalletLogEntry[]> = new Map();

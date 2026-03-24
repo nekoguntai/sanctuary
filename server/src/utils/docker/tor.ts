@@ -10,7 +10,7 @@ import { getErrorMessage } from '../errors';
 import { DOCKER_PROXY_URL, listAllContainers, discoverProjectName } from './common';
 import type { ContainerInfo, ContainerStatus, ContainerActionResult } from './types';
 
-const log = createLogger('DOCKER');
+const log = createLogger('UTIL:DOCKER_TOR');
 
 // Pattern to match tor containers (supports dynamic project names)
 // Container names will be like: {project}-tor-1 or sanctuary-tor

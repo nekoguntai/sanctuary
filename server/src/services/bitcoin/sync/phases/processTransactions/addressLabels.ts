@@ -9,7 +9,7 @@ import { db as prisma } from '../../../../../repositories/db';
 import { createLogger } from '../../../../../utils/logger';
 import type { TransactionCreateData } from '../../types';
 
-const log = createLogger('SYNC-TX');
+const log = createLogger('BITCOIN:SVC_SYNC_TX');
 
 /**
  * Auto-apply address labels to new transactions

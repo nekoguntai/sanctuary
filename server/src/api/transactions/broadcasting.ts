@@ -2,17 +2,22 @@
  * Transactions - Broadcasting Router
  *
  * Endpoints for broadcasting signed transactions and PSBTs.
+ *
+ * NOTE: These routes intentionally keep try/catch for audit logging
+ * on failed broadcasts before re-throwing to asyncHandler.
  */
 
 import { Router, Request, Response } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
+import { asyncHandler } from '../../errors/errorHandler';
+import { ValidationError, ForbiddenError } from '../../errors/ApiError';
 import { auditService, AuditCategory, AuditAction } from '../../services/auditService';
 import { policyEvaluationEngine } from '../../services/vaultPolicy';
 
 const router = Router();
-const log = createLogger('TX:BROADCAST');
+const log = createLogger('TX_BROADCAST:ROUTE');
 
 /**
  * POST /api/v1/wallets/:walletId/transactions/broadcast
@@ -21,69 +26,62 @@ const log = createLogger('TX:BROADCAST');
  * - signedPsbtBase64: Signed PSBT from Ledger or file upload
  * - rawTxHex: Raw transaction hex from Trezor (fully signed)
  */
-router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('edit'), async (req: Request, res: Response) => {
-  try {
-    const walletId = req.walletId!;
-    const {
-      signedPsbtBase64,
-      rawTxHex, // For Trezor: fully signed transaction hex
-      recipient,
-      amount,
-      fee,
-      label,
-      memo,
-      utxos,
-    } = req.body;
+router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('edit'), asyncHandler(async (req: Request, res: Response) => {
+  const walletId = req.walletId!;
+  const {
+    signedPsbtBase64,
+    rawTxHex, // For Trezor: fully signed transaction hex
+    recipient,
+    amount,
+    fee,
+    label,
+    memo,
+    utxos,
+  } = req.body;
 
-    // Validation - require either signedPsbtBase64 or rawTxHex
-    if (!signedPsbtBase64 && !rawTxHex) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Either signedPsbtBase64 or rawTxHex is required',
-      });
-    }
+  // Validation - require either signedPsbtBase64 or rawTxHex
+  if (!signedPsbtBase64 && !rawTxHex) {
+    throw new ValidationError('Either signedPsbtBase64 or rawTxHex is required');
+  }
 
-    // Re-evaluate policies before broadcast (guard against drift).
-    // Extract from PSBT when available; fall back to client-supplied fields.
-    const txService = await import('../../services/bitcoin/transactionService');
-    let evalRecipient = recipient;
-    let evalAmount = amount;
+  // Re-evaluate policies before broadcast (guard against drift).
+  // Extract from PSBT when available; fall back to client-supplied fields.
+  const txService = await import('../../services/bitcoin/transactionService');
+  let evalRecipient = recipient;
+  let evalAmount = amount;
 
-    if (signedPsbtBase64 && (!evalRecipient || !evalAmount)) {
-      try {
-        const psbtInfo = txService.getPSBTInfo(signedPsbtBase64);
-        const firstOutput = psbtInfo.outputs[0];
-        if (firstOutput) {
-          evalRecipient = evalRecipient || firstOutput.address;
-          evalAmount = evalAmount || firstOutput.value;
-        }
-      } catch (parseErr) {
-        log.debug('Could not parse PSBT for policy eval', { error: getErrorMessage(parseErr) });
+  if (signedPsbtBase64 && (!evalRecipient || !evalAmount)) {
+    try {
+      const psbtInfo = txService.getPSBTInfo(signedPsbtBase64);
+      const firstOutput = psbtInfo.outputs[0];
+      if (firstOutput) {
+        evalRecipient = evalRecipient || firstOutput.address;
+        evalAmount = evalAmount || firstOutput.value;
       }
+    } catch (parseErr) {
+      log.debug('Could not parse PSBT for policy eval', { error: getErrorMessage(parseErr) });
     }
+  }
 
-    if (evalRecipient && evalAmount) {
-      const policyResult = await policyEvaluationEngine.evaluatePolicies({
+  if (evalRecipient && evalAmount) {
+    const policyResult = await policyEvaluationEngine.evaluatePolicies({
+      walletId,
+      userId: req.user!.userId,
+      recipient: evalRecipient,
+      amount: BigInt(evalAmount),
+    });
+
+    if (!policyResult.allowed) {
+      log.warn('Broadcast blocked by policy', {
         walletId,
-        userId: req.user!.userId,
-        recipient: evalRecipient,
-        amount: BigInt(evalAmount),
+        triggered: policyResult.triggered.map(t => t.policyName),
       });
-
-      if (!policyResult.allowed) {
-        log.warn('Broadcast blocked by policy', {
-          walletId,
-          triggered: policyResult.triggered.map(t => t.policyName),
-        });
-        return res.status(403).json({
-          error: 'Forbidden',
-          message: 'Transaction blocked by vault policy',
-          policyEvaluation: policyResult,
-        });
-      }
+      throw new ForbiddenError('Transaction blocked by vault policy');
     }
+  }
 
-    // Broadcast transaction
+  // Broadcast transaction (wrap in try/catch for audit logging on failure)
+  try {
     const result = await txService.broadcastAndSave(walletId, signedPsbtBase64, {
       recipient,
       amount,
@@ -116,9 +114,7 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
 
     res.json(result);
   } catch (error) {
-    log.error('Broadcast transaction error', { error });
-
-    // Audit log failed broadcast
+    // Audit log failed broadcast before re-throwing
     await auditService.logFromRequest(req, AuditAction.TRANSACTION_BROADCAST_FAILED, AuditCategory.WALLET, {
       success: false,
       errorMsg: getErrorMessage(error),
@@ -129,64 +125,54 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
       },
     });
 
-    res.status(400).json({
-      error: 'Bad Request',
-      message: getErrorMessage(error, 'Failed to broadcast transaction'),
-    });
+    throw error;
   }
-});
+}));
 
 /**
  * POST /api/v1/wallets/:walletId/psbt/broadcast
  * Broadcast a signed PSBT
  */
-router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), async (req: Request, res: Response) => {
-  try {
-    const walletId = req.walletId!;
-    const { signedPsbt, label, memo } = req.body;
+router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), asyncHandler(async (req: Request, res: Response) => {
+  const walletId = req.walletId!;
+  const { signedPsbt, label, memo } = req.body;
 
-    // Validation
-    if (!signedPsbt) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'signedPsbt is required',
-      });
-    }
+  // Validation
+  if (!signedPsbt) {
+    throw new ValidationError('signedPsbt is required');
+  }
 
-    // Parse PSBT to get transaction details
-    const txService = await import('../../services/bitcoin/transactionService');
-    const psbtInfo = txService.getPSBTInfo(signedPsbt);
+  // Parse PSBT to get transaction details
+  const txService = await import('../../services/bitcoin/transactionService');
+  const psbtInfo = txService.getPSBTInfo(signedPsbt);
 
-    // Calculate amount from outputs (exclude change)
-    // For simplicity, assume last output is change if there are 2+ outputs
-    const outputs = psbtInfo.outputs;
-    const recipientOutput = outputs[0];
-    const amount = recipientOutput?.value || 0;
-    const recipientAddress = recipientOutput?.address || '';
+  // Calculate amount from outputs (exclude change)
+  // For simplicity, assume last output is change if there are 2+ outputs
+  const outputs = psbtInfo.outputs;
+  const recipientOutput = outputs[0];
+  const amount = recipientOutput?.value || 0;
+  const recipientAddress = recipientOutput?.address || '';
 
-    // Evaluate policies using data extracted from the PSBT itself (not client metadata)
-    if (recipientAddress && amount > 0) {
-      const policyResult = await policyEvaluationEngine.evaluatePolicies({
+  // Evaluate policies using data extracted from the PSBT itself (not client metadata)
+  if (recipientAddress && amount > 0) {
+    const policyResult = await policyEvaluationEngine.evaluatePolicies({
+      walletId,
+      userId: req.user!.userId,
+      recipient: recipientAddress,
+      amount: BigInt(amount),
+    });
+
+    if (!policyResult.allowed) {
+      log.warn('PSBT broadcast blocked by policy', {
         walletId,
-        userId: req.user!.userId,
-        recipient: recipientAddress,
-        amount: BigInt(amount),
+        triggered: policyResult.triggered.map(t => t.policyName),
       });
-
-      if (!policyResult.allowed) {
-        log.warn('PSBT broadcast blocked by policy', {
-          walletId,
-          triggered: policyResult.triggered.map(t => t.policyName),
-        });
-        return res.status(403).json({
-          error: 'Forbidden',
-          message: 'Transaction blocked by vault policy',
-          policyEvaluation: policyResult,
-        });
-      }
+      throw new ForbiddenError('Transaction blocked by vault policy');
     }
+  }
 
-    // Broadcast transaction
+  // Broadcast transaction (wrap in try/catch for audit logging on failure)
+  try {
     const result = await txService.broadcastAndSave(walletId, signedPsbt, {
       recipient: recipientAddress,
       amount,
@@ -220,9 +206,7 @@ router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), as
       broadcasted: result.broadcasted,
     });
   } catch (error) {
-    log.error('PSBT broadcast error', { error });
-
-    // Audit log failed broadcast
+    // Audit log failed broadcast before re-throwing
     await auditService.logFromRequest(req, AuditAction.TRANSACTION_BROADCAST_FAILED, AuditCategory.WALLET, {
       success: false,
       errorMsg: getErrorMessage(error),
@@ -231,11 +215,8 @@ router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), as
       },
     });
 
-    res.status(400).json({
-      error: 'Bad Request',
-      message: getErrorMessage(error, 'Failed to broadcast transaction'),
-    });
+    throw error;
   }
-});
+}));
 
 export default router;

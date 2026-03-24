@@ -9,7 +9,7 @@ import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext } from '../types';
 
-const log = createLogger('SYNC-HISTORIES');
+const log = createLogger('BITCOIN:SVC_SYNC_HISTORIES');
 
 /** Number of addresses to fetch per batch RPC call */
 const BATCH_SIZE = 50;

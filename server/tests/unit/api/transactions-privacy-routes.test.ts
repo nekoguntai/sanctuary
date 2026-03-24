@@ -50,6 +50,7 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+import { errorHandler } from '../../../src/errors/errorHandler';
 import privacyRouter from '../../../src/api/transactions/privacy';
 
 describe('Transactions Privacy Routes', () => {
@@ -65,6 +66,7 @@ describe('Transactions Privacy Routes', () => {
       next();
     });
     app.use('/api/v1', privacyRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -118,7 +120,7 @@ describe('Transactions Privacy Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/privacy');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('An unexpected error occurred');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns 401 for utxo privacy lookup without authenticated user', async () => {
@@ -127,7 +129,7 @@ describe('Transactions Privacy Routes', () => {
       .set('x-no-user', 'true');
 
     expect(response.status).toBe(401);
-    expect(response.body).toEqual({ error: 'Unauthorized' });
+    expect(response.body).toMatchObject({ error: 'Unauthorized' });
   });
 
   it('returns 404 when requested utxo privacy target does not exist', async () => {
@@ -136,7 +138,7 @@ describe('Transactions Privacy Routes', () => {
     const response = await request(app).get('/api/v1/utxos/missing/privacy');
 
     expect(response.status).toBe(404);
-    expect(response.body).toEqual({ error: 'UTXO not found' });
+    expect(response.body).toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('returns 403 when user lacks access to utxo wallet', async () => {
@@ -145,7 +147,7 @@ describe('Transactions Privacy Routes', () => {
     const response = await request(app).get('/api/v1/utxos/utxo-1/privacy');
 
     expect(response.status).toBe(403);
-    expect(response.body).toEqual({ error: 'Access denied' });
+    expect(response.body).toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('returns single-utxo privacy score when access is granted', async () => {
@@ -166,7 +168,7 @@ describe('Transactions Privacy Routes', () => {
     const response = await request(app).get('/api/v1/utxos/utxo-1/privacy');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('An unexpected error occurred');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('validates spend-analysis utxoIds payload type', async () => {
@@ -217,6 +219,6 @@ describe('Transactions Privacy Routes', () => {
       .send({ utxoIds: ['utxo-1', 'utxo-2'] });
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('An unexpected error occurred');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

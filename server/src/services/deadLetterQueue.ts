@@ -16,7 +16,7 @@ import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 import { getDistributedCache } from '../infrastructure';
 
-const log = createLogger('DLQ');
+const log = createLogger('DLQ:SVC');
 
 // =============================================================================
 // Types

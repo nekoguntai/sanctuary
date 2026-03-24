@@ -8,7 +8,7 @@
 import type { IRateLimiter, RateLimitResult } from './types';
 import { createLogger } from '../../utils/logger';
 
-const log = createLogger('RATE_LIMIT');
+const log = createLogger('RATE_LIMIT:SVC_MEMORY');
 
 // Maximum number of unique keys to track (prevents memory exhaustion from IP rotation attacks)
 const MAX_WINDOWS = 100000;

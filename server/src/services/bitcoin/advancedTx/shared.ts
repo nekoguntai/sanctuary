@@ -10,7 +10,7 @@ import { createLogger } from '../../../utils/logger';
 import { safeJsonParse, SystemSettingSchemas } from '../../../utils/safeJson';
 import { DEFAULT_DUST_THRESHOLD } from '../../../constants';
 
-export const log = createLogger('ADVANCED_TX');
+export const log = createLogger('BITCOIN:SVC_ADVANCED_TX');
 
 /**
  * RBF (Replace-By-Fee) Configuration

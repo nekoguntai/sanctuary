@@ -15,7 +15,7 @@ import {
 } from './broadcasts';
 import type { TransactionNotification } from './types';
 
-const log = createLogger('NOTIFY');
+const log = createLogger('WS:NOTIFY_SUB');
 
 /**
  * Subscribe to new blocks with retry logic

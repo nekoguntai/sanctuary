@@ -40,6 +40,7 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+import { errorHandler } from '../../../src/errors/errorHandler';
 import addressesRouter from '../../../src/api/transactions/addresses';
 
 describe('Transactions Addresses Routes (Extended)', () => {
@@ -49,6 +50,7 @@ describe('Transactions Addresses Routes (Extended)', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1', addressesRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -227,7 +229,7 @@ describe('Transactions Addresses Routes (Extended)', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/addresses');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to fetch addresses');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns address summary with split used/unused balances', async () => {
@@ -277,7 +279,7 @@ describe('Transactions Addresses Routes (Extended)', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/addresses/summary');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to fetch address summary');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns 404 when generating addresses for a missing wallet', async () => {
@@ -381,6 +383,6 @@ describe('Transactions Addresses Routes (Extended)', () => {
       .send({ count: 2 });
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to generate addresses');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

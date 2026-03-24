@@ -7,7 +7,7 @@
 import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 
-const log = createLogger('TRANSFER');
+const log = createLogger('TRANSFER:SVC');
 
 /**
  * Expire old transfers (called by maintenance job)

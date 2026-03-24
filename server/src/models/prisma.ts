@@ -24,7 +24,7 @@ import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 import { dbQueryDuration } from '../observability/metrics';
 
-const log = createLogger('DB');
+const log = createLogger('INFRA:DB');
 
 // Slow query threshold in milliseconds
 const SLOW_QUERY_THRESHOLD_MS = 100;

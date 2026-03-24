@@ -53,8 +53,24 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+// Mock requestContext (needed by errorHandler and auth middleware)
+vi.mock('../../../src/utils/requestContext', () => ({
+  requestContext: {
+    getRequestId: () => 'test-request-id',
+    setUser: vi.fn(),
+    get: () => undefined,
+    run: (_ctx: unknown, fn: () => unknown) => fn(),
+    getUserId: () => undefined,
+    getTraceId: () => undefined,
+    setTraceId: vi.fn(),
+    getDuration: () => 0,
+    generateRequestId: () => 'test-request-id',
+  },
+}));
+
 // Import router and mocked modules after mocks
 import pushRouter from '../../../src/api/push';
+import { errorHandler } from '../../../src/errors/errorHandler';
 import { pushDeviceRepository, auditLogRepository } from '../../../src/repositories';
 
 // Get typed references to mocked functions
@@ -93,6 +109,7 @@ describe('Push API Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/push', pushRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -168,9 +185,16 @@ describe('Push API Routes', () => {
           },
         };
 
-        pushRouter.handle(req, res, (err?: Error) => {
+        pushRouter.handle(req, res, (err?: any) => {
           if (err) {
-            reject(err);
+            // Simulate errorHandler: ApiErrors get their status code, generic errors get 500
+            const statusCode = err.statusCode || 500;
+            const body = err.toResponse
+              ? err.toResponse()
+              : { error: 'Internal', code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' };
+            res.statusCode = statusCode;
+            res.body = body;
+            resolve({ status: statusCode, headers: res.headers, body });
             return;
           }
           reject(new Error(`Route not handled: ${this.method} ${normalizedUrl}`));
@@ -312,7 +336,7 @@ describe('Push API Routes', () => {
         });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Bad Request');
+      expect(res.body.code).toBe('INVALID_INPUT');
       expect(res.body.message).toBe('Device token is required');
     });
 
@@ -325,7 +349,7 @@ describe('Push API Routes', () => {
         });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Bad Request');
+      expect(res.body.code).toBe('INVALID_INPUT');
       expect(res.body.message).toBe('Platform must be "ios" or "android"');
     });
 
@@ -441,8 +465,8 @@ describe('Push API Routes', () => {
         });
 
       expect(res.status).toBe(500);
-      expect(res.body.error).toBe('Internal Server Error');
-      expect(res.body.message).toBe('Failed to register device');
+      expect(res.body.code).toBe('INTERNAL_ERROR');
+      expect(res.body.message).toBe('An unexpected error occurred');
     });
   });
 
@@ -524,7 +548,7 @@ describe('Push API Routes', () => {
         .send({ token: validAndroidToken });
 
       expect(res.status).toBe(500);
-      expect(res.body.message).toBe('Failed to unregister device');
+      expect(res.body.message).toBe('An unexpected error occurred');
     });
   });
 
@@ -588,7 +612,7 @@ describe('Push API Routes', () => {
         .set('Authorization', 'Bearer test-token');
 
       expect(res.status).toBe(500);
-      expect(res.body.message).toBe('Failed to list devices');
+      expect(res.body.message).toBe('An unexpected error occurred');
     });
   });
 
@@ -619,7 +643,7 @@ describe('Push API Routes', () => {
         .set('Authorization', 'Bearer test-token');
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toBe('Not Found');
+      expect(res.body.code).toBe('NOT_FOUND');
       expect(res.body.message).toBe('Device not found');
     });
 
@@ -653,7 +677,7 @@ describe('Push API Routes', () => {
         .set('Authorization', 'Bearer test-token');
 
       expect(res.status).toBe(500);
-      expect(res.body.message).toBe('Failed to delete device');
+      expect(res.body.message).toBe('An unexpected error occurred');
     });
   });
 
@@ -734,7 +758,7 @@ describe('Push API Routes', () => {
         .set('X-Gateway-Timestamp', timestamp);
 
       expect(res.status).toBe(500);
-      expect(res.body.message).toBe('Failed to fetch devices');
+      expect(res.body.message).toBe('An unexpected error occurred');
     });
   });
 
@@ -794,7 +818,7 @@ describe('Push API Routes', () => {
         .set('X-Gateway-Timestamp', timestamp);
 
       expect(res.status).toBe(500);
-      expect(res.body.message).toBe('Failed to remove device');
+      expect(res.body.message).toBe('An unexpected error occurred');
     });
   });
 
@@ -988,7 +1012,7 @@ describe('Push API Routes', () => {
         .send(body);
 
       expect(res.status).toBe(500);
-      expect(res.body.message).toBe('Failed to log audit event');
+      expect(res.body.message).toBe('An unexpected error occurred');
     });
   });
 });

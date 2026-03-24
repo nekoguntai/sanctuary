@@ -12,7 +12,7 @@
 import { notificationChannelRegistry, type TransactionNotification, type DraftNotification } from './channels';
 import { createLogger } from '../../utils/logger';
 
-const log = createLogger('NOTIFY');
+const log = createLogger('NOTIFY:SVC');
 
 // Re-export types for backward compatibility
 export type TransactionData = TransactionNotification;

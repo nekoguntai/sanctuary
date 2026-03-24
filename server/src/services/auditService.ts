@@ -20,7 +20,7 @@ import type { AuditCategory as RepoAuditCategory } from '../repositories/auditLo
 import { createLogger } from '../utils/logger';
 import { Request } from 'express';
 
-const log = createLogger('AUDIT');
+const log = createLogger('AUDIT:SVC');
 
 /**
  * Audit event categories

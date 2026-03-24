@@ -30,6 +30,7 @@ vi.mock('../../../src/utils/logger', () => ({
 }));
 
 import crossWalletRouter from '../../../src/api/transactions/crossWallet';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 describe('transactions cross-wallet routes', () => {
   let app: Express;
@@ -42,6 +43,7 @@ describe('transactions cross-wallet routes', () => {
       next();
     });
     app.use('/api/v1', crossWalletRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -280,8 +282,7 @@ describe('transactions cross-wallet routes', () => {
 
     expect(response.status).toBe(500);
     expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
+      error: 'Internal',
     });
   });
 
@@ -419,8 +420,7 @@ describe('transactions cross-wallet routes', () => {
 
     expect(response.status).toBe(500);
     expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
+      error: 'Internal',
     });
   });
 
@@ -506,8 +506,7 @@ describe('transactions cross-wallet routes', () => {
 
     expect(response.status).toBe(500);
     expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
+      error: 'Internal',
     });
   });
 });

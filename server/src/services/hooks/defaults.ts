@@ -17,7 +17,7 @@ import {
 } from './types';
 import { createLogger } from '../../utils/logger';
 
-const auditLog = createLogger('AUDIT');
+const auditLog = createLogger('HOOK:AUDIT');
 
 /**
  * Register default audit logging hooks

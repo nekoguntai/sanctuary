@@ -16,7 +16,7 @@ import type {
   ProxyConfig,
 } from './types';
 
-const log = createLogger('ELECTRUM_POOL:CONNECTION');
+const log = createLogger('ELECTRUM_POOL:SVC_CONNECTION');
 
 /**
  * Create a new connection to a specific server or auto-select one.

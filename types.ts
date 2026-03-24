@@ -1,21 +1,96 @@
 /**
  * Central Type Definitions
  *
- * Single source of truth for all shared types across the Sanctuary codebase.
- * This file contains both UI-facing types (enums for display) and API-facing types.
+ * Frontend-facing types for the Sanctuary codebase.
+ * Domain enums and shared types are imported from shared/types/domain.ts
+ * which is the canonical source for types used across frontend and server.
+ *
+ * This file re-exports shared types and adds frontend-specific interfaces.
  */
+
+// Import shared domain types for local use within this file
+// These are re-exported below so existing imports from types.ts keep working
+import {
+  WalletType,
+  type WalletScriptType,
+  type WalletNetwork,
+  type WalletRole,
+  type DeviceRole,
+  type TransactionType,
+  type TransactionOutputType,
+  type RbfStatus,
+  type SelectionStrategy,
+  type DraftStatus,
+  type TransferStatus,
+  type TransferResourceType,
+  type SyncStatus,
+  type SyncPriority,
+  type ConnectionMode,
+  type LoadBalancingStrategy,
+  type PrivacyGrade,
+  type HealthStatus,
+  type Quorum,
+} from './shared/types/domain';
+
+import type {
+  ApiErrorResponse,
+  ApiSuccessResponse,
+  PaginationParams,
+  CursorPaginationParams,
+  PaginatedResponse,
+  CursorPaginatedResponse,
+  SortDirection,
+  SortParams,
+  DateRangeParams,
+  FeeEstimates,
+  PriceSource,
+  AggregatedPrice,
+} from './shared/types/api';
+
+// Re-export all shared domain types (canonical source: shared/types/domain.ts)
+export {
+  WalletType,
+};
+export type {
+  WalletScriptType,
+  WalletNetwork,
+  WalletRole,
+  DeviceRole,
+  TransactionType,
+  TransactionOutputType,
+  RbfStatus,
+  SelectionStrategy,
+  DraftStatus,
+  TransferStatus,
+  TransferResourceType,
+  SyncStatus,
+  SyncPriority,
+  ConnectionMode,
+  LoadBalancingStrategy,
+  PrivacyGrade,
+  HealthStatus,
+  Quorum,
+};
+
+// Re-export shared API types
+export type {
+  ApiErrorResponse,
+  ApiSuccessResponse,
+  PaginationParams,
+  CursorPaginationParams,
+  PaginatedResponse,
+  CursorPaginatedResponse,
+  SortDirection,
+  SortParams,
+  DateRangeParams,
+  FeeEstimates,
+  PriceSource,
+  AggregatedPrice,
+};
 
 // ============================================================================
 // WALLET TYPE ENUMS & ALIASES
 // ============================================================================
-
-/**
- * WalletType enum - values match API/database format
- */
-export enum WalletType {
-  SINGLE_SIG = 'single_sig',
-  MULTI_SIG = 'multi_sig',
-}
 
 /**
  * Display labels for wallet types (for UI rendering)
@@ -42,15 +117,7 @@ export function isMultisigType(type: WalletType | string | undefined): boolean {
   return type === WalletType.MULTI_SIG || type === 'multi_sig';
 }
 
-/**
- * Script type for wallet address derivation
- */
-export type WalletScriptType = 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
-
-/**
- * Bitcoin network
- */
-export type WalletNetwork = 'mainnet' | 'testnet' | 'regtest' | 'signet';
+// WalletScriptType and WalletNetwork are re-exported from shared/types/domain above
 
 // ============================================================================
 // HARDWARE DEVICE ENUMS & TYPES
@@ -378,8 +445,7 @@ export interface Group {
 // NODE CONFIGURATION
 // ============================================================================
 
-export type ConnectionMode = 'singleton' | 'pool';
-export type LoadBalancingStrategy = 'round_robin' | 'least_connections' | 'failover_only';
+// ConnectionMode and LoadBalancingStrategy are re-exported from shared/types/domain above
 
 export interface NodeConfig {
   type: 'electrum'; // Only Electrum is supported
@@ -560,7 +626,7 @@ export interface Device {
   groupRole?: string;
 }
 
-export type DeviceRole = 'owner' | 'viewer' | null;
+// DeviceRole is re-exported from shared/types/domain above
 
 export interface DeviceShareInfo {
   group: { id: string; name: string } | null;
@@ -730,10 +796,7 @@ export interface PendingTransaction {
 // WALLET TYPES
 // ============================================================================
 
-export interface Quorum {
-  m: number;
-  n: number;
-}
+// Quorum is re-exported from shared/types/domain above
 
 /**
  * Helper to get the 'm' value from a Quorum (required signatures)
@@ -753,7 +816,7 @@ export function getQuorumN(quorum: Quorum | number | undefined | null, totalSign
   return typeof quorum === 'number' ? (totalSigners ?? fallback) : quorum.n;
 }
 
-export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
+// WalletRole is re-exported from shared/types/domain above
 
 export interface Wallet {
   id: string;
@@ -806,13 +869,7 @@ export interface FeeEstimate {
   minimumFee?: number;
 }
 
-export interface FeeEstimates {
-  fastest: number;
-  halfHour: number;
-  hour: number;
-  economy: number;
-  minimum?: number;
-}
+// FeeEstimates is re-exported from shared/types/api above
 
 // ============================================================================
 // BITCOIN TRANSACTION DETAILS (for Electrum/mempool.space responses)
@@ -935,20 +992,7 @@ export interface WebSocketCallbacks {
 // UTXO SELECTION STRATEGIES
 // ============================================================================
 
-/**
- * UTXO selection strategy for transaction building
- * - privacy: Minimize address linking and metadata leakage
- * - efficiency: Minimize fees and optimize transaction size
- * - oldest_first: Select oldest UTXOs first (useful for coin age)
- * - largest_first: Select largest UTXOs first (consolidation)
- * - smallest_first: Select smallest UTXOs first (dust cleanup)
- */
-export type SelectionStrategy =
-  | 'privacy'
-  | 'efficiency'
-  | 'oldest_first'
-  | 'largest_first'
-  | 'smallest_first';
+// SelectionStrategy is re-exported from shared/types/domain above
 
 // ============================================================================
 // APP STATE
@@ -964,8 +1008,7 @@ export interface AppState {
 // OWNERSHIP TRANSFERS
 // ============================================================================
 
-export type TransferStatus = 'pending' | 'accepted' | 'confirmed' | 'cancelled' | 'declined' | 'expired';
-export type TransferResourceType = 'wallet' | 'device';
+// TransferStatus and TransferResourceType are re-exported from shared/types/domain above
 
 export interface Transfer {
   id: string;

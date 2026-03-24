@@ -25,6 +25,7 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+import { errorHandler } from '../../../src/errors/errorHandler';
 import transactionDetailRouter from '../../../src/api/transactions/transactionDetail';
 
 describe('Transactions Detail Routes', () => {
@@ -40,6 +41,7 @@ describe('Transactions Detail Routes', () => {
       next();
     });
     app.use('/api/v1', transactionDetailRouter);
+    app.use(errorHandler);
   });
 
   afterAll(() => {
@@ -96,10 +98,7 @@ describe('Transactions Detail Routes', () => {
       'https://mempool.space/api/tx/missing/hex',
       expect.any(Object)
     );
-    expect(response.body).toMatchObject({
-      error: 'Not Found',
-      message: 'Transaction not found',
-    });
+    expect(response.body.code).toBe('NOT_FOUND');
   });
 
   it('returns 500 when raw transaction lookup throws', async () => {
@@ -108,10 +107,7 @@ describe('Transactions Detail Routes', () => {
     const response = await request(app).get('/api/v1/transactions/tx-err/raw');
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch raw transaction',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns serialized transaction details with numeric bigint fields and labels', async () => {
@@ -193,10 +189,7 @@ describe('Transactions Detail Routes', () => {
     const response = await request(app).get('/api/v1/transactions/missing');
 
     expect(response.status).toBe(404);
-    expect(response.body).toMatchObject({
-      error: 'Not Found',
-      message: 'Transaction not found',
-    });
+    expect(response.body.code).toBe('NOT_FOUND');
   });
 
   it('returns 500 when transaction detail lookup fails unexpectedly', async () => {
@@ -205,9 +198,6 @@ describe('Transactions Detail Routes', () => {
     const response = await request(app).get('/api/v1/transactions/tx-err');
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch transaction',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

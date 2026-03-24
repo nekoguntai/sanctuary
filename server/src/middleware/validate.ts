@@ -1,0 +1,54 @@
+/**
+ * Zod Validation Middleware
+ *
+ * Validates request body, params, and/or query against Zod schemas.
+ * Returns 400 with structured error details on validation failure.
+ *
+ * @example
+ * router.post('/wallets', validate({ body: CreateWalletSchema }), asyncHandler(async (req, res) => {
+ *   // req.body is now typed and validated
+ * }));
+ */
+
+import { Request, Response, NextFunction } from 'express';
+import { ZodSchema, ZodError } from 'zod';
+import { ValidationError } from '../errors/ApiError';
+
+interface ValidationSchemas {
+  body?: ZodSchema;
+  params?: ZodSchema;
+  query?: ZodSchema;
+}
+
+/**
+ * Express middleware that validates request data against Zod schemas.
+ * Replaces req.body/params/query with the parsed (and potentially transformed) values.
+ */
+export function validate(schemas: ValidationSchemas) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    try {
+      if (schemas.params) {
+        req.params = schemas.params.parse(req.params) as typeof req.params;
+      }
+      if (schemas.query) {
+        req.query = schemas.query.parse(req.query) as typeof req.query;
+      }
+      if (schemas.body) {
+        req.body = schemas.body.parse(req.body);
+      }
+      next();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const details = {
+          issues: error.issues.map(issue => ({
+            path: issue.path.join('.'),
+            message: issue.message,
+          })),
+        };
+        next(new ValidationError('Validation failed', undefined, details));
+        return;
+      }
+      next(error);
+    }
+  };
+}

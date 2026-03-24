@@ -23,7 +23,7 @@ import type {
   VALID_ENFORCEMENT_MODES,
 } from './types';
 
-const log = createLogger('VAULT_POLICY');
+const log = createLogger('VAULT_POLICY:SVC');
 
 // ========================================
 // POLICY CRUD

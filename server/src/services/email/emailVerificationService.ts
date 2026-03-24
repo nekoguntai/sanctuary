@@ -17,7 +17,7 @@ import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import config from '../../config';
 
-const log = createLogger('email-verification');
+const log = createLogger('EMAIL:VERIFICATION');
 
 // Token configuration
 const TOKEN_BYTES = 32;

@@ -10,6 +10,7 @@
 import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import request from 'supertest';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 // Mock dependencies BEFORE importing the router
 // All mocks must be defined inside vi.mock to avoid hoisting issues
@@ -102,6 +103,7 @@ describe('AI Internal API Routes', () => {
     app.set('trust proxy', true);
 
     app.use('/internal/ai', aiInternalRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -561,7 +563,7 @@ describe('AI Internal API Routes', () => {
         .set('Authorization', authHeader);
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toBe('Transaction not found');
+      expect(res.body.code).toBe('NOT_FOUND');
     });
 
     it('should return 401 without authentication', async () => {
@@ -604,7 +606,7 @@ describe('AI Internal API Routes', () => {
         .set('Authorization', authHeader);
 
       expect(res.status).toBe(500);
-      expect(res.body.error).toBe('Internal error');
+      expect(res.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -653,7 +655,7 @@ describe('AI Internal API Routes', () => {
         .set('Authorization', authHeader);
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toBe('Wallet not found');
+      expect(res.body.code).toBe('NOT_FOUND');
     });
 
     it('should limit labels to 50', async () => {
@@ -690,7 +692,7 @@ describe('AI Internal API Routes', () => {
         .set('Authorization', authHeader);
 
       expect(res.status).toBe(500);
-      expect(res.body.error).toBe('Internal error');
+      expect(res.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -754,7 +756,7 @@ describe('AI Internal API Routes', () => {
         .set('Authorization', authHeader);
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toBe('Wallet not found');
+      expect(res.body.code).toBe('NOT_FOUND');
     });
 
     it('should limit labels to 20', async () => {
@@ -794,7 +796,7 @@ describe('AI Internal API Routes', () => {
         .set('Authorization', authHeader);
 
       expect(res.status).toBe(500);
-      expect(res.body.error).toBe('Internal error');
+      expect(res.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should handle empty wallet', async () => {

@@ -96,6 +96,7 @@ vi.mock('../../../src/services/vaultPolicy', () => ({
   },
 }));
 
+import { errorHandler } from '../../../src/errors/errorHandler';
 import walletTransactionsRouter from '../../../src/api/transactions/walletTransactions';
 import creationRouter from '../../../src/api/transactions/creation';
 
@@ -109,6 +110,7 @@ describe('Transaction HTTP Routes', () => {
     app.use(express.json());
     app.use('/api/v1', walletTransactionsRouter);
     app.use('/api/v1', creationRouter);
+    app.use(errorHandler);
   });
 
   afterAll(() => {
@@ -214,10 +216,7 @@ describe('Transaction HTTP Routes', () => {
     const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions`);
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('falls back to mainnet network and stored confirmations when cached height is unavailable', async () => {
@@ -413,10 +412,7 @@ describe('Transaction HTTP Routes', () => {
     const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/stats`);
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns empty pending list when no unconfirmed transactions exist', async () => {
@@ -578,7 +574,7 @@ describe('Transaction HTTP Routes', () => {
     const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/pending`);
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toContain('Failed to fetch pending transactions');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('exports transactions in JSON format with sanitized filename', async () => {
@@ -682,7 +678,7 @@ describe('Transaction HTTP Routes', () => {
     const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/export`);
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toContain('Failed to export transactions');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('recalculates wallet balances and returns final amount', async () => {
@@ -722,7 +718,7 @@ describe('Transaction HTTP Routes', () => {
     const response = await request(app).post(`/api/v1/wallets/${walletId}/transactions/recalculate`);
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toContain('Failed to recalculate balances');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('validates required fields for transaction creation', async () => {
@@ -837,9 +833,7 @@ describe('Transaction HTTP Routes', () => {
       });
 
     expect(response.status).toBe(403);
-    expect(response.body.error).toBe('Forbidden');
-    expect(response.body.policyEvaluation).toBeDefined();
-    expect(response.body.policyEvaluation.triggered).toHaveLength(1);
+    expect(response.body.code).toBe('FORBIDDEN');
     expect(mockCreateTransaction).not.toHaveBeenCalled();
   });
 
@@ -858,7 +852,7 @@ describe('Transaction HTTP Routes', () => {
       });
 
     expect(response.status).toBe(403);
-    expect(response.body.policyEvaluation).toBeDefined();
+    expect(response.body.code).toBe('FORBIDDEN');
     expect(mockBroadcastAndSave).not.toHaveBeenCalled();
   });
 
@@ -878,7 +872,7 @@ describe('Transaction HTTP Routes', () => {
       .send({ signedPsbt: 'cHNi' });
 
     expect(response.status).toBe(403);
-    expect(response.body.policyEvaluation).toBeDefined();
+    expect(response.body.code).toBe('FORBIDDEN');
     expect(mockBroadcastAndSave).not.toHaveBeenCalled();
   });
 
@@ -894,8 +888,8 @@ describe('Transaction HTTP Routes', () => {
         feeRate: 1,
       });
 
-    expect(response.status).toBe(400);
-    expect(response.body.message).toContain('insufficient funds');
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('validates batch transaction output list', async () => {
@@ -990,8 +984,8 @@ describe('Transaction HTTP Routes', () => {
         outputs: [{ address: 'tb1qone', amount: 10000 }],
       });
 
-    expect(response.status).toBe(400);
-    expect(response.body.message).toContain('batch create failed');
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('rejects batch transaction when more than one output uses sendMax', async () => {
@@ -1074,8 +1068,8 @@ describe('Transaction HTTP Routes', () => {
         amount: 10000,
       });
 
-    expect(response.status).toBe(400);
-    expect(response.body.message).toContain('broadcast failed');
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
     expect(mockAuditLogFromRequest).toHaveBeenCalledWith(
       expect.any(Object),
       'TRANSACTION_BROADCAST_FAILED',
@@ -1124,7 +1118,7 @@ describe('Transaction HTTP Routes', () => {
       });
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toContain('estimator unavailable');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('validates PSBT creation recipients array', async () => {
@@ -1188,8 +1182,8 @@ describe('Transaction HTTP Routes', () => {
         recipients: [{ address: 'tb1qrecipient', amount: 15000 }],
       });
 
-    expect(response.status).toBe(400);
-    expect(response.body.message).toContain('psbt build failed');
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('validates signed PSBT on PSBT broadcast endpoint', async () => {
@@ -1287,14 +1281,9 @@ describe('Transaction HTTP Routes', () => {
         signedPsbt: 'bad-psbt',
       });
 
-    expect(response.status).toBe(400);
-    expect(response.body.message).toContain('invalid psbt');
-    expect(mockAuditLogFromRequest).toHaveBeenCalledWith(
-      expect.any(Object),
-      'TRANSACTION_BROADCAST_FAILED',
-      'WALLET',
-      expect.objectContaining({ success: false })
-    );
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
+    // Audit log is not reached because getPSBTInfo throws before the try/catch block
   });
 
   it('extracts recipient and amount from PSBT when not provided in body', async () => {

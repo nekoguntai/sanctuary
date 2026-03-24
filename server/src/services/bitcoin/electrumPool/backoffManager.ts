@@ -15,7 +15,7 @@ import type {
 import { DEFAULT_BACKOFF_CONFIG } from './types';
 import { updateServerHealthInDb } from './healthChecker';
 
-const log = createLogger('ELECTRUM_POOL:BACKOFF');
+const log = createLogger('ELECTRUM_POOL:SVC_BACKOFF');
 
 /**
  * Record a failure for a server (call this when requests fail).

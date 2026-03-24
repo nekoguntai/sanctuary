@@ -21,7 +21,7 @@ import { notificationChannelRegistry } from '../../services/notifications/channe
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 
-const log = createLogger('NotifyJobs');
+const log = createLogger('JOB:NOTIFY');
 
 // =============================================================================
 // Transaction Notification Job

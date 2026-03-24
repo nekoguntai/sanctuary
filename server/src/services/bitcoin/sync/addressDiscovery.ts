@@ -11,7 +11,7 @@ import { walletLog } from '../../../websocket/notifications';
 import { ADDRESS_GAP_LIMIT } from '../../../constants';
 import * as addressDerivation from '../addressDerivation';
 
-const log = createLogger('ADDRESS_DISCOVERY');
+const log = createLogger('BITCOIN:SVC_ADDR_DISCOVERY');
 
 /**
  * Check and expand addresses to maintain gap limit

@@ -8,7 +8,7 @@
 import { db as prisma } from '../../../repositories/db';
 import { createLogger } from '../../../utils/logger';
 
-const log = createLogger('BALANCE');
+const log = createLogger('BITCOIN:SVC_BALANCE');
 
 /**
  * Correct misclassified consolidation transactions

@@ -13,7 +13,7 @@ import { checkRedisHealth } from '../../infrastructure/redis';
 import { jobQueue } from '../../jobs';
 import type { ComponentHealth } from './types';
 
-const log = createLogger('HEALTH');
+const log = createLogger('HEALTH:SERVICE');
 
 /**
  * Check Electrum/blockchain service status

@@ -32,7 +32,7 @@ import {
 import { checkDiskUsage } from './diskMonitoring';
 import { runWeeklyMaintenance, runMonthlyMaintenance } from './databaseMaintenance';
 
-const log = createLogger('MAINTENANCE');
+const log = createLogger('MAINTENANCE:SVC');
 
 /**
  * Get maintenance config from centralized config

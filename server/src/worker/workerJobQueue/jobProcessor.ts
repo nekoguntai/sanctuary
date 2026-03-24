@@ -17,7 +17,7 @@ import {
 import { createLogger } from '../../utils/logger';
 import type { RegisteredHandler } from './types';
 
-const log = createLogger('WorkerQueue');
+const log = createLogger('WORKER:QUEUE_PROCESSOR');
 
 /**
  * Process a job with optional distributed locking.

@@ -7,7 +7,7 @@
 
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('RECOVERY');
+const log = createLogger('RECOVERY:SVC');
 
 export type ExhaustedAction = 'notify' | 'disable' | 'continue' | 'fallback';
 

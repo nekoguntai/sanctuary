@@ -10,7 +10,7 @@ import { createLogger } from '../../../utils/logger';
 import { parseResponseBuffer, isNotification, processResponse } from './protocol';
 import type { ElectrumResponse, PendingRequest } from './types';
 
-const log = createLogger('ELECTRUM');
+const log = createLogger('ELECTRUM:SVC_DATA');
 
 /**
  * Handle incoming data from server. Parses the response buffer, processes

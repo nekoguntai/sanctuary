@@ -27,7 +27,7 @@ import Redis from 'ioredis';
 import { createLogger } from '../../utils/logger';
 import type { ICacheService, CacheStats } from './cacheService';
 
-const log = createLogger('RedisCache');
+const log = createLogger('CACHE:SVC_REDIS');
 
 /**
  * Redis-backed cache with TTL support

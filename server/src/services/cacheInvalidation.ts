@@ -9,7 +9,7 @@ import { eventBus } from '../events/eventBus';
 import { walletCache, feeCache, priceCache } from './cache';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('CacheInvalidation');
+const log = createLogger('CACHE_INVALIDATION:SVC');
 
 let isInitialized = false;
 const unsubscribers: Array<() => void> = [];

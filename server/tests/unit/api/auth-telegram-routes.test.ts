@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import express, { type Express } from 'express';
 import request from 'supertest';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 const {
   mockGetChatIdFromBot,
@@ -33,6 +34,7 @@ describe('Auth Telegram Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/auth', telegramAuthRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -78,7 +80,7 @@ describe('Auth Telegram Routes', () => {
       .send({ botToken: 'token-123' });
 
     expect(withCustomError.status).toBe(400);
-    expect(withCustomError.body).toEqual({ success: false, error: 'No recent messages found' });
+    expect(withCustomError.body.message).toBe('No recent messages found');
 
     mockGetChatIdFromBot.mockResolvedValueOnce({ success: false });
     const withDefaultError = await request(app)
@@ -86,7 +88,7 @@ describe('Auth Telegram Routes', () => {
       .send({ botToken: 'token-123' });
 
     expect(withDefaultError.status).toBe(400);
-    expect(withDefaultError.body).toEqual({ success: false, error: 'Failed to fetch chat ID' });
+    expect(withDefaultError.body).toMatchObject({ code: 'INVALID_INPUT' });
   });
 
   it('handles unexpected chat-id lookup errors', async () => {
@@ -97,10 +99,7 @@ describe('Auth Telegram Routes', () => {
       .send({ botToken: 'token-123' });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch chat ID',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns 400 when required telegram test fields are missing', async () => {
@@ -133,7 +132,7 @@ describe('Auth Telegram Routes', () => {
       .send({ botToken: 'token-123', chatId: '123456789' });
 
     expect(withCustomError.status).toBe(400);
-    expect(withCustomError.body).toEqual({ success: false, error: 'Bot blocked by user' });
+    expect(withCustomError.body.message).toBe('Bot blocked by user');
 
     mockTestTelegramConfig.mockResolvedValueOnce({ success: false });
     const withDefaultError = await request(app)
@@ -141,7 +140,7 @@ describe('Auth Telegram Routes', () => {
       .send({ botToken: 'token-123', chatId: '123456789' });
 
     expect(withDefaultError.status).toBe(400);
-    expect(withDefaultError.body).toEqual({ success: false, error: 'Failed to send test message' });
+    expect(withDefaultError.body).toMatchObject({ code: 'INVALID_INPUT' });
   });
 
   it('handles unexpected telegram test errors', async () => {
@@ -152,9 +151,6 @@ describe('Auth Telegram Routes', () => {
       .send({ botToken: 'token-123', chatId: '123456789' });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to test Telegram configuration',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

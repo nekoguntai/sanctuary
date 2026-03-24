@@ -9,8 +9,9 @@
  */
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import express, { type Express, type Request, type Response, type NextFunction } from 'express';
+import express, { type Express } from 'express';
 import request from 'supertest';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 const {
   mockGetSystemPolicies,
@@ -79,41 +80,14 @@ vi.mock('../../../src/utils/errors', () => ({
 
 import policiesRouter from '../../../src/api/admin/policies';
 
-/**
- * Wraps an Express Router so that async handler rejections are forwarded to
- * Express error-handling middleware (Express 4 does not do this natively).
- */
-function wrapAsyncRouter(router: express.Router): express.Router {
-  const stack = (router as any).stack as any[];
-  for (const layer of stack) {
-    if (layer.route) {
-      for (const routeLayer of layer.route.stack) {
-        const original = routeLayer.handle;
-        if (original.length <= 3) {
-          routeLayer.handle = (req: Request, res: Response, next: NextFunction) => {
-            const result = original(req, res, next);
-            if (result && typeof result.catch === 'function') {
-              result.catch(next);
-            }
-          };
-        }
-      }
-    }
-  }
-  return router;
-}
-
 describe('Admin Policies Routes', () => {
   let app: Express;
 
   beforeAll(() => {
     app = express();
     app.use(express.json());
-    app.use('/api/v1/admin/policies', wrapAsyncRouter(policiesRouter));
-    // Error handler to catch re-thrown errors
-    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-      res.status(500).json({ error: 'Internal Server Error', message: err.message });
-    });
+    app.use('/api/v1/admin/policies', policiesRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -157,7 +131,7 @@ describe('Admin Policies Routes', () => {
       const response = await request(app).get(url);
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -262,7 +236,7 @@ describe('Admin Policies Routes', () => {
         .send(policyPayload);
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should not call audit when createPolicy throws', async () => {
@@ -415,7 +389,7 @@ describe('Admin Policies Routes', () => {
         .send({ name: 'Updated' });
 
       expect(response.status).toBe(403);
-      expect(response.body.error).toBe('Admin policy endpoints can only manage system-level policies');
+      expect(response.body.message).toBe('Admin policy endpoints can only manage system-level policies');
       expect(mockUpdatePolicy).not.toHaveBeenCalled();
     });
 
@@ -431,7 +405,7 @@ describe('Admin Policies Routes', () => {
         .send({ name: 'Updated' });
 
       expect(response.status).toBe(403);
-      expect(response.body.error).toBe('Admin policy endpoints can only manage system-level policies');
+      expect(response.body.message).toBe('Admin policy endpoints can only manage system-level policies');
       expect(mockUpdatePolicy).not.toHaveBeenCalled();
     });
 
@@ -443,7 +417,7 @@ describe('Admin Policies Routes', () => {
         .send({ name: 'Updated' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should return 500 when updatePolicy throws', async () => {
@@ -455,7 +429,7 @@ describe('Admin Policies Routes', () => {
         .send({ name: 'Updated' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should not call audit when updatePolicy throws', async () => {
@@ -524,7 +498,7 @@ describe('Admin Policies Routes', () => {
       const response = await request(app).delete(url);
 
       expect(response.status).toBe(403);
-      expect(response.body.error).toBe('Admin policy endpoints can only manage system-level policies');
+      expect(response.body.message).toBe('Admin policy endpoints can only manage system-level policies');
       expect(mockDeletePolicy).not.toHaveBeenCalled();
     });
 
@@ -547,7 +521,7 @@ describe('Admin Policies Routes', () => {
       const response = await request(app).delete(url);
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should return 500 when deletePolicy throws', async () => {
@@ -557,7 +531,7 @@ describe('Admin Policies Routes', () => {
       const response = await request(app).delete(url);
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should not call audit when deletePolicy throws', async () => {

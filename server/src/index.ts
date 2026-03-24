@@ -20,6 +20,7 @@ import compression from 'compression';
 import { createServer } from 'http';
 import config from './config';
 import { registerRoutes } from './routes';
+import { errorHandler, notFoundHandler } from './errors/errorHandler';
 import { initializeWebSocketServer, initializeGatewayWebSocketServer } from './websocket/server';
 import { initializeRedisBridge, shutdownRedisBridge } from './websocket/redisBridge';
 import { notificationService } from './websocket/notifications';
@@ -156,22 +157,11 @@ app.use('/api', apiVersionMiddleware({
 
 registerRoutes(app);
 
-// 404 handler
-app.use((req: Request, res: Response) => {
-  res.status(404).json({
-    error: 'Not Found',
-    message: `Route ${req.method} ${req.path} not found`,
-  });
-});
+// 404 handler for undefined routes
+app.use(notFoundHandler);
 
-// Error handler
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  log.error('Unhandled error', { error: err });
-  res.status(500).json({
-    error: 'Internal Server Error',
-    message: config.nodeEnv === 'development' ? err.message : 'Something went wrong',
-  });
-});
+// Centralized error handler — converts all errors to standardized ApiErrorResponse format
+app.use(errorHandler);
 
 // ========================================
 // SERVER START

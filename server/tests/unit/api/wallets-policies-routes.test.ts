@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import express, { type Express, type Request, type Response, type NextFunction } from 'express';
+import express, { type Express } from 'express';
 import request from 'supertest';
 
 const {
@@ -96,35 +96,12 @@ vi.mock('../../../src/utils/errors', () => ({
 }));
 
 import policiesRouter from '../../../src/api/wallets/policies';
-
-/**
- * Wrap all async route handlers on an Express Router so that rejected promises
- * are forwarded to `next()`. Required because Express 4.x does not natively
- * catch async errors, which would otherwise cause unhandled promise rejections
- * in tests.
- */
-function wrapAsyncRouterHandlers(router: any): void {
-  for (const layer of router.stack) {
-    if (layer.route) {
-      for (const routeLayer of layer.route.stack) {
-        const originalHandle = routeLayer.handle;
-        if (originalHandle.constructor.name === 'AsyncFunction') {
-          routeLayer.handle = function wrappedHandler(req: Request, res: Response, next: NextFunction) {
-            return Promise.resolve(originalHandle(req, res, next)).catch(next);
-          };
-        }
-      }
-    }
-  }
-}
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 describe('Wallet Policies Routes', () => {
   let app: Express;
 
   beforeAll(() => {
-    // Wrap the router's async handlers to forward errors to Express error middleware
-    wrapAsyncRouterHandlers(policiesRouter);
-
     app = express();
     app.use(express.json());
     // Inject req.user for all requests (simulates authenticate middleware)
@@ -133,10 +110,7 @@ describe('Wallet Policies Routes', () => {
       next();
     });
     app.use('/api/v1/wallets', policiesRouter);
-    // Error-handling middleware to capture thrown errors from async handlers
-    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-      res.status(500).json({ error: 'Internal Server Error', message: err.message });
-    });
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -257,7 +231,7 @@ describe('Wallet Policies Routes', () => {
       const response = await request(app).get('/api/v1/wallets/wallet-1/policies/events');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -318,7 +292,7 @@ describe('Wallet Policies Routes', () => {
         .send({ amount: 50000 });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('recipient and amount are required');
+      expect(response.body.message).toBe('recipient and amount are required');
     });
 
     it('returns 400 when amount is missing', async () => {
@@ -327,7 +301,7 @@ describe('Wallet Policies Routes', () => {
         .send({ recipient: 'tb1qaddr' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('recipient and amount are required');
+      expect(response.body.message).toBe('recipient and amount are required');
     });
 
     it('returns 400 when amount is undefined', async () => {
@@ -336,7 +310,7 @@ describe('Wallet Policies Routes', () => {
         .send({ recipient: 'tb1qaddr', amount: undefined });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('recipient and amount are required');
+      expect(response.body.message).toBe('recipient and amount are required');
     });
 
     it('returns 400 when amount is not a valid integer string', async () => {
@@ -345,7 +319,7 @@ describe('Wallet Policies Routes', () => {
         .send({ recipient: 'tb1qaddr', amount: 'abc' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('amount must be a valid non-negative integer');
+      expect(response.body.message).toBe('amount must be a valid non-negative integer');
     });
 
     it('returns 400 when amount is a negative string', async () => {
@@ -354,7 +328,7 @@ describe('Wallet Policies Routes', () => {
         .send({ recipient: 'tb1qaddr', amount: '-100' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('amount must be a valid non-negative integer');
+      expect(response.body.message).toBe('amount must be a valid non-negative integer');
     });
 
     it('returns 400 when amount is a boolean', async () => {
@@ -363,7 +337,7 @@ describe('Wallet Policies Routes', () => {
         .send({ recipient: 'tb1qaddr', amount: true });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('amount must be a valid non-negative integer');
+      expect(response.body.message).toBe('amount must be a valid non-negative integer');
     });
 
     it('accepts amount of 0 (number)', async () => {
@@ -400,7 +374,7 @@ describe('Wallet Policies Routes', () => {
         .send({ recipient: 'tb1qaddr', amount: 50000 });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -458,7 +432,7 @@ describe('Wallet Policies Routes', () => {
       const response = await request(app).get('/api/v1/wallets/wallet-1/policies');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -483,7 +457,7 @@ describe('Wallet Policies Routes', () => {
       const response = await request(app).get('/api/v1/wallets/wallet-1/policies/pol-missing');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -570,7 +544,7 @@ describe('Wallet Policies Routes', () => {
         .send(createPayload);
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -650,7 +624,7 @@ describe('Wallet Policies Routes', () => {
         .send({ name: 'x' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
 
     it('returns 500 when updatePolicy throws', async () => {
@@ -662,7 +636,7 @@ describe('Wallet Policies Routes', () => {
         .send({ name: 'x' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -699,7 +673,7 @@ describe('Wallet Policies Routes', () => {
         .delete('/api/v1/wallets/wallet-1/policies/pol-1');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -764,7 +738,7 @@ describe('Wallet Policies Routes', () => {
         .get('/api/v1/wallets/wallet-1/policies/pol-1/addresses');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
 
     it('returns 500 when findPolicyAddresses throws', async () => {
@@ -775,7 +749,7 @@ describe('Wallet Policies Routes', () => {
         .get('/api/v1/wallets/wallet-1/policies/pol-1/addresses');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -826,7 +800,7 @@ describe('Wallet Policies Routes', () => {
         .send({ address: 'tb1qfoo', listType: 'allow' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Address lists can only be managed on address_control policies');
+      expect(response.body.message).toBe('Address lists can only be managed on address_control policies');
     });
 
     it('returns 400 when address is missing', async () => {
@@ -837,7 +811,7 @@ describe('Wallet Policies Routes', () => {
         .send({ listType: 'allow' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('address and listType are required');
+      expect(response.body.message).toBe('address and listType are required');
     });
 
     it('returns 400 when listType is missing', async () => {
@@ -848,7 +822,7 @@ describe('Wallet Policies Routes', () => {
         .send({ address: 'tb1qfoo' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('address and listType are required');
+      expect(response.body.message).toBe('address and listType are required');
     });
 
     it('returns 400 when both address and listType are missing', async () => {
@@ -859,7 +833,7 @@ describe('Wallet Policies Routes', () => {
         .send({});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('address and listType are required');
+      expect(response.body.message).toBe('address and listType are required');
     });
 
     it('returns 400 when address is not a string', async () => {
@@ -870,7 +844,7 @@ describe('Wallet Policies Routes', () => {
         .send({ address: 12345, listType: 'allow' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('address must be a string of 100 characters or fewer');
+      expect(response.body.message).toBe('address must be a string of 100 characters or fewer');
     });
 
     it('returns 400 when address exceeds 100 characters', async () => {
@@ -881,7 +855,7 @@ describe('Wallet Policies Routes', () => {
         .send({ address: 'a'.repeat(101), listType: 'allow' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('address must be a string of 100 characters or fewer');
+      expect(response.body.message).toBe('address must be a string of 100 characters or fewer');
     });
 
     it('accepts address at exactly 100 characters', async () => {
@@ -903,7 +877,7 @@ describe('Wallet Policies Routes', () => {
         .send({ address: 'tb1qfoo', listType: 'block' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('listType must be "allow" or "deny"');
+      expect(response.body.message).toBe('listType must be "allow" or "deny"');
     });
 
     it('returns 500 when getPolicyInWallet throws', async () => {
@@ -914,7 +888,7 @@ describe('Wallet Policies Routes', () => {
         .send({ address: 'tb1qfoo', listType: 'allow' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
 
     it('returns 500 when createPolicyAddress throws', async () => {
@@ -926,7 +900,7 @@ describe('Wallet Policies Routes', () => {
         .send({ address: 'tb1qfoo', listType: 'allow' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -957,7 +931,7 @@ describe('Wallet Policies Routes', () => {
         .delete('/api/v1/wallets/wallet-1/policies/pol-1/addresses/addr-missing');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Address not found in this policy');
+      expect(response.body.message).toBe('Address not found in this policy');
     });
 
     it('returns 404 when address belongs to a different policy', async () => {
@@ -968,7 +942,7 @@ describe('Wallet Policies Routes', () => {
         .delete('/api/v1/wallets/wallet-1/policies/pol-1/addresses/addr-1');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Address not found in this policy');
+      expect(response.body.message).toBe('Address not found in this policy');
     });
 
     it('returns 500 when getPolicyInWallet throws', async () => {
@@ -978,7 +952,7 @@ describe('Wallet Policies Routes', () => {
         .delete('/api/v1/wallets/wallet-1/policies/pol-1/addresses/addr-1');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
 
     it('returns 500 when findPolicyAddressById throws', async () => {
@@ -989,7 +963,7 @@ describe('Wallet Policies Routes', () => {
         .delete('/api/v1/wallets/wallet-1/policies/pol-1/addresses/addr-1');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
 
     it('returns 500 when removePolicyAddress throws', async () => {
@@ -1001,7 +975,7 @@ describe('Wallet Policies Routes', () => {
         .delete('/api/v1/wallets/wallet-1/policies/pol-1/addresses/addr-1');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 });

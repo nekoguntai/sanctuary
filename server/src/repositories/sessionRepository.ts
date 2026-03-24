@@ -9,7 +9,7 @@ import crypto from 'crypto';
 import type { RefreshToken, RevokedToken } from '@prisma/client';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('SessionRepo');
+const log = createLogger('SESSION:REPO');
 
 /**
  * Create refresh token input

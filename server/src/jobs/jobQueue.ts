@@ -40,7 +40,7 @@ import { createLogger } from '../utils/logger';
 import { withSpan } from '../utils/tracing';
 import type { JobDefinition, JobQueueConfig, QueueHealthStatus, ScheduleOptions, JobResult } from './types';
 
-const log = createLogger('JobQueue');
+const log = createLogger('JOB:QUEUE');
 
 // Default configuration
 const DEFAULT_CONFIG: Required<JobQueueConfig> = {

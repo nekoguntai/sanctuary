@@ -10,7 +10,7 @@ import * as ecc from 'tiny-secp256k1';
 import { createLogger } from '../../../utils/logger';
 import { parseMultisigScript } from './witnessScript';
 
-const log = createLogger('PSBT-BUILDER');
+const log = createLogger('BITCOIN:SVC_PSBT_MULTISIG');
 
 /**
  * Finalize a multisig P2WSH input.

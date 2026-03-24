@@ -24,7 +24,7 @@ import {
   ELECTRUM_SUBSCRIPTION_LOCK_REFRESH_MS,
 } from './types';
 
-const log = createLogger('SYNC:SUBS');
+const log = createLogger('SYNC:SVC_SUBS');
 
 /**
  * Set up real-time subscriptions for block and address notifications.

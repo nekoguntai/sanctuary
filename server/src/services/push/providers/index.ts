@@ -18,7 +18,7 @@ export { FCMPushProvider, isFCMConfigured } from './fcm';
 import { APNsPushProvider } from './apns';
 import { FCMPushProvider } from './fcm';
 
-const log = createLogger('PushProviders');
+const log = createLogger('PUSH:SVC_PROVIDERS');
 
 /**
  * Create and configure the push provider registry

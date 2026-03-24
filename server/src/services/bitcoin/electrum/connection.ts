@@ -12,7 +12,7 @@ import { SocksClient, SocksClientOptions } from 'socks';
 import { createLogger } from '../../../utils/logger';
 import type { ProxyConfig } from './types';
 
-const log = createLogger('ELECTRUM');
+const log = createLogger('ELECTRUM:SVC_CONNECTION');
 
 /**
  * Create a socket connection through a SOCKS5 proxy

@@ -7,7 +7,7 @@
 import { getNodeClient } from '../nodeClient';
 import { createLogger } from '../../../utils/logger';
 
-const log = createLogger('BLOCK_HEIGHT');
+const log = createLogger('BITCOIN:SVC_BLOCK_HEIGHT');
 
 export type Network = 'mainnet' | 'testnet' | 'signet' | 'regtest';
 

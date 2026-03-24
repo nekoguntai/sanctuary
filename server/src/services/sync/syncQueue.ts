@@ -11,7 +11,7 @@ import { getErrorMessage } from '../../utils/errors';
 import type { SyncState, SyncResult } from './types';
 import { MAX_QUEUE_SIZE } from './types';
 
-const log = createLogger('SYNC:QUEUE');
+const log = createLogger('SYNC:SVC_QUEUE');
 
 /**
  * Sort the queue by priority (high > normal > low), then by request time (FIFO within same priority).

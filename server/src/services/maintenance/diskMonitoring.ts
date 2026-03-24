@@ -11,7 +11,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import type { MaintenanceServiceConfig } from './types';
 
-const log = createLogger('MAINTENANCE');
+const log = createLogger('MAINTENANCE:SVC_DISK');
 const execAsync = promisify(exec);
 
 /**

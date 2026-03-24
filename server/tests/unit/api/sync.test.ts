@@ -78,8 +78,24 @@ vi.mock('../../../src/services/walletLogBuffer', () => ({
   },
 }));
 
+// Mock requestContext (needed by errorHandler and auth middleware)
+vi.mock('../../../src/utils/requestContext', () => ({
+  requestContext: {
+    getRequestId: () => 'test-request-id',
+    setUser: vi.fn(),
+    get: () => undefined,
+    run: (_ctx: unknown, fn: () => unknown) => fn(),
+    getUserId: () => undefined,
+    getTraceId: () => undefined,
+    setTraceId: vi.fn(),
+    getDuration: () => 0,
+    generateRequestId: () => 'test-request-id',
+  },
+}));
+
 // Import after mocks
 import syncRouter from '../../../src/api/sync';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 describe('Sync API - Network Endpoints', () => {
   let app: express.Application;
@@ -88,6 +104,7 @@ describe('Sync API - Network Endpoints', () => {
     app = express();
     app.use(express.json());
     app.use('/sync', syncRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -142,7 +159,7 @@ describe('Sync API - Network Endpoints', () => {
         .send({});
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('sync exploded');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('POST /sync/queue/:walletId queues sync and returns status', async () => {
@@ -181,7 +198,7 @@ describe('Sync API - Network Endpoints', () => {
         .send({});
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('queue exploded');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('GET /sync/status/:walletId returns wallet sync state', async () => {
@@ -217,7 +234,7 @@ describe('Sync API - Network Endpoints', () => {
         .get('/sync/status/wallet-1');
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('status failed');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('GET /sync/logs/:walletId returns buffered logs', async () => {
@@ -253,7 +270,7 @@ describe('Sync API - Network Endpoints', () => {
         .get('/sync/logs/wallet-1');
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('logs failed');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('POST /sync/user queues all wallets', async () => {
@@ -276,7 +293,7 @@ describe('Sync API - Network Endpoints', () => {
         .send({ priority: 'normal' });
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('batch failed');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('POST /sync/reset/:walletId resets stuck state', async () => {
@@ -312,7 +329,7 @@ describe('Sync API - Network Endpoints', () => {
         .send({});
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('reset failed');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('POST /sync/resync/:walletId performs full resync and queues high priority', async () => {
@@ -354,7 +371,7 @@ describe('Sync API - Network Endpoints', () => {
         .send({});
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('delete failed');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -444,7 +461,7 @@ describe('Sync API - Network Endpoints', () => {
         .send({});
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('network lookup failed');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -564,7 +581,7 @@ describe('Sync API - Network Endpoints', () => {
         .send({});
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('resync failed');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -616,7 +633,7 @@ describe('Sync API - Network Endpoints', () => {
         .get('/sync/network/mainnet/status');
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('status lookup failed');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 });

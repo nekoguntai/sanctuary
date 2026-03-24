@@ -9,7 +9,7 @@ import { notificationChannelRegistry } from '../notifications/channels';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 
-const log = createLogger('APPROVAL_NOTIFY');
+const log = createLogger('VAULT_POLICY:SVC_APPROVAL_NOTIFY');
 
 /**
  * Notify approvers that a new approval is required.

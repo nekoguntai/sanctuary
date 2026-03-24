@@ -21,7 +21,7 @@ import type { IPushProvider, PushMessage, PushPlatform } from './types';
 import { isInvalidTokenError } from './types';
 import { recordPushFailure } from '../deadLetterQueue';
 
-const log = createLogger('PUSH');
+const log = createLogger('PUSH:SVC');
 
 export interface TransactionData {
   txid: string;

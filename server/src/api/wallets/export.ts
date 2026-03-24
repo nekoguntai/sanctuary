@@ -4,14 +4,14 @@
  * Wallet export in various formats (BIP 329, Sparrow, etc.)
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
 import { walletRepository, transactionRepository, addressRepository } from '../../repositories';
-import { createLogger } from '../../utils/logger';
+import { asyncHandler } from '../../errors/errorHandler';
+import { InvalidInputError, NotFoundError } from '../../errors/ApiError';
 import { exportFormatRegistry, type WalletExportData } from '../../services/export';
 
 const router = Router();
-const log = createLogger('WALLETS:EXPORT');
 
 /**
  * Build wallet export data from wallet with devices
@@ -95,120 +95,98 @@ export function mapDeviceTypeToWalletModel(deviceType: string): string {
  * Export wallet labels in BIP 329 format (JSON Lines)
  * https://github.com/bitcoin/bips/blob/master/bip-0329.mediawiki
  */
-router.get('/:id/export/labels', requireWalletAccess('view'), async (req: Request, res: Response) => {
-  try {
-    const walletId = req.walletId!;
+router.get('/:id/export/labels', requireWalletAccess('view'), asyncHandler(async (req, res) => {
+  const walletId = req.walletId!;
 
-    // Get wallet name for filename
-    const walletName = await walletRepository.getName(walletId);
+  // Get wallet name for filename
+  const walletName = await walletRepository.getName(walletId);
 
-    if (!walletName) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
-      });
-    }
-
-    // Get all transactions with labels
-    const transactions = await transactionRepository.findWithLabels(walletId);
-
-    // Get all addresses with labels
-    const addresses = await addressRepository.findWithLabels(walletId);
-
-    // Build BIP 329 JSON Lines
-    const lines: string[] = [];
-
-    // Transaction labels
-    for (const tx of transactions) {
-      // Combine label, memo, and tag labels
-      const labelParts: string[] = [];
-      if (tx.label) labelParts.push(tx.label);
-      if (tx.memo) labelParts.push(tx.memo);
-      for (const tl of tx.transactionLabels) {
-        if (tl.label.name) labelParts.push(tl.label.name);
-      }
-
-      if (labelParts.length > 0) {
-        lines.push(JSON.stringify({
-          type: 'tx',
-          ref: tx.txid,
-          label: labelParts.join(', '),
-        }));
-      }
-    }
-
-    // Address labels
-    for (const addr of addresses) {
-      const labelParts: string[] = [];
-      for (const al of addr.addressLabels) {
-        if (al.label.name) labelParts.push(al.label.name);
-      }
-
-      if (labelParts.length > 0) {
-        lines.push(JSON.stringify({
-          type: 'addr',
-          ref: addr.address,
-          label: labelParts.join(', '),
-          origin: addr.derivationPath || undefined,
-        }));
-      }
-    }
-
-    // Set response headers for file download
-    const filename = `${walletName.replace(/[^a-zA-Z0-9]/g, '_')}_labels_bip329.jsonl`;
-    res.setHeader('Content-Type', 'application/jsonl');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-    // Send as newline-separated JSON
-    res.send(lines.join('\n'));
-  } catch (error) {
-    log.error('Export labels error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to export labels',
-    });
+  if (!walletName) {
+    throw new NotFoundError('Wallet not found');
   }
-});
+
+  // Get all transactions with labels
+  const transactions = await transactionRepository.findWithLabels(walletId);
+
+  // Get all addresses with labels
+  const addresses = await addressRepository.findWithLabels(walletId);
+
+  // Build BIP 329 JSON Lines
+  const lines: string[] = [];
+
+  // Transaction labels
+  for (const tx of transactions) {
+    // Combine label, memo, and tag labels
+    const labelParts: string[] = [];
+    if (tx.label) labelParts.push(tx.label);
+    if (tx.memo) labelParts.push(tx.memo);
+    for (const tl of tx.transactionLabels) {
+      if (tl.label.name) labelParts.push(tl.label.name);
+    }
+
+    if (labelParts.length > 0) {
+      lines.push(JSON.stringify({
+        type: 'tx',
+        ref: tx.txid,
+        label: labelParts.join(', '),
+      }));
+    }
+  }
+
+  // Address labels
+  for (const addr of addresses) {
+    const labelParts: string[] = [];
+    for (const al of addr.addressLabels) {
+      if (al.label.name) labelParts.push(al.label.name);
+    }
+
+    if (labelParts.length > 0) {
+      lines.push(JSON.stringify({
+        type: 'addr',
+        ref: addr.address,
+        label: labelParts.join(', '),
+        origin: addr.derivationPath || undefined,
+      }));
+    }
+  }
+
+  // Set response headers for file download
+  const filename = `${walletName.replace(/[^a-zA-Z0-9]/g, '_')}_labels_bip329.jsonl`;
+  res.setHeader('Content-Type', 'application/jsonl');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  // Send as newline-separated JSON
+  res.send(lines.join('\n'));
+}));
 
 /**
  * GET /api/v1/wallets/:id/export/formats
  * Get available export formats for this wallet
  */
-router.get('/:id/export/formats', requireWalletAccess('view'), async (req: Request, res: Response) => {
-  try {
-    const walletId = req.walletId!;
+router.get('/:id/export/formats', requireWalletAccess('view'), asyncHandler(async (req, res) => {
+  const walletId = req.walletId!;
 
-    // Get wallet to determine which formats are available
-    const wallet = await walletRepository.findByIdWithDevices(walletId);
+  // Get wallet to determine which formats are available
+  const wallet = await walletRepository.findByIdWithDevices(walletId);
 
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
-      });
-    }
-
-    // Build wallet export data to check format availability
-    const walletData = buildWalletExportData(wallet);
-
-    // Get available formats
-    const formats = exportFormatRegistry.getAvailableFormats(walletData).map((handler) => ({
-      id: handler.id,
-      name: handler.name,
-      description: handler.description,
-      extension: handler.fileExtension,
-      mimeType: handler.mimeType,
-    }));
-
-    res.json({ formats });
-  } catch (error) {
-    log.error('Get export formats error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get export formats',
-    });
+  if (!wallet) {
+    throw new NotFoundError('Wallet not found');
   }
-});
+
+  // Build wallet export data to check format availability
+  const walletData = buildWalletExportData(wallet);
+
+  // Get available formats
+  const formats = exportFormatRegistry.getAvailableFormats(walletData).map((handler) => ({
+    id: handler.id,
+    name: handler.name,
+    description: handler.description,
+    extension: handler.fileExtension,
+    mimeType: handler.mimeType,
+  }));
+
+  res.json({ formats });
+}));
 
 /**
  * GET /api/v1/wallets/:id/export
@@ -216,56 +194,35 @@ router.get('/:id/export/formats', requireWalletAccess('view'), async (req: Reque
  * Query params:
  *   format - Export format ID (sparrow, descriptor, bluewallet, coldcard)
  */
-router.get('/:id/export', requireWalletAccess('view'), async (req: Request, res: Response) => {
-  try {
-    const walletId = req.walletId!;
-    const formatId = (req.query.format as string) || 'sparrow';
+router.get('/:id/export', requireWalletAccess('view'), asyncHandler(async (req, res) => {
+  const walletId = req.walletId!;
+  const formatId = (req.query.format as string) || 'sparrow';
 
-    // Get wallet with all related data
-    const wallet = await walletRepository.findByIdWithDevices(walletId);
+  // Get wallet with all related data
+  const wallet = await walletRepository.findByIdWithDevices(walletId);
 
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
-      });
-    }
-
-    // Build wallet export data (uses device accounts for correct derivation paths)
-    const walletData = buildWalletExportData(wallet);
-
-    // Check if format exists
-    if (!exportFormatRegistry.has(formatId)) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: `Unknown export format: ${formatId}. Use GET /export/formats to see available formats.`,
-      });
-    }
-
-    // Export using registry
-    try {
-      const result = exportFormatRegistry.export(formatId, walletData, {
-        includeDevices: true,
-        includeChangeDescriptor: true,
-      });
-
-      // Set appropriate headers for download
-      res.setHeader('Content-Type', result.mimeType);
-      res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
-      res.send(result.content);
-    } catch (exportError) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: exportError instanceof Error ? exportError.message : 'Failed to export wallet in the specified format',
-      });
-    }
-  } catch (error) {
-    log.error('Export wallet error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to export wallet',
-    });
+  if (!wallet) {
+    throw new NotFoundError('Wallet not found');
   }
-});
+
+  // Build wallet export data (uses device accounts for correct derivation paths)
+  const walletData = buildWalletExportData(wallet);
+
+  // Check if format exists
+  if (!exportFormatRegistry.has(formatId)) {
+    throw new InvalidInputError(`Unknown export format: ${formatId}. Use GET /export/formats to see available formats.`);
+  }
+
+  // Export using registry
+  const result = exportFormatRegistry.export(formatId, walletData, {
+    includeDevices: true,
+    includeChangeDescriptor: true,
+  });
+
+  // Set appropriate headers for download
+  res.setHeader('Content-Type', result.mimeType);
+  res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+  res.send(result.content);
+}));
 
 export default router;

@@ -13,7 +13,7 @@ import {
   ELECTRUM_SUBSCRIPTION_LOCK_REFRESH_MS,
 } from './types';
 
-const log = createLogger('ElectrumMgr');
+const log = createLogger('WORKER:ELECTRUM_LOCK');
 
 /**
  * Attempt to acquire the Electrum subscription lock.

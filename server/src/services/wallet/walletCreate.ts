@@ -13,7 +13,7 @@ import { InvalidInputError, DeviceNotFoundError } from '../../errors';
 import { generateInitialAddresses } from './addressGeneration';
 import type { CreateWalletInput, WalletWithBalance } from './types';
 
-const log = createLogger('WALLET');
+const log = createLogger('WALLET:SVC_CREATE');
 
 /**
  * Create a new wallet

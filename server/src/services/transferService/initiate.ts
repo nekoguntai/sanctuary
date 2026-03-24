@@ -11,7 +11,7 @@ import { ForbiddenError, InvalidInputError, ConflictError, UserNotFoundError } f
 import { calculateExpiryDate, checkResourceOwnership, formatTransfer } from './helpers';
 import type { Transfer, InitiateTransferInput } from './types';
 
-const log = createLogger('TRANSFER');
+const log = createLogger('TRANSFER:SVC');
 
 /**
  * Initiate an ownership transfer

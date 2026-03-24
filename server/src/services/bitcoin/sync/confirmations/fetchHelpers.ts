@@ -10,7 +10,7 @@ import { getNodeClient } from '../../nodeClient';
 import { walletLog } from '../../../../websocket/notifications';
 import { mapWithConcurrency } from '../../../../utils/async';
 
-const log = createLogger('CONFIRMATIONS');
+const log = createLogger('BITCOIN:SVC_CONFIRMATIONS');
 
 /**
  * Fetch block heights from address history for transactions missing blockHeight.

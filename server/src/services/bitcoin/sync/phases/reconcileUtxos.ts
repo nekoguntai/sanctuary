@@ -13,7 +13,7 @@ import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext } from '../types';
 
-const log = createLogger('SYNC-RECONCILE');
+const log = createLogger('BITCOIN:SVC_SYNC_RECONCILE');
 
 /**
  * Execute reconcile UTXOs phase

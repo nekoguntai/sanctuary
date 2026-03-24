@@ -11,7 +11,7 @@ import { walletLog } from '../../../../websocket/notifications';
 import { populateBlockHeight, populateBlockTime, populateFee, populateCounterpartyAddress, populateAddressId } from './fieldPopulators';
 import type { PopulationStats, PendingUpdate } from './types';
 
-const log = createLogger('CONFIRMATIONS');
+const log = createLogger('BITCOIN:SVC_CONFIRMATIONS');
 
 /**
  * Process all transactions and collect pending database updates.

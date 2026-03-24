@@ -14,7 +14,7 @@ import {
 import type { BitcoinNetwork, NetworkState, ElectrumManagerCallbacks } from './types';
 import { connectNetwork } from './networkConnection';
 
-const log = createLogger('ElectrumMgr');
+const log = createLogger('WORKER:ELECTRUM_RECONNECT');
 
 /**
  * Schedule a reconnection attempt with exponential backoff.

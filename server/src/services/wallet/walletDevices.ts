@@ -11,7 +11,7 @@ import { ConflictError, WalletNotFoundError, DeviceNotFoundError } from '../../e
 import { getErrorMessage } from '../../utils/errors';
 import { generateInitialAddresses } from './addressGeneration';
 
-const log = createLogger('WALLET');
+const log = createLogger('WALLET:SVC_DEVICE');
 
 /**
  * Add device to wallet

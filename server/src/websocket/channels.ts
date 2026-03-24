@@ -21,7 +21,7 @@ import {
 } from './types';
 import { recordRateLimitEvent } from './rateLimiter';
 
-const log = createLogger('WS_CHANNELS');
+const log = createLogger('WS:CHANNELS');
 
 /**
  * Callback interface for channel operations that need to interact with the server

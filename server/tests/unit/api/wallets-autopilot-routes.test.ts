@@ -47,6 +47,7 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+import { errorHandler } from '../../../src/errors/errorHandler';
 import autopilotRouter from '../../../src/api/wallets/autopilot';
 
 describe('Wallets Autopilot Routes', () => {
@@ -60,6 +61,7 @@ describe('Wallets Autopilot Routes', () => {
       next();
     });
     app.use('/api/v1/wallets', autopilotRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -257,10 +259,7 @@ describe('Wallets Autopilot Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/autopilot');
 
     expect(response.status).toBe(500);
-    expect(response.body).toEqual({
-      error: 'Internal Server Error',
-      message: 'Failed to get autopilot settings',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns 500 on settings update failures', async () => {
@@ -271,10 +270,7 @@ describe('Wallets Autopilot Routes', () => {
       .send({ enabled: true });
 
     expect(response.status).toBe(500);
-    expect(response.body).toEqual({
-      error: 'Internal Server Error',
-      message: 'Failed to update autopilot settings',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns 500 on status computation failures', async () => {
@@ -283,9 +279,6 @@ describe('Wallets Autopilot Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/autopilot/status');
 
     expect(response.status).toBe(500);
-    expect(response.body).toEqual({
-      error: 'Internal Server Error',
-      message: 'Failed to get autopilot status',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

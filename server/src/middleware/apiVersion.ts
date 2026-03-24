@@ -36,7 +36,7 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('ApiVersion');
+const log = createLogger('MW:API_VERSION');
 
 // =============================================================================
 // Types

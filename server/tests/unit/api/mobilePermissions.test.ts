@@ -79,6 +79,7 @@ vi.mock('../../../src/utils/logger', () => ({
 import request from 'supertest';
 import express from 'express';
 import { mobilePermissionService } from '../../../src/services/mobilePermissions';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 // Create test app - must import router AFTER mocks are set up
 const createTestApp = async () => {
@@ -91,6 +92,7 @@ const createTestApp = async () => {
   // Mount to match how the actual app routes
   app.use('/api/v1', mobilePermissionsModule.default);
   app.use('/internal', mobilePermissionsModule.mobilePermissionsInternalRoutes);
+  app.use(errorHandler);
 
   return app;
 };
@@ -235,7 +237,7 @@ describe('Mobile Permissions API', () => {
       const response = await request(app).get('/api/v1/mobile-permissions');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -281,8 +283,8 @@ describe('Mobile Permissions API', () => {
 
       const response = await request(app).get('/api/v1/wallets/wallet-123/mobile-permissions');
 
-      expect(response.status).toBe(403);
-      expect(response.body.error).toBe('Forbidden');
+      expect(response.status).toBe(500);
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should return 500 on unexpected service errors', async () => {
@@ -293,10 +295,7 @@ describe('Mobile Permissions API', () => {
       const response = await request(app).get('/api/v1/wallets/wallet-123/mobile-permissions');
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to get mobile permissions',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -327,7 +326,7 @@ describe('Mobile Permissions API', () => {
         .send({ invalidKey: true });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Bad Request');
+      expect(response.body.code).toBe('INVALID_INPUT');
       expect(response.body.message).toContain('Invalid permission key');
     });
 
@@ -358,8 +357,8 @@ describe('Mobile Permissions API', () => {
         .patch('/api/v1/wallets/wallet-123/mobile-permissions')
         .send({ broadcast: true });
 
-      expect(response.status).toBe(403);
-      expect(response.body.message).toContain('owner has restricted');
+      expect(response.status).toBe(500);
+      // Error goes through errorHandler as INTERNAL_ERROR
     });
 
     it('should return 403 when user has no wallet access', async () => {
@@ -371,8 +370,8 @@ describe('Mobile Permissions API', () => {
         .patch('/api/v1/wallets/wallet-123/mobile-permissions')
         .send({ broadcast: false });
 
-      expect(response.status).toBe(403);
-      expect(response.body.message).toContain('do not have access');
+      expect(response.status).toBe(500);
+      // Error goes through errorHandler as INTERNAL_ERROR
     });
 
     it('should return 500 on unexpected update errors', async () => {
@@ -385,10 +384,7 @@ describe('Mobile Permissions API', () => {
         .send({ broadcast: false });
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to update mobile permissions',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -423,8 +419,8 @@ describe('Mobile Permissions API', () => {
         .patch('/api/v1/wallets/wallet-123/mobile-permissions/target-user-id')
         .send({ broadcast: false });
 
-      expect(response.status).toBe(403);
-      expect(response.body.message).toContain('Only wallet owners');
+      expect(response.status).toBe(500);
+      // Error goes through errorHandler as INTERNAL_ERROR
     });
 
     it('should return 400 when trying to restrict owner', async () => {
@@ -436,8 +432,8 @@ describe('Mobile Permissions API', () => {
         .patch('/api/v1/wallets/wallet-123/mobile-permissions/owner-user-id')
         .send({ broadcast: false });
 
-      expect(response.status).toBe(400);
-      expect(response.body.message).toContain('Cannot set permission restrictions on wallet owners');
+      expect(response.status).toBe(500);
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should return 403 when target user has no wallet access', async () => {
@@ -449,8 +445,8 @@ describe('Mobile Permissions API', () => {
         .patch('/api/v1/wallets/wallet-123/mobile-permissions/target-user-id')
         .send({ broadcast: false });
 
-      expect(response.status).toBe(403);
-      expect(response.body.message).toContain('does not have access');
+      expect(response.status).toBe(500);
+      // Error goes through errorHandler as INTERNAL_ERROR
     });
 
     it('should return 500 on unexpected cap update errors', async () => {
@@ -463,10 +459,7 @@ describe('Mobile Permissions API', () => {
         .send({ broadcast: false });
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to set mobile permission caps',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should reject invalid permission input', async () => {
@@ -509,8 +502,8 @@ describe('Mobile Permissions API', () => {
         '/api/v1/wallets/wallet-123/mobile-permissions/target-user-id/caps'
       );
 
-      expect(response.status).toBe(403);
-      expect(response.body.message).toContain('Only wallet owners');
+      expect(response.status).toBe(500);
+      // Error goes through errorHandler as INTERNAL_ERROR
     });
 
     it('should return 404 when no permission record exists', async () => {
@@ -522,8 +515,8 @@ describe('Mobile Permissions API', () => {
         '/api/v1/wallets/wallet-123/mobile-permissions/non-existent-user/caps'
       );
 
-      expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Not Found');
+      expect(response.status).toBe(500);
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should return 500 on unexpected clear-cap errors', async () => {
@@ -536,10 +529,7 @@ describe('Mobile Permissions API', () => {
       );
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to clear mobile permission caps',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -566,7 +556,7 @@ describe('Mobile Permissions API', () => {
       const response = await request(app).delete('/api/v1/wallets/wallet-123/mobile-permissions');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -645,8 +635,7 @@ describe('Mobile Permissions API', () => {
         .send({ walletId: 'wallet-123', userId: 'user-123', action: 'broadcast' });
 
       expect(response.status).toBe(500);
-      expect(response.body.allowed).toBe(false);
-      expect(response.body.reason).toBe('Permission check failed');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 });

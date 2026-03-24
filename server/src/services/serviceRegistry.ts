@@ -12,7 +12,7 @@ export interface ManagedService extends ServiceDefinition {
   stop?: () => Promise<void> | void;
 }
 
-const log = createLogger('ServiceRegistry');
+const log = createLogger('SERVICE:REGISTRY');
 const services = new Map<string, ManagedService>();
 
 export function registerService(service: ManagedService): void {

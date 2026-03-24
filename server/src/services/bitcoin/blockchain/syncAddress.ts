@@ -12,7 +12,7 @@ import { createLogger } from '../../../utils/logger';
 import { getBlockHeight, getBlockTimestamp } from '../utils/blockHeight';
 import type { SyncAddressResult } from './types';
 
-const log = createLogger('BLOCKCHAIN');
+const log = createLogger('BITCOIN:SVC_SYNC_ADDRESS');
 
 /**
  * Calculate confirmations for a transaction (internal helper)

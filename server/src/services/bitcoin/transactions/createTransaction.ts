@@ -28,7 +28,7 @@ import { selectUtxosForMode } from './utxoModes';
 import { buildAndAddOutputs } from './outputBuilder';
 import type { CreateTransactionResult } from './types';
 
-const log = createLogger('CREATE-TX');
+const log = createLogger('BITCOIN:SVC_TX_CREATE');
 
 /**
  * Create a transaction

@@ -91,7 +91,7 @@ import {
   processWaitingQueue,
 } from './acquisitionQueue';
 
-const log = createLogger('ELECTRUM_POOL');
+const log = createLogger('ELECTRUM_POOL:SVC');
 
 /**
  * Electrum Connection Pool

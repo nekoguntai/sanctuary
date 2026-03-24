@@ -10,7 +10,7 @@ import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext } from '../types';
 
-const log = createLogger('SYNC-ADDRESSES');
+const log = createLogger('BITCOIN:SVC_SYNC_ADDRESSES');
 
 /**
  * Execute update addresses phase

@@ -48,7 +48,7 @@ import { sendToClient, processClientQueue } from './messageQueue';
 // Re-export for external consumers
 export { getRateLimitEvents } from './rateLimiter';
 
-const log = createLogger('WS');
+const log = createLogger('WS:CLIENT');
 
 // ============================================================================
 // Client WebSocket Server

@@ -15,7 +15,7 @@ import { db as prisma } from '../repositories/db';
 import { Prisma } from '@prisma/client';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('DRAFT-LOCK');
+const log = createLogger('DRAFT_LOCK:SVC');
 
 export interface LockResult {
   success: boolean;

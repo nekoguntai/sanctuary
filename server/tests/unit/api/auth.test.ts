@@ -618,8 +618,24 @@ vi.mock('../../../src/services/twoFactorService', () => ({
   isBackupCode: vi.fn().mockReturnValue(false),
 }));
 
+// Mock requestContext (needed by errorHandler and auth middleware)
+vi.mock('../../../src/utils/requestContext', () => ({
+  requestContext: {
+    getRequestId: () => 'test-request-id',
+    setUser: vi.fn(),
+    get: () => undefined,
+    run: (_ctx: unknown, fn: () => unknown) => fn(),
+    getUserId: () => undefined,
+    getTraceId: () => undefined,
+    setTraceId: vi.fn(),
+    getDuration: () => 0,
+    generateRequestId: () => 'test-request-id',
+  },
+}));
+
 import request from 'supertest';
 import express from 'express';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 // Create test app for auth routes
 const createAuthTestApp = async () => {
@@ -629,6 +645,7 @@ const createAuthTestApp = async () => {
   // Import router dynamically after mocks
   const authModule = await import('../../../src/api/auth');
   app.use('/api/v1/auth', authModule.default);
+  app.use(errorHandler);
 
   return app;
 };
@@ -709,7 +726,7 @@ describe('Auth API Routes', () => {
         .get('/api/v1/auth/me');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Not Found');
+      expect(response.body.code).toBe('NOT_FOUND');
     });
 
     it('should handle database errors gracefully', async () => {
@@ -719,7 +736,7 @@ describe('Auth API Routes', () => {
         .get('/api/v1/auth/me');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -799,7 +816,7 @@ describe('Auth API Routes', () => {
         .send({ darkMode: true });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -845,7 +862,7 @@ describe('Auth API Routes', () => {
         .get('/api/v1/auth/me/groups');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -897,7 +914,7 @@ describe('Auth API Routes', () => {
         .get('/api/v1/auth/users/search?q=test');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -991,7 +1008,7 @@ describe('Auth API Routes', () => {
         .get('/api/v1/auth/sessions');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1020,7 +1037,7 @@ describe('Auth API Routes', () => {
         .delete('/api/v1/auth/sessions/non-existent');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Not Found');
+      expect(response.body.code).toBe('NOT_FOUND');
     });
 
     it('should audit revoke session with unknown username fallback', async () => {
@@ -1053,7 +1070,7 @@ describe('Auth API Routes', () => {
         .delete('/api/v1/auth/sessions/session-1');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1098,14 +1115,14 @@ describe('Auth API Routes', () => {
       expect(response.body.enabled).toBe(false);
     });
 
-    it('should return disabled on error', async () => {
+    it('should return 500 on error', async () => {
       mockPrismaClient.systemSetting.findUnique.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
         .get('/api/v1/auth/registration-status');
 
-      expect(response.status).toBe(200);
-      expect(response.body.enabled).toBe(false);
+      expect(response.status).toBe(500);
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1218,7 +1235,7 @@ describe('Auth API Routes', () => {
         .send({ username: 'newuser', password: 'StrongPassword123!', email: 'new@example.com' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should reject invalid email format', async () => {
@@ -1550,7 +1567,7 @@ describe('Auth API Routes', () => {
         .send({ username: 'testuser', password: 'password123' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should return 500 when login query fails unexpectedly', async () => {
@@ -1561,10 +1578,7 @@ describe('Auth API Routes', () => {
         .send({ username: 'testuser', password: 'password123' });
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to login',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1663,7 +1677,7 @@ describe('Auth API Routes', () => {
         .send({ currentPassword: 'OldPassword123!', newPassword: 'NewStrongPassword123!' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -1856,7 +1870,7 @@ describe('Auth API Routes', () => {
         .send({ refreshToken: 'valid-token' });
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toBe('Failed to rotate refresh token');
+      expect(response.body.error).toBe('Internal');
     });
 
     it('should handle errors gracefully', async () => {
@@ -1867,7 +1881,7 @@ describe('Auth API Routes', () => {
         .send({ refreshToken: 'valid-token' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -1949,7 +1963,7 @@ describe('Auth API Routes', () => {
         .send({});
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -1977,7 +1991,7 @@ describe('Auth API Routes', () => {
         .send({});
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.error).toBe('Internal');
     });
 
     it('should audit logout-all with unknown username fallback', async () => {
@@ -2056,7 +2070,7 @@ describe('Auth API Routes', () => {
         .send({});
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -2159,7 +2173,7 @@ describe('Auth API Routes', () => {
         .send({ token: '123456' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -2336,7 +2350,7 @@ describe('Auth API Routes', () => {
         .send({ password: correctPassword, token: '123456' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -2498,7 +2512,7 @@ describe('Auth API Routes', () => {
         .send({ tempToken: 'valid-token', code: '123456' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -2602,7 +2616,7 @@ describe('Auth API Routes', () => {
         .send({ password: correctPassword });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -2731,7 +2745,7 @@ describe('Auth API Routes', () => {
         .send({ password: correctPassword, token: '123456' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 });

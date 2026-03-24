@@ -20,7 +20,7 @@ import {
 } from './strategies';
 import type { SelectionStrategy, SelectionResult, SelectionOptions } from './types';
 
-const log = createLogger('UTXO-SELECTION');
+const log = createLogger('UTXO_SELECTION:SVC');
 
 // Re-export all types and strategy helpers
 export type { SelectionStrategy, SelectedUtxo, SelectionResult, SelectionOptions } from './types';

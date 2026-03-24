@@ -9,13 +9,12 @@
  * - WRITE (POST, PUT, DELETE): Only owner or signer roles
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
+import { requireWalletAccess } from '../middleware/walletAccess';
 import { labelService } from '../services/labelService';
-import { ApiError } from '../errors';
-import { createLogger } from '../utils/logger';
-
-const log = createLogger('LABELS');
+import { asyncHandler } from '../errors/errorHandler';
+import { serializeForJson } from '../utils/serialization';
 
 const router = Router();
 
@@ -30,138 +29,68 @@ router.use(authenticate);
  * GET /api/v1/wallets/:walletId/labels
  * Get all labels for a wallet
  */
-router.get('/wallets/:walletId/labels', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
+router.get('/wallets/:walletId/labels', requireWalletAccess('view'), asyncHandler(async (req, res) => {
+  const { walletId } = req.params;
 
-    const labels = await labelService.getLabelsForWallet(walletId, userId);
-    res.json(labels);
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Get labels error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch labels',
-    });
-  }
-});
+  const labels = await labelService.getLabelsForWallet(walletId);
+  res.json(labels);
+}));
 
 /**
  * GET /api/v1/wallets/:walletId/labels/:labelId
  * Get a specific label with all associated transactions and addresses
  */
-router.get('/wallets/:walletId/labels/:labelId', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { walletId, labelId } = req.params;
+router.get('/wallets/:walletId/labels/:labelId', requireWalletAccess('view'), asyncHandler(async (req, res) => {
+  const { walletId, labelId } = req.params;
 
-    const label = await labelService.getLabel(walletId, labelId, userId);
-
-    // Transform response for API (convert BigInt to Number)
-    const response = {
-      ...label,
-      transactions: label.transactions.map(tx => ({
-        ...tx,
-        amount: Number(tx.amount),
-      })),
-    };
-
-    res.json(response);
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Get label error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch label',
-    });
-  }
-});
+  const label = await labelService.getLabel(walletId, labelId);
+  res.json(serializeForJson(label));
+}));
 
 /**
  * POST /api/v1/wallets/:walletId/labels
  * Create a new label (requires edit access: owner or signer)
  */
-router.post('/wallets/:walletId/labels', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
-    const { name, color, description } = req.body;
+router.post('/wallets/:walletId/labels', requireWalletAccess('edit'), asyncHandler(async (req, res) => {
+  const { walletId } = req.params;
+  const { name, color, description } = req.body;
 
-    const label = await labelService.createLabel(walletId, userId, {
-      name,
-      color,
-      description,
-    });
+  const label = await labelService.createLabel(walletId, {
+    name,
+    color,
+    description,
+  });
 
-    res.status(201).json(label);
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Create label error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to create label',
-    });
-  }
-});
+  res.status(201).json(label);
+}));
 
 /**
  * PUT /api/v1/wallets/:walletId/labels/:labelId
  * Update a label (requires edit access: owner or signer)
  */
-router.put('/wallets/:walletId/labels/:labelId', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { walletId, labelId } = req.params;
-    const { name, color, description } = req.body;
+router.put('/wallets/:walletId/labels/:labelId', requireWalletAccess('edit'), asyncHandler(async (req, res) => {
+  const { walletId, labelId } = req.params;
+  const { name, color, description } = req.body;
 
-    const label = await labelService.updateLabel(walletId, labelId, userId, {
-      name,
-      color,
-      description,
-    });
+  const label = await labelService.updateLabel(walletId, labelId, {
+    name,
+    color,
+    description,
+  });
 
-    res.json(label);
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Update label error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to update label',
-    });
-  }
-});
+  res.json(label);
+}));
 
 /**
  * DELETE /api/v1/wallets/:walletId/labels/:labelId
  * Delete a label (requires edit access: owner or signer)
  */
-router.delete('/wallets/:walletId/labels/:labelId', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { walletId, labelId } = req.params;
+router.delete('/wallets/:walletId/labels/:labelId', requireWalletAccess('edit'), asyncHandler(async (req, res) => {
+  const { walletId, labelId } = req.params;
 
-    await labelService.deleteLabel(walletId, labelId, userId);
-    res.status(204).send();
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Delete label error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to delete label',
-    });
-  }
-});
+  await labelService.deleteLabel(walletId, labelId);
+  res.status(204).send();
+}));
 
 // ========================================
 // TRANSACTION LABEL OPERATIONS
@@ -171,97 +100,53 @@ router.delete('/wallets/:walletId/labels/:labelId', async (req: Request, res: Re
  * GET /api/v1/transactions/:transactionId/labels
  * Get all labels for a transaction
  */
-router.get('/transactions/:transactionId/labels', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { transactionId } = req.params;
+router.get('/transactions/:transactionId/labels', asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { transactionId } = req.params;
 
-    const labels = await labelService.getTransactionLabels(transactionId, userId);
-    res.json(labels);
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Get transaction labels error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch transaction labels',
-    });
-  }
-});
+  const labels = await labelService.getTransactionLabels(transactionId, userId);
+  res.json(labels);
+}));
 
 /**
  * POST /api/v1/transactions/:transactionId/labels
  * Add labels to a transaction (requires edit access: owner or signer)
  * Body: { labelIds: string[] }
  */
-router.post('/transactions/:transactionId/labels', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { transactionId } = req.params;
-    const { labelIds } = req.body;
+router.post('/transactions/:transactionId/labels', asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { transactionId } = req.params;
+  const { labelIds } = req.body;
 
-    const labels = await labelService.addTransactionLabels(transactionId, userId, labelIds);
-    res.json(labels);
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Add transaction labels error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to add labels to transaction',
-    });
-  }
-});
+  const labels = await labelService.addTransactionLabels(transactionId, userId, labelIds);
+  res.json(labels);
+}));
 
 /**
  * PUT /api/v1/transactions/:transactionId/labels
  * Replace all labels on a transaction (requires edit access: owner or signer)
  * Body: { labelIds: string[] }
  */
-router.put('/transactions/:transactionId/labels', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { transactionId } = req.params;
-    const { labelIds } = req.body;
+router.put('/transactions/:transactionId/labels', asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { transactionId } = req.params;
+  const { labelIds } = req.body;
 
-    const labels = await labelService.replaceTransactionLabels(transactionId, userId, labelIds);
-    res.json(labels);
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Replace transaction labels error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to replace transaction labels',
-    });
-  }
-});
+  const labels = await labelService.replaceTransactionLabels(transactionId, userId, labelIds);
+  res.json(labels);
+}));
 
 /**
  * DELETE /api/v1/transactions/:transactionId/labels/:labelId
  * Remove a label from a transaction (requires edit access: owner or signer)
  */
-router.delete('/transactions/:transactionId/labels/:labelId', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { transactionId, labelId } = req.params;
+router.delete('/transactions/:transactionId/labels/:labelId', asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { transactionId, labelId } = req.params;
 
-    await labelService.removeTransactionLabel(transactionId, labelId, userId);
-    res.status(204).send();
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Remove transaction label error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to remove label from transaction',
-    });
-  }
-});
+  await labelService.removeTransactionLabel(transactionId, labelId, userId);
+  res.status(204).send();
+}));
 
 // ========================================
 // ADDRESS LABEL OPERATIONS
@@ -271,96 +156,52 @@ router.delete('/transactions/:transactionId/labels/:labelId', async (req: Reques
  * GET /api/v1/addresses/:addressId/labels
  * Get all labels for an address
  */
-router.get('/addresses/:addressId/labels', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { addressId } = req.params;
+router.get('/addresses/:addressId/labels', asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { addressId } = req.params;
 
-    const labels = await labelService.getAddressLabels(addressId, userId);
-    res.json(labels);
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Get address labels error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch address labels',
-    });
-  }
-});
+  const labels = await labelService.getAddressLabels(addressId, userId);
+  res.json(labels);
+}));
 
 /**
  * POST /api/v1/addresses/:addressId/labels
  * Add labels to an address (requires edit access: owner or signer)
  * Body: { labelIds: string[] }
  */
-router.post('/addresses/:addressId/labels', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { addressId } = req.params;
-    const { labelIds } = req.body;
+router.post('/addresses/:addressId/labels', asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { addressId } = req.params;
+  const { labelIds } = req.body;
 
-    const labels = await labelService.addAddressLabels(addressId, userId, labelIds);
-    res.json(labels);
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Add address labels error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to add labels to address',
-    });
-  }
-});
+  const labels = await labelService.addAddressLabels(addressId, userId, labelIds);
+  res.json(labels);
+}));
 
 /**
  * PUT /api/v1/addresses/:addressId/labels
  * Replace all labels on an address (requires edit access: owner or signer)
  * Body: { labelIds: string[] }
  */
-router.put('/addresses/:addressId/labels', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { addressId } = req.params;
-    const { labelIds } = req.body;
+router.put('/addresses/:addressId/labels', asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { addressId } = req.params;
+  const { labelIds } = req.body;
 
-    const labels = await labelService.replaceAddressLabels(addressId, userId, labelIds);
-    res.json(labels);
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Replace address labels error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to replace address labels',
-    });
-  }
-});
+  const labels = await labelService.replaceAddressLabels(addressId, userId, labelIds);
+  res.json(labels);
+}));
 
 /**
  * DELETE /api/v1/addresses/:addressId/labels/:labelId
  * Remove a label from an address (requires edit access: owner or signer)
  */
-router.delete('/addresses/:addressId/labels/:labelId', async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { addressId, labelId } = req.params;
+router.delete('/addresses/:addressId/labels/:labelId', asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { addressId, labelId } = req.params;
 
-    await labelService.removeAddressLabel(addressId, labelId, userId);
-    res.status(204).send();
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.code, message: error.message });
-    }
-    log.error('Remove address label error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to remove label from address',
-    });
-  }
-});
+  await labelService.removeAddressLabel(addressId, labelId, userId);
+  res.status(204).send();
+}));
 
 export default router;

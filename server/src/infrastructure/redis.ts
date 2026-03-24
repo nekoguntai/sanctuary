@@ -34,7 +34,7 @@ import { RedisCache } from '../services/cache/redisCache';
 import { eventBus as localEventBus } from '../events/eventBus';
 import { RedisEventBus } from '../events/redisEventBus';
 
-const log = createLogger('RedisInfra');
+const log = createLogger('INFRA:REDIS');
 
 // =============================================================================
 // State

@@ -8,7 +8,7 @@
 import { createLogger } from '../../../../utils/logger';
 import type { PopulationStats } from './types';
 
-const log = createLogger('CONFIRMATIONS');
+const log = createLogger('BITCOIN:SVC_CONFIRMATIONS');
 
 /**
  * Populate blockHeight from various sources (Electrum, RPC, address history)

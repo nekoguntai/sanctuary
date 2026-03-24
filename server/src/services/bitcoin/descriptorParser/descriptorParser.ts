@@ -19,7 +19,7 @@ import {
 } from './descriptorUtils';
 import type { ParsedDevice, ParsedDescriptor, DescriptorParseError } from './types';
 
-const log = createLogger('DESCRIPTOR');
+const log = createLogger('BITCOIN:SVC_DESCRIPTOR');
 
 /**
  * Parse a Bitcoin output descriptor and extract all relevant information

@@ -16,7 +16,7 @@ import { sessionRepository } from '../repositories';
 import { generateRefreshToken, decodeToken } from '../utils/jwt';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('REFRESH_TOKEN');
+const log = createLogger('REFRESH_TOKEN:SVC');
 
 export interface DeviceInfo {
   deviceId?: string;

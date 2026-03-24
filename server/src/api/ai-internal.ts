@@ -28,8 +28,10 @@ import { authenticate } from '../middleware/auth';
 import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
 import { notificationService } from '../websocket/notifications';
+import { asyncHandler } from '../errors/errorHandler';
+import { NotFoundError } from '../errors/ApiError';
 
-const log = createLogger('AI-INTERNAL');
+const log = createLogger('AI_INTERNAL:ROUTE');
 
 const router = Router();
 
@@ -131,54 +133,48 @@ router.use(authenticate);
  * Returns sanitized transaction metadata for AI label suggestions.
  * DOES NOT include: address, txid, or any identifying information.
  */
-router.get('/tx/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user?.userId;
+router.get('/tx/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user?.userId;
 
-    // Fetch transaction with wallet access check
-    const transaction = await prisma.transaction.findFirst({
-      where: {
-        id,
-        wallet: {
-          OR: [
-            { users: { some: { userId } } },
-            { group: { members: { some: { userId } } } },
-          ],
-        },
+  // Fetch transaction with wallet access check
+  const transaction = await prisma.transaction.findFirst({
+    where: {
+      id,
+      wallet: {
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
       },
-      select: {
-        // ONLY select non-sensitive fields
-        id: true,
-        amount: true,
-        type: true,
-        blockTime: true,
-        createdAt: true,
-        confirmations: true,
-        walletId: true,
-        // DO NOT select: txid, address, or any other identifying info
-      },
-    });
+    },
+    select: {
+      // ONLY select non-sensitive fields
+      id: true,
+      amount: true,
+      type: true,
+      blockTime: true,
+      createdAt: true,
+      confirmations: true,
+      walletId: true,
+      // DO NOT select: txid, address, or any other identifying info
+    },
+  });
 
-    if (!transaction) {
-      return res.status(404).json({ error: 'Transaction not found' });
-    }
-
-    // Return SANITIZED data only
-    res.json({
-      walletId: transaction.walletId,
-      amount: Math.abs(Number(transaction.amount)), // Always positive
-      direction: Number(transaction.amount) >= 0 ? 'receive' : 'send',
-      date: (transaction.blockTime || transaction.createdAt).toISOString(),
-      confirmations: transaction.confirmations,
-      // Note: We intentionally do NOT include txid or address
-    });
-
-  } catch (error) {
-    log.error('Error fetching transaction for AI', { error: String(error) });
-    res.status(500).json({ error: 'Internal error' });
+  if (!transaction) {
+    throw new NotFoundError('Transaction not found');
   }
-});
+
+  // Return SANITIZED data only
+  res.json({
+    walletId: transaction.walletId,
+    amount: Math.abs(Number(transaction.amount)), // Always positive
+    direction: Number(transaction.amount) >= 0 ? 'receive' : 'send',
+    date: (transaction.blockTime || transaction.createdAt).toISOString(),
+    confirmations: transaction.confirmations,
+    // Note: We intentionally do NOT include txid or address
+  });
+}));
 
 /**
  * GET /internal/ai/wallet/:id/labels
@@ -186,43 +182,37 @@ router.get('/tx/:id', async (req: Request, res: Response) => {
  * Returns existing labels in a wallet for AI context.
  * Helps AI suggest labels consistent with user's existing categorization.
  */
-router.get('/wallet/:id/labels', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user?.userId;
+router.get('/wallet/:id/labels', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user?.userId;
 
-    // Verify wallet access
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    });
+  // Verify wallet access
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id,
+      OR: [
+        { users: { some: { userId } } },
+        { group: { members: { some: { userId } } } },
+      ],
+    },
+  });
 
-    if (!wallet) {
-      return res.status(404).json({ error: 'Wallet not found' });
-    }
-
-    // Fetch recent labels
-    const labels = await prisma.label.findMany({
-      where: { walletId: id },
-      select: { name: true },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
-
-    res.json({
-      labels: labels.map(l => l.name),
-    });
-
-  } catch (error) {
-    log.error('Error fetching labels for AI', { error: String(error) });
-    res.status(500).json({ error: 'Internal error' });
+  if (!wallet) {
+    throw new NotFoundError('Wallet not found');
   }
-});
+
+  // Fetch recent labels
+  const labels = await prisma.label.findMany({
+    where: { walletId: id },
+    select: { name: true },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+
+  res.json({
+    labels: labels.map(l => l.name),
+  });
+}));
 
 /**
  * GET /internal/ai/wallet/:id/context
@@ -230,53 +220,47 @@ router.get('/wallet/:id/labels', async (req: Request, res: Response) => {
  * Returns wallet context for natural language queries.
  * Used to help AI understand available data and user's labeling patterns.
  */
-router.get('/wallet/:id/context', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user?.userId;
+router.get('/wallet/:id/context', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user?.userId;
 
-    // Verify wallet access
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    });
+  // Verify wallet access
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id,
+      OR: [
+        { users: { some: { userId } } },
+        { group: { members: { some: { userId } } } },
+      ],
+    },
+  });
 
-    if (!wallet) {
-      return res.status(404).json({ error: 'Wallet not found' });
-    }
-
-    // Fetch summary stats (no sensitive data)
-    const [labels, txCount, addressCount, utxoCount] = await Promise.all([
-      prisma.label.findMany({
-        where: { walletId: id },
-        select: { name: true },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      }),
-      prisma.transaction.count({ where: { walletId: id } }),
-      prisma.address.count({ where: { walletId: id } }),
-      prisma.uTXO.count({ where: { walletId: id, spent: false } }),
-    ]);
-
-    res.json({
-      labels: labels.map(l => l.name),
-      stats: {
-        transactionCount: txCount,
-        addressCount: addressCount,
-        utxoCount: utxoCount,
-      },
-      // DO NOT include: balance, addresses, txids, or any identifying info
-    });
-
-  } catch (error) {
-    log.error('Error fetching wallet context for AI', { error: String(error) });
-    res.status(500).json({ error: 'Internal error' });
+  if (!wallet) {
+    throw new NotFoundError('Wallet not found');
   }
-});
+
+  // Fetch summary stats (no sensitive data)
+  const [labels, txCount, addressCount, utxoCount] = await Promise.all([
+    prisma.label.findMany({
+      where: { walletId: id },
+      select: { name: true },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    }),
+    prisma.transaction.count({ where: { walletId: id } }),
+    prisma.address.count({ where: { walletId: id } }),
+    prisma.uTXO.count({ where: { walletId: id, spent: false } }),
+  ]);
+
+  res.json({
+    labels: labels.map(l => l.name),
+    stats: {
+      transactionCount: txCount,
+      addressCount: addressCount,
+      utxoCount: utxoCount,
+    },
+    // DO NOT include: balance, addresses, txids, or any identifying info
+  });
+}));
 
 export default router;

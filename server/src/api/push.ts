@@ -32,14 +32,16 @@
  * - Device tokens are only modifiable by the owning user
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { pushDeviceRepository, auditLogRepository } from '../repositories';
 import { authenticate } from '../middleware/auth';
 import { verifyGatewayRequest } from '../middleware/gatewayAuth';
 import { createLogger } from '../utils/logger';
+import { asyncHandler } from '../errors/errorHandler';
+import { InvalidInputError, NotFoundError } from '../errors/ApiError';
 
 const router = Router();
-const log = createLogger('PUSH-API');
+const log = createLogger('PUSH:ROUTE');
 
 /**
  * Device token format validation (SEC-008)
@@ -90,168 +92,121 @@ function validateDeviceToken(token: string, platform: 'ios' | 'android'): Device
  * POST /api/v1/push/register
  * Register a device token for push notifications
  */
-router.post('/register', authenticate, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { token, platform, deviceName } = req.body;
+router.post('/register', authenticate, asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { token, platform, deviceName } = req.body;
 
-    // Validation
-    if (!token || typeof token !== 'string') {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Device token is required',
-      });
-    }
-
-    if (!platform || !['ios', 'android'].includes(platform)) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Platform must be "ios" or "android"',
-      });
-    }
-
-    // SEC-008: Validate device token format
-    const tokenValidation = validateDeviceToken(token, platform);
-    if (!tokenValidation.valid) {
-      log.warn('Invalid device token format', { platform, error: tokenValidation.error });
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: tokenValidation.error,
-      });
-    }
-
-    // Use upsert to handle both new and existing tokens
-    const device = await pushDeviceRepository.upsert({
-      token,
-      userId,
-      platform,
-      deviceName: deviceName || undefined,
-    });
-
-    const isNew = device.createdAt.getTime() === device.lastUsedAt.getTime();
-    const message = isNew ? 'Device registered for push notifications' : 'Device token updated';
-
-    log.info(`Registered ${platform} device for user ${userId}`);
-    res.json({
-      success: true,
-      deviceId: device.id,
-      message,
-    });
-  } catch (error) {
-    log.error('Register device error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to register device',
-    });
+  // Validation
+  if (!token || typeof token !== 'string') {
+    throw new InvalidInputError('Device token is required');
   }
-});
+
+  if (!platform || !['ios', 'android'].includes(platform)) {
+    throw new InvalidInputError('Platform must be "ios" or "android"');
+  }
+
+  // SEC-008: Validate device token format
+  const tokenValidation = validateDeviceToken(token, platform);
+  if (!tokenValidation.valid) {
+    log.warn('Invalid device token format', { platform, error: tokenValidation.error });
+    throw new InvalidInputError(tokenValidation.error);
+  }
+
+  // Use upsert to handle both new and existing tokens
+  const device = await pushDeviceRepository.upsert({
+    token,
+    userId,
+    platform,
+    deviceName: deviceName || undefined,
+  });
+
+  const isNew = device.createdAt.getTime() === device.lastUsedAt.getTime();
+  const message = isNew ? 'Device registered for push notifications' : 'Device token updated';
+
+  log.info(`Registered ${platform} device for user ${userId}`);
+  res.json({
+    success: true,
+    deviceId: device.id,
+    message,
+  });
+}));
 
 /**
  * DELETE /api/v1/push/unregister
  * Remove a device token (called when user signs out of mobile app)
  */
-router.delete('/unregister', authenticate, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { token } = req.body;
+router.delete('/unregister', authenticate, asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { token } = req.body;
 
-    if (!token || typeof token !== 'string') {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Device token is required',
-      });
-    }
+  if (!token || typeof token !== 'string') {
+    throw new InvalidInputError('Device token is required');
+  }
 
-    // Find the device by token
-    const device = await pushDeviceRepository.findByToken(token);
+  // Find the device by token
+  const device = await pushDeviceRepository.findByToken(token);
 
-    if (!device || device.userId !== userId) {
-      // Token not found or not owned by user - still return success
-      // This is idempotent behavior for sign-out scenarios
-      return res.json({
-        success: true,
-        message: 'Device token removed',
-      });
-    }
-
-    await pushDeviceRepository.deleteByToken(token);
-
-    log.info(`Unregistered ${device.platform} device for user ${userId}`);
-    res.json({
+  if (!device || device.userId !== userId) {
+    // Token not found or not owned by user - still return success
+    // This is idempotent behavior for sign-out scenarios
+    return res.json({
       success: true,
       message: 'Device token removed',
     });
-  } catch (error) {
-    log.error('Unregister device error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to unregister device',
-    });
   }
-});
+
+  await pushDeviceRepository.deleteByToken(token);
+
+  log.info(`Unregistered ${device.platform} device for user ${userId}`);
+  res.json({
+    success: true,
+    message: 'Device token removed',
+  });
+}));
 
 /**
  * GET /api/v1/push/devices
  * List all registered devices for the current user
  */
-router.get('/devices', authenticate, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
+router.get('/devices', authenticate, asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
 
-    const devices = await pushDeviceRepository.findByUserId(userId);
+  const devices = await pushDeviceRepository.findByUserId(userId);
 
-    res.json({
-      devices: devices.map((d) => ({
-        id: d.id,
-        platform: d.platform,
-        deviceName: d.deviceName,
-        lastUsedAt: d.lastUsedAt.toISOString(),
-        createdAt: d.createdAt.toISOString(),
-      })),
-    });
-  } catch (error) {
-    log.error('List devices error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to list devices',
-    });
-  }
-});
+  res.json({
+    devices: devices.map((d) => ({
+      id: d.id,
+      platform: d.platform,
+      deviceName: d.deviceName,
+      lastUsedAt: d.lastUsedAt.toISOString(),
+      createdAt: d.createdAt.toISOString(),
+    })),
+  });
+}));
 
 /**
  * DELETE /api/v1/push/devices/:id
  * Remove a specific device by ID
  */
-router.delete('/devices/:id', authenticate, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { id } = req.params;
+router.delete('/devices/:id', authenticate, asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { id } = req.params;
 
-    // Find device (must be owned by user)
-    const device = await pushDeviceRepository.findById(id);
+  // Find device (must be owned by user)
+  const device = await pushDeviceRepository.findById(id);
 
-    if (!device || device.userId !== userId) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Device not found',
-      });
-    }
-
-    await pushDeviceRepository.deleteById(id);
-
-    log.info(`Removed ${device.platform} device ${id} for user ${userId}`);
-    res.json({
-      success: true,
-      message: 'Device removed',
-    });
-  } catch (error) {
-    log.error('Delete device error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to delete device',
-    });
+  if (!device || device.userId !== userId) {
+    throw new NotFoundError('Device not found');
   }
-});
+
+  await pushDeviceRepository.deleteById(id);
+
+  log.info(`Removed ${device.platform} device ${id} for user ${userId}`);
+  res.json({
+    success: true,
+    message: 'Device removed',
+  });
+}));
 
 /**
  * GET /api/v1/push/by-user/:userId
@@ -264,29 +219,21 @@ router.delete('/devices/:id', authenticate, async (req: Request, res: Response) 
  *
  * Security: SEC-002 - Requires HMAC-signed gateway authentication
  */
-router.get('/by-user/:userId', verifyGatewayRequest, async (req: Request, res: Response) => {
-  try {
-    const { userId } = req.params;
+router.get('/by-user/:userId', verifyGatewayRequest, asyncHandler(async (req, res) => {
+  const { userId } = req.params;
 
-    const devices = await pushDeviceRepository.findByUserId(userId);
+  const devices = await pushDeviceRepository.findByUserId(userId);
 
-    // Map to gateway's expected format
-    res.json(
-      devices.map((d) => ({
-        id: d.id,
-        platform: d.platform,
-        pushToken: d.token,
-        userId: d.userId,
-      }))
-    );
-  } catch (error) {
-    log.error('Fetch devices by user error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch devices',
-    });
-  }
-});
+  // Map to gateway's expected format
+  res.json(
+    devices.map((d) => ({
+      id: d.id,
+      platform: d.platform,
+      pushToken: d.token,
+      userId: d.userId,
+    }))
+  );
+}));
 
 /**
  * DELETE /api/v1/push/device/:deviceId
@@ -297,41 +244,33 @@ router.get('/by-user/:userId', verifyGatewayRequest, async (req: Request, res: R
  *
  * Security: SEC-002 - Requires HMAC-signed gateway authentication
  */
-router.delete('/device/:deviceId', verifyGatewayRequest, async (req: Request, res: Response) => {
-  try {
-    const { deviceId } = req.params;
+router.delete('/device/:deviceId', verifyGatewayRequest, asyncHandler(async (req, res) => {
+  const { deviceId } = req.params;
 
-    // Check if device exists
-    const device = await pushDeviceRepository.findById(deviceId);
+  // Check if device exists
+  const device = await pushDeviceRepository.findById(deviceId);
 
-    if (!device) {
-      // Return success even if not found (idempotent behavior)
-      return res.json({
-        success: true,
-        message: 'Device not found or already removed',
-      });
-    }
-
-    // Delete the device
-    await pushDeviceRepository.deleteById(deviceId);
-
-    log.info(`Gateway removed invalid ${device.platform} token`, {
-      deviceId,
-      userId: device.userId
-    });
-
-    res.json({
+  if (!device) {
+    // Return success even if not found (idempotent behavior)
+    return res.json({
       success: true,
-      message: 'Device removed',
-    });
-  } catch (error) {
-    log.error('Gateway device removal error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to remove device',
+      message: 'Device not found or already removed',
     });
   }
-});
+
+  // Delete the device
+  await pushDeviceRepository.deleteById(deviceId);
+
+  log.info(`Gateway removed invalid ${device.platform} token`, {
+    deviceId,
+    userId: device.userId
+  });
+
+  res.json({
+    success: true,
+    message: 'Device removed',
+  });
+}));
 
 /**
  * POST /api/v1/push/gateway-audit
@@ -352,56 +291,45 @@ router.delete('/device/:deviceId', verifyGatewayRequest, async (req: Request, re
  *   - userId: string (optional) - User ID if authenticated
  *   - username: string (optional) - Username if known
  */
-router.post('/gateway-audit', verifyGatewayRequest, async (req: Request, res: Response) => {
-  try {
-    const {
-      event,
-      category,
-      severity,
-      details,
-      ip,
-      userAgent,
-      userId,
-      username,
-    } = req.body;
+router.post('/gateway-audit', verifyGatewayRequest, asyncHandler(async (req, res) => {
+  const {
+    event,
+    category,
+    severity,
+    details,
+    ip,
+    userAgent,
+    userId,
+    username,
+  } = req.body;
 
-    // Validate required fields
-    if (!event) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Event type is required',
-      });
-    }
-
-    // Determine success based on event type
-    const isFailure = event.includes('FAILED') || event.includes('EXCEEDED') || event.includes('BLOCKED');
-
-    // Create audit log entry
-    await auditLogRepository.create({
-      userId: userId || null,
-      username: username || 'gateway',
-      action: `gateway.${event.toLowerCase()}`,
-      category: (category || 'system') as 'auth' | 'user' | 'wallet' | 'device' | 'admin' | 'system',
-      details: {
-        ...(details || {}),
-        severity: severity || 'info',
-        source: 'gateway',
-      },
-      ipAddress: ip || null,
-      userAgent: userAgent || null,
-      success: !isFailure,
-      errorMsg: isFailure ? event : null,
-    });
-
-    log.debug('Gateway audit event logged', { event, category });
-    res.json({ success: true });
-  } catch (error) {
-    log.error('Gateway audit log error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to log audit event',
-    });
+  // Validate required fields
+  if (!event) {
+    throw new InvalidInputError('Event type is required');
   }
-});
+
+  // Determine success based on event type
+  const isFailure = event.includes('FAILED') || event.includes('EXCEEDED') || event.includes('BLOCKED');
+
+  // Create audit log entry
+  await auditLogRepository.create({
+    userId: userId || null,
+    username: username || 'gateway',
+    action: `gateway.${event.toLowerCase()}`,
+    category: (category || 'system') as 'auth' | 'user' | 'wallet' | 'device' | 'admin' | 'system',
+    details: {
+      ...(details || {}),
+      severity: severity || 'info',
+      source: 'gateway',
+    },
+    ipAddress: ip || null,
+    userAgent: userAgent || null,
+    success: !isFailure,
+    errorMsg: isFailure ? event : null,
+  });
+
+  log.debug('Gateway audit event logged', { event, category });
+  res.json({ success: true });
+}));
 
 export default router;

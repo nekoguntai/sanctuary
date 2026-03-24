@@ -39,7 +39,7 @@ import { getRedisClient, isRedisConnected } from './redis';
 import { createLogger } from '../utils/logger';
 import crypto from 'crypto';
 
-const log = createLogger('DistLock');
+const log = createLogger('INFRA:DIST_LOCK');
 
 // =============================================================================
 // Types

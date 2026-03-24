@@ -23,7 +23,7 @@ import {
 import { getRawTransactionHex } from './helpers';
 import type { WalletSigningInfo } from './types';
 
-const log = createLogger('PSBT-CONSTRUCTION');
+const log = createLogger('BITCOIN:SVC_PSBT_BUILD');
 
 // Initialize BIP32 for key derivation
 // Note: bitcoin.initEccLib(ecc) is NOT called here because it's already

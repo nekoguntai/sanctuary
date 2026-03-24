@@ -18,7 +18,7 @@ import type {
   NetworkType,
 } from './types';
 
-const log = createLogger('ELECTRUM_POOL:REGISTRY');
+const log = createLogger('ELECTRUM_POOL:SVC_REGISTRY');
 
 // Singleton pool instance (legacy - for backward compatibility, uses mainnet)
 let poolInstance: ElectrumPool | null = null;

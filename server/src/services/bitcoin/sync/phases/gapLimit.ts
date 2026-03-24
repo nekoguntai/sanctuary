@@ -11,7 +11,7 @@ import { walletLog } from '../../../../websocket/notifications';
 import { ensureGapLimit } from '../addressDiscovery';
 import type { SyncContext } from '../types';
 
-const log = createLogger('SYNC-GAP');
+const log = createLogger('BITCOIN:SVC_SYNC_GAP');
 
 /**
  * Execute gap limit phase

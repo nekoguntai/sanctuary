@@ -11,16 +11,15 @@ import { db as prisma } from '../repositories/db';
 import { draftRepository, DraftStatus } from '../repositories';
 import { lockUtxosForDraft, resolveUtxoIds } from './draftLockService';
 import { notifyNewDraft } from './notifications/notificationService';
-import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError, WalletNotFoundError } from '../errors';
+import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError } from '../errors';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 import { safeJsonParse, SystemSettingSchemas } from '../utils/safeJson';
 import { DEFAULT_DRAFT_EXPIRATION_DAYS } from '../constants';
-import * as walletService from './wallet';
 import { approvalService } from './vaultPolicy/approvalService';
 import type { PolicyEvaluationResult } from './vaultPolicy/types';
 
-const log = createLogger('DRAFT_SVC');
+const log = createLogger('DRAFT:SVC');
 const MAX_SIGNATURE_UPDATE_RETRIES = 3;
 
 /**
@@ -85,34 +84,24 @@ async function getDraftExpirationDays(): Promise<number> {
 
 /**
  * Get all drafts for a wallet
+ *
+ * Access control: handled by requireWalletAccess('view') middleware at route level
  */
 export async function getDraftsForWallet(
-  walletId: string,
-  userId: string
+  walletId: string
 ): Promise<DraftTransaction[]> {
-  // Verify user has access to this wallet
-  const wallet = await walletService.getWalletById(walletId, userId);
-  if (!wallet) {
-    throw new WalletNotFoundError(walletId);
-  }
-
   return draftRepository.findByWalletId(walletId);
 }
 
 /**
  * Get a specific draft
+ *
+ * Access control: handled by requireWalletAccess('view') middleware at route level
  */
 export async function getDraft(
   walletId: string,
-  draftId: string,
-  userId: string
+  draftId: string
 ): Promise<DraftTransaction> {
-  // Verify user has access to this wallet
-  const wallet = await walletService.getWalletById(walletId, userId);
-  if (!wallet) {
-    throw new WalletNotFoundError(walletId);
-  }
-
   const draft = await draftRepository.findByIdInWallet(draftId, walletId);
   if (!draft) {
     throw new NotFoundError('Draft not found');
@@ -129,15 +118,7 @@ export async function createDraft(
   userId: string,
   data: CreateDraftInput
 ): Promise<DraftTransaction> {
-  // Verify user has access and is at least a signer
-  const wallet = await walletService.getWalletById(walletId, userId);
-  if (!wallet) {
-    throw new WalletNotFoundError(walletId);
-  }
-
-  if (wallet.userRole === 'viewer') {
-    throw new ForbiddenError('Viewers cannot create draft transactions');
-  }
+  // Access control: handled by requireWalletAccess('edit') middleware at route level
 
   // Validation
   if (!data.recipient || data.amount === undefined || !data.feeRate || !data.psbtBase64) {
@@ -241,18 +222,9 @@ export async function createDraft(
 export async function updateDraft(
   walletId: string,
   draftId: string,
-  userId: string,
   data: UpdateDraftInput
 ): Promise<DraftTransaction> {
-  // Verify user has access and is at least a signer
-  const wallet = await walletService.getWalletById(walletId, userId);
-  if (!wallet) {
-    throw new WalletNotFoundError(walletId);
-  }
-
-  if (wallet.userRole === 'viewer') {
-    throw new ForbiddenError('Viewers cannot modify draft transactions');
-  }
+  // Access control: handled by requireWalletAccess('edit') middleware at route level
 
   // Get existing draft
   const existingDraft = await draftRepository.findByIdInWallet(draftId, walletId);
@@ -407,18 +379,18 @@ export async function updateDraft(
 
 /**
  * Delete a draft transaction
+ *
+ * Access control: wallet-level view access handled by requireWalletAccess('view') middleware.
+ * Additional authorization (creator or owner only) checked here as business logic.
+ *
+ * @param walletRole - caller's role from middleware (req.walletRole)
  */
 export async function deleteDraft(
   walletId: string,
   draftId: string,
-  userId: string
+  userId: string,
+  walletRole: string | null | undefined
 ): Promise<void> {
-  // Verify user has access to this wallet
-  const wallet = await walletService.getWalletById(walletId, userId);
-  if (!wallet) {
-    throw new WalletNotFoundError(walletId);
-  }
-
   // Get existing draft
   const existingDraft = await draftRepository.findByIdInWallet(draftId, walletId);
   if (!existingDraft) {
@@ -426,7 +398,7 @@ export async function deleteDraft(
   }
 
   // Only creator or wallet owner can delete
-  if (existingDraft.userId !== userId && wallet.userRole !== 'owner') {
+  if (existingDraft.userId !== userId && walletRole !== 'owner') {
     throw new ForbiddenError('Only the creator or wallet owner can delete drafts');
   }
 

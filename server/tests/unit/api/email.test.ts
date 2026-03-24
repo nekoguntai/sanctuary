@@ -95,6 +95,7 @@ vi.mock('../../../src/utils/errors', () => ({
 // Import after mocks
 import { verifyPassword } from '../../../src/utils/password';
 import { createEmailRouter } from '../../../src/api/auth/email';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 // Create test app with rate limiters
 function createTestApp() {
@@ -111,6 +112,7 @@ function createTestApp() {
     noopLimiter as any  // updateLimiter
   );
   app.use('/api/v1/auth', emailRouter);
+  app.use(errorHandler);
 
   return app;
 }
@@ -158,7 +160,7 @@ describe('Email Verification API', () => {
         .send({});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.code).toBe('VALIDATION_ERROR');
     });
 
     it('should reject empty token', async () => {
@@ -167,7 +169,7 @@ describe('Email Verification API', () => {
         .send({ token: '' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.code).toBe('VALIDATION_ERROR');
     });
 
     it('should handle INVALID_TOKEN error', async () => {
@@ -181,8 +183,8 @@ describe('Email Verification API', () => {
         .send({ token: 'invalid-token' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Verification Failed');
-      expect(response.body.code).toBe('INVALID_TOKEN');
+      expect(response.body.code).toBe('VALIDATION_ERROR');
+      expect(response.body.details.code).toBe('INVALID_TOKEN');
     });
 
     it('should handle EXPIRED_TOKEN error', async () => {
@@ -196,7 +198,7 @@ describe('Email Verification API', () => {
         .send({ token: 'expired-token' });
 
       expect(response.status).toBe(400);
-      expect(response.body.code).toBe('EXPIRED_TOKEN');
+      expect(response.body.details.code).toBe('EXPIRED_TOKEN');
       expect(response.body.message).toContain('expired');
     });
 
@@ -211,7 +213,7 @@ describe('Email Verification API', () => {
         .send({ token: 'used-token' });
 
       expect(response.status).toBe(400);
-      expect(response.body.code).toBe('ALREADY_USED');
+      expect(response.body.details.code).toBe('ALREADY_USED');
     });
 
     it('should handle USER_NOT_FOUND error', async () => {
@@ -225,7 +227,7 @@ describe('Email Verification API', () => {
         .send({ token: 'orphan-token' });
 
       expect(response.status).toBe(400);
-      expect(response.body.code).toBe('USER_NOT_FOUND');
+      expect(response.body.details.code).toBe('USER_NOT_FOUND');
     });
 
     it('should create audit log on success', async () => {
@@ -281,7 +283,7 @@ describe('Email Verification API', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.message).toBe('An error occurred during verification');
-      expect(response.body.code).toBeUndefined();
+      expect(response.body.code).toBe('VALIDATION_ERROR');
     });
 
     it('should audit success with username=unknown when user lookup fails', async () => {
@@ -314,10 +316,7 @@ describe('Email Verification API', () => {
         .send({ token: 'throws' });
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'An error occurred during email verification',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -359,7 +358,7 @@ describe('Email Verification API', () => {
         .send();
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Resend Failed');
+      expect(response.body.code).toBe('VALIDATION_ERROR');
     });
 
     it('should reject if no email set', async () => {
@@ -408,10 +407,8 @@ describe('Email Verification API', () => {
         .send();
 
       expect(response.status).toBe(404);
-      expect(response.body).toMatchObject({
-        error: 'Not Found',
-        message: 'User not found',
-      });
+      expect(response.body.code).toBe('NOT_FOUND');
+      expect(response.body.message).toBe('User not found');
     });
 
     it('should use default resend failure message when service omits an error', async () => {
@@ -445,10 +442,7 @@ describe('Email Verification API', () => {
         .send();
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'An error occurred while sending verification email',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -493,7 +487,7 @@ describe('Email Verification API', () => {
         .send({ email: 'invalid-email', password: currentPassword });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.code).toBe('VALIDATION_ERROR');
     });
 
     it('should reject missing password', async () => {
@@ -502,7 +496,7 @@ describe('Email Verification API', () => {
         .send({ email: newEmail });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.code).toBe('VALIDATION_ERROR');
     });
 
     it('should reject invalid password', async () => {
@@ -513,7 +507,7 @@ describe('Email Verification API', () => {
         .send({ email: newEmail, password: 'wrongpassword' });
 
       expect(response.status).toBe(401);
-      expect(response.body.error).toBe('Unauthorized');
+      expect(response.body.code).toBe('UNAUTHORIZED');
       expect(response.body.message).toBe('Invalid password');
     });
 
@@ -526,7 +520,7 @@ describe('Email Verification API', () => {
         .send({ email: newEmail, password: currentPassword });
 
       expect(response.status).toBe(409);
-      expect(response.body.error).toBe('Conflict');
+      expect(response.body.code).toBe('CONFLICT');
       expect(response.body.message).toContain('already in use');
     });
 
@@ -588,7 +582,7 @@ describe('Email Verification API', () => {
         .send({ email: newEmail, password: currentPassword });
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Not Found');
+      expect(response.body.code).toBe('NOT_FOUND');
     });
 
     it('should skip duplicate check when new email only changes case', async () => {
@@ -621,10 +615,7 @@ describe('Email Verification API', () => {
         .send({ email: newEmail, password: currentPassword });
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'An error occurred while updating email',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 });

@@ -7,7 +7,7 @@
 import { db as prisma } from '../../../repositories/db';
 import { createLogger } from '../../../utils/logger';
 
-const log = createLogger('MEMPOOL');
+const log = createLogger('BITCOIN:SVC_MEMPOOL_CONFIG');
 
 // Default mempool.space API (public instance)
 const DEFAULT_MEMPOOL_API = 'https://mempool.space/api';

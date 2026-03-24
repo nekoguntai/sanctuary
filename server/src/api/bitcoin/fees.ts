@@ -10,149 +10,113 @@ import * as utils from '../../services/bitcoin/utils';
 import * as mempool from '../../services/bitcoin/mempool';
 import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
+import { asyncHandler } from '../../errors/errorHandler';
+import { ValidationError } from '../../errors/ApiError';
 
 const router = Router();
-const log = createLogger('BITCOIN:FEES');
+const log = createLogger('BITCOIN_FEE:ROUTE');
 
 /**
  * GET /api/v1/bitcoin/fees
  * Get current fee estimates from configured source (mempool.space API or Electrum)
  */
-router.get('/fees', async (_req: Request, res: Response) => {
-  try {
-    // Check configured fee estimator source
-    const nodeConfig = await prisma.nodeConfig.findFirst({
-      where: { isDefault: true },
-    });
+router.get('/fees', asyncHandler(async (_req: Request, res: Response) => {
+  // Check configured fee estimator source
+  const nodeConfig = await prisma.nodeConfig.findFirst({
+    where: { isDefault: true },
+  });
 
-    const useMempoolApi = nodeConfig?.feeEstimatorUrl !== '' && nodeConfig?.feeEstimatorUrl !== undefined;
+  const useMempoolApi = nodeConfig?.feeEstimatorUrl !== '' && nodeConfig?.feeEstimatorUrl !== undefined;
 
-    if (useMempoolApi) {
-      // Use mempool.space API (or configured URL)
-      try {
-        const mempoolFees = await mempool.getRecommendedFees();
-        res.json({
-          fastest: mempoolFees.fastestFee,
-          halfHour: mempoolFees.halfHourFee,
-          hour: mempoolFees.hourFee,
-          economy: mempoolFees.economyFee,
-          minimum: mempoolFees.minimumFee,
-          source: 'mempool',
-        });
-        return;
-      } catch (mempoolError) {
-        log.warn('Mempool API fee fetch failed, falling back to Electrum', { error: String(mempoolError) });
-      }
+  if (useMempoolApi) {
+    // Use mempool.space API (or configured URL)
+    try {
+      const mempoolFees = await mempool.getRecommendedFees();
+      res.json({
+        fastest: mempoolFees.fastestFee,
+        halfHour: mempoolFees.halfHourFee,
+        hour: mempoolFees.hourFee,
+        economy: mempoolFees.economyFee,
+        minimum: mempoolFees.minimumFee,
+        source: 'mempool',
+      });
+      return;
+    } catch (mempoolError) {
+      log.warn('Mempool API fee fetch failed, falling back to Electrum', { error: String(mempoolError) });
     }
-
-    // Use Electrum server estimates
-    const fees = await blockchain.getFeeEstimates();
-    res.json({
-      ...fees,
-      minimum: fees.economy || 1,
-      source: 'electrum',
-    });
-  } catch (error) {
-    log.error('Get fees error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch fee estimates',
-    });
   }
-});
+
+  // Use Electrum server estimates
+  const fees = await blockchain.getFeeEstimates();
+  res.json({
+    ...fees,
+    minimum: fees.economy || 1,
+    source: 'electrum',
+  });
+}));
 
 /**
  * GET /api/v1/bitcoin/fees/advanced
  * Get advanced fee estimates with time predictions
  */
-router.get('/fees/advanced', async (_req: Request, res: Response) => {
-  try {
-    const advancedTx = await import('../../services/bitcoin/advancedTx');
-    const fees = await advancedTx.getAdvancedFeeEstimates();
+router.get('/fees/advanced', asyncHandler(async (_req: Request, res: Response) => {
+  const advancedTx = await import('../../services/bitcoin/advancedTx');
+  const fees = await advancedTx.getAdvancedFeeEstimates();
 
-    res.json(fees);
-  } catch (error) {
-    log.error('Get advanced fees error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch advanced fee estimates',
-    });
-  }
-});
+  res.json(fees);
+}));
 
 /**
  * POST /api/v1/bitcoin/utils/estimate-fee
  * Estimate transaction fee
  */
-router.post('/utils/estimate-fee', async (req: Request, res: Response) => {
-  try {
-    const {
-      inputCount,
-      outputCount,
-      scriptType = 'native_segwit',
-      feeRate,
-    } = req.body;
+router.post('/utils/estimate-fee', asyncHandler(async (req: Request, res: Response) => {
+  const {
+    inputCount,
+    outputCount,
+    scriptType = 'native_segwit',
+    feeRate,
+  } = req.body;
 
-    if (!inputCount || !outputCount || !feeRate) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'inputCount, outputCount, and feeRate are required',
-      });
-    }
-
-    const size = utils.estimateTransactionSize(inputCount, outputCount, scriptType);
-    const fee = utils.calculateFee(size, feeRate);
-
-    res.json({
-      size,
-      fee,
-      feeRate,
-    });
-  } catch (error) {
-    log.error('Estimate fee error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to estimate fee',
-    });
+  if (!inputCount || !outputCount || !feeRate) {
+    throw new ValidationError('inputCount, outputCount, and feeRate are required');
   }
-});
+
+  const size = utils.estimateTransactionSize(inputCount, outputCount, scriptType);
+  const fee = utils.calculateFee(size, feeRate);
+
+  res.json({
+    size,
+    fee,
+    feeRate,
+  });
+}));
 
 /**
  * POST /api/v1/bitcoin/utils/estimate-optimal-fee
  * Estimate optimal fee for a transaction based on priority
  */
-router.post('/utils/estimate-optimal-fee', async (req: Request, res: Response) => {
-  try {
-    const {
-      inputCount,
-      outputCount,
-      priority = 'medium',
-      scriptType = 'native_segwit',
-    } = req.body;
+router.post('/utils/estimate-optimal-fee', asyncHandler(async (req: Request, res: Response) => {
+  const {
+    inputCount,
+    outputCount,
+    priority = 'medium',
+    scriptType = 'native_segwit',
+  } = req.body;
 
-    if (!inputCount || !outputCount) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'inputCount and outputCount are required',
-      });
-    }
-
-    const advancedTx = await import('../../services/bitcoin/advancedTx');
-    const result = await advancedTx.estimateOptimalFee(
-      inputCount,
-      outputCount,
-      priority,
-      scriptType
-    );
-
-    res.json(result);
-  } catch (error) {
-    log.error('Optimal fee estimation error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to estimate optimal fee',
-    });
+  if (!inputCount || !outputCount) {
+    throw new ValidationError('inputCount and outputCount are required');
   }
-});
+
+  const advancedTx = await import('../../services/bitcoin/advancedTx');
+  const result = await advancedTx.estimateOptimalFee(
+    inputCount,
+    outputCount,
+    priority,
+    scriptType
+  );
+
+  res.json(result);
+}));
 
 export default router;

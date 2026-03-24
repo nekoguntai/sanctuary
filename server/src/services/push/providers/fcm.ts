@@ -12,7 +12,7 @@ import { createLogger } from '../../../utils/logger';
 import { createCircuitBreaker, type CircuitBreaker } from '../../circuitBreaker';
 import type { PushMessage, PushResult } from '../types';
 
-const log = createLogger('FCM');
+const log = createLogger('PUSH:SVC_FCM');
 
 interface ServiceAccount {
   client_email: string;

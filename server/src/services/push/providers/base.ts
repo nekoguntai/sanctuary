@@ -14,7 +14,7 @@ export interface BasePushProviderConfig {
   platform: PushPlatform;
 }
 
-const log = createLogger('PushProvider');
+const log = createLogger('PUSH:SVC_PROVIDER');
 
 export abstract class BasePushProvider implements IPushProvider {
   readonly name: string;

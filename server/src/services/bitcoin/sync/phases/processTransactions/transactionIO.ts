@@ -10,7 +10,7 @@ import { createLogger } from '../../../../../utils/logger';
 import type { SyncContext, TransactionCreateData, TxInputCreateData, TxOutputCreateData } from '../../types';
 import { detectRBFReplacements } from './rbfDetection';
 
-const log = createLogger('SYNC-TX');
+const log = createLogger('BITCOIN:SVC_SYNC_TX');
 
 /**
  * Store transaction inputs and outputs in the database

@@ -15,7 +15,7 @@ import http from 'http';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 
-const log = createLogger('WorkerHealth');
+const log = createLogger('WORKER:HEALTH');
 
 // =============================================================================
 // Types

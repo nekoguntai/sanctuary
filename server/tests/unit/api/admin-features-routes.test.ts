@@ -15,6 +15,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import express, { type Express } from 'express';
 import request from 'supertest';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 const { mockFeatureFlagService } = vi.hoisted(() => ({
   mockFeatureFlagService: {
@@ -79,6 +80,7 @@ describe('Admin Feature Flags Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/admin/features', featuresRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -129,7 +131,7 @@ describe('Admin Feature Flags Routes', () => {
       const response = await request(app).get('/api/v1/admin/features');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -237,7 +239,7 @@ describe('Admin Feature Flags Routes', () => {
       const response = await request(app).get('/api/v1/admin/features/aiAssistant');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Not Found');
+      expect(response.body.code).toBe('NOT_FOUND');
       expect(mockFeatureFlagService.getFlag).toHaveBeenCalledWith('aiAssistant');
     });
 

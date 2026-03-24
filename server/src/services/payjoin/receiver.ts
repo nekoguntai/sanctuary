@@ -20,7 +20,7 @@ import { getNetwork } from '../bitcoin/utils';
 import { PayjoinErrors } from './types';
 import type { PayjoinResult } from './types';
 
-const log = createLogger('PAYJOIN:RECV');
+const log = createLogger('PAYJOIN:SVC_RECV');
 
 /**
  * Process an incoming Payjoin request (we're the receiver)

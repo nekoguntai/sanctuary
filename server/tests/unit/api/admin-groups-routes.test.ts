@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import express, { type Express } from 'express';
 import request from 'supertest';
+import { errorHandler } from '../../../src/errors/errorHandler';
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 
 const {
@@ -65,6 +66,7 @@ describe('Admin Groups Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/admin/groups', groupsRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -127,7 +129,7 @@ describe('Admin Groups Routes', () => {
     const response = await request(app).get('/api/v1/admin/groups');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to get groups');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('validates group creation requires name', async () => {
@@ -211,7 +213,7 @@ describe('Admin Groups Routes', () => {
       .send({ name: 'broken' });
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to create group');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns 404 when updating a missing group', async () => {
@@ -347,7 +349,7 @@ describe('Admin Groups Routes', () => {
       .send({ name: 'x' });
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to update group');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns 404 when deleting a missing group', async () => {
@@ -382,7 +384,7 @@ describe('Admin Groups Routes', () => {
     const response = await request(app).delete('/api/v1/admin/groups/group-1');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to delete group');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('validates add-member requires userId', async () => {
@@ -470,7 +472,7 @@ describe('Admin Groups Routes', () => {
       .send({ userId: 'u1' });
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to add member to group');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns 404 when removing a non-member', async () => {
@@ -510,6 +512,6 @@ describe('Admin Groups Routes', () => {
       .delete('/api/v1/admin/groups/group-1/members/u1');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to remove member from group');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

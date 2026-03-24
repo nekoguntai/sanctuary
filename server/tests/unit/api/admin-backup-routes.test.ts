@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import express, { type Express } from 'express';
 import request from 'supertest';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 const {
   mockCreateBackup,
@@ -107,6 +108,7 @@ describe('Admin Backup Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/admin', backupRouter);
+    app.use(errorHandler);
   });
 
   afterAll(() => {
@@ -180,10 +182,7 @@ describe('Admin Backup Routes', () => {
       .send({});
 
     expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({
-      error: 'Bad Request',
-      message: 'Password confirmation required to view encryption keys',
-    });
+    expect(response.body.code).toBe('INVALID_INPUT');
   });
 
   it('returns 401 when password is incorrect', async () => {
@@ -194,10 +193,7 @@ describe('Admin Backup Routes', () => {
       .send({ password: 'wrong-password' });
 
     expect(response.status).toBe(401);
-    expect(response.body).toMatchObject({
-      error: 'Unauthorized',
-      message: 'Incorrect password',
-    });
+    expect(response.body.error).toBe('Unauthorized');
   });
 
   it('returns empty encryption values when environment variables are missing', async () => {
@@ -225,10 +221,7 @@ describe('Admin Backup Routes', () => {
       .send({ password: 'admin-password' });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to retrieve encryption keys',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('creates a backup, audits creation, and returns downloadable JSON', async () => {
@@ -278,10 +271,7 @@ describe('Admin Backup Routes', () => {
       .send({ includeCache: false });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Backup Failed',
-      message: 'Failed to create database backup',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('rejects backup validation requests without backup payload', async () => {
@@ -290,10 +280,7 @@ describe('Admin Backup Routes', () => {
       .send({});
 
     expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({
-      error: 'Bad Request',
-      message: 'Missing backup data',
-    });
+    expect(response.body.code).toBe('INVALID_INPUT');
   });
 
   it('validates backup payloads successfully', async () => {
@@ -315,11 +302,8 @@ describe('Admin Backup Routes', () => {
       .post('/api/v1/admin/backup/validate')
       .send({ backup: makeBackup() });
 
-    expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({
-      error: 'Validation Failed',
-      message: 'Failed to validate backup file',
-    });
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('requires explicit restore confirmation code', async () => {
@@ -328,7 +312,7 @@ describe('Admin Backup Routes', () => {
       .send({ backup: makeBackup(), confirmationCode: 'NOPE' });
 
     expect(response.status).toBe(400);
-    expect(response.body.error).toBe('Confirmation Required');
+    expect(response.body.code).toBe('INVALID_INPUT');
   });
 
   it('rejects restore without backup payload', async () => {
@@ -337,10 +321,7 @@ describe('Admin Backup Routes', () => {
       .send({ confirmationCode: 'CONFIRM_RESTORE' });
 
     expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({
-      error: 'Bad Request',
-      message: 'Missing backup data',
-    });
+    expect(response.body.code).toBe('INVALID_INPUT');
   });
 
   it('rejects restore when validation reports issues', async () => {
@@ -446,9 +427,6 @@ describe('Admin Backup Routes', () => {
       .send({ backup: makeBackup(), confirmationCode: 'CONFIRM_RESTORE' });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Restore Failed',
-      message: 'An unexpected error occurred during restore',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

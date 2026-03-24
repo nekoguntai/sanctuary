@@ -54,8 +54,24 @@ vi.mock('../../../src/middleware/auth', () => ({
   },
 }));
 
+// Mock requestContext (needed by errorHandler and auth middleware)
+vi.mock('../../../src/utils/requestContext', () => ({
+  requestContext: {
+    getRequestId: () => 'test-request-id',
+    setUser: vi.fn(),
+    get: () => undefined,
+    run: (_ctx: unknown, fn: () => unknown) => fn(),
+    getUserId: () => undefined,
+    getTraceId: () => undefined,
+    setTraceId: vi.fn(),
+    getDuration: () => 0,
+    generateRequestId: () => 'test-request-id',
+  },
+}));
+
 // Import the router and mocked modules AFTER all mocks are set up
 import transfersRouter from '../../../src/api/transfers';
+import { errorHandler } from '../../../src/errors/errorHandler';
 import {
   initiateTransfer,
   acceptTransfer,
@@ -97,6 +113,7 @@ describe('Transfers API Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/transfers', transfersRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -177,9 +194,15 @@ describe('Transfers API Routes', () => {
           },
         };
 
-        transfersRouter.handle(req, res, (err?: Error) => {
+        transfersRouter.handle(req, res, (err?: any) => {
           if (err) {
-            reject(err);
+            const statusCode = err.statusCode || 500;
+            const body = err.toResponse
+              ? err.toResponse()
+              : { error: 'Internal', code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' };
+            res.statusCode = statusCode;
+            res.body = body;
+            resolve({ status: statusCode, headers: res.headers, body });
             return;
           }
           reject(new Error(`Route not handled: ${this.method} ${normalizedUrl}`));
@@ -850,7 +873,7 @@ describe('Transfers API Routes', () => {
         .set('Authorization', authHeader);
 
       expect(res.status).toBe(500);
-      expect(res.body.error).toBe('Internal Server Error');
+      expect(res.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -868,7 +891,7 @@ describe('Transfers API Routes', () => {
         });
 
       expect(res.status).toBe(500);
-      expect(res.body.error).toBe('Internal Server Error');
+      expect(res.body.code).toBe('INTERNAL_ERROR');
     });
   });
 });

@@ -14,7 +14,7 @@ import { requestContext } from '../utils/requestContext';
 import { createLogger } from '../utils/logger';
 import { redactObject } from '../utils/redact';
 
-const log = createLogger('HTTP');
+const log = createLogger('MW:HTTP');
 
 /**
  * Enable request body logging for debugging (disabled by default)

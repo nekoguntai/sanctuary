@@ -14,7 +14,7 @@ import type {
   FormatDetectionResult,
 } from './types';
 
-const log = createLogger('IMPORT:REGISTRY');
+const log = createLogger('IMPORT:SVC_REGISTRY');
 
 /**
  * Import Format Registry

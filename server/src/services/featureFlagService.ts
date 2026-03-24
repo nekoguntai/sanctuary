@@ -48,7 +48,7 @@ import { getDistributedCache, getDistributedEventBus } from '../infrastructure';
 import { createLogger } from '../utils/logger';
 import { getFeatureFlagDefinition } from './featureFlags/definitions';
 
-const log = createLogger('FeatureFlags');
+const log = createLogger('FEATURE_FLAG:SVC');
 
 // =============================================================================
 // Types

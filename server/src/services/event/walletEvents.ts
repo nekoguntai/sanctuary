@@ -9,7 +9,7 @@ import { broadcastBalance, broadcastSync } from '../../websocket/broadcast';
 import { createLogger } from '../../utils/logger';
 import type { WalletSyncResult, WalletCreatedData, BalanceChangeData } from './types';
 
-const log = createLogger('EVENT_SVC');
+const log = createLogger('EVENT:SVC_WALLET');
 
 /**
  * Emit wallet synced event

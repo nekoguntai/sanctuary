@@ -7,7 +7,7 @@
 import { eventBus } from '../../events/eventBus';
 import { createLogger } from '../../utils/logger';
 
-const log = createLogger('EVENT_SVC');
+const log = createLogger('EVENT:SVC_SYSTEM');
 
 // ===========================================================================
 // System Events

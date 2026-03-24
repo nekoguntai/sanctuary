@@ -15,7 +15,7 @@ import { safeJsonParse, SystemSettingSchemas } from '../../utils/safeJson';
 import { createHash } from 'crypto';
 import type { AIConfig, ConfigSyncState } from './types';
 
-const log = createLogger('AI');
+const log = createLogger('AI:CONFIG');
 
 // AI container URL
 const AI_CONTAINER_URL = process.env.AI_CONTAINER_URL || 'http://ai:3100';

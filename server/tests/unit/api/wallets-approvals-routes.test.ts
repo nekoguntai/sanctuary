@@ -64,35 +64,8 @@ vi.mock('../../../src/utils/errors', () => ({
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
 }));
 
+import { errorHandler } from '../../../src/errors/errorHandler';
 import approvalsRouter from '../../../src/api/wallets/approvals';
-
-/**
- * Wraps an Express Router so that async handler rejections are forwarded to
- * Express error-handling middleware (Express 4 does not do this natively).
- */
-function wrapAsyncRouter(
-  router: express.Router,
-): express.Router {
-  const wrapped = express.Router();
-  const stack = (router as any).stack as any[];
-  for (const layer of stack) {
-    if (layer.route) {
-      const route = layer.route;
-      for (const routeLayer of route.stack) {
-        const original = routeLayer.handle;
-        if (original.length <= 3) {
-          routeLayer.handle = (req: Request, res: Response, next: NextFunction) => {
-            const result = original(req, res, next);
-            if (result && typeof result.catch === 'function') {
-              result.catch(next);
-            }
-          };
-        }
-      }
-    }
-  }
-  return router;
-}
 
 describe('Wallet Approvals Routes', () => {
   let app: Express;
@@ -105,11 +78,8 @@ describe('Wallet Approvals Routes', () => {
       req.user = { userId: 'user-1', username: 'alice', isAdmin: false } as any;
       next();
     });
-    app.use('/api/v1/wallets', wrapAsyncRouter(approvalsRouter));
-    // Error handler to catch re-thrown errors
-    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-      res.status(500).json({ error: 'Internal Server Error', message: err.message });
-    });
+    app.use('/api/v1/wallets', approvalsRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -153,7 +123,7 @@ describe('Wallet Approvals Routes', () => {
       const response = await request(app).get(url);
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -321,7 +291,7 @@ describe('Wallet Approvals Routes', () => {
         .send({});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('decision is required and must be one of: approve, reject, veto');
+      expect(response.body.message).toBe('decision is required and must be one of: approve, reject, veto');
       expect(mockCastVote).not.toHaveBeenCalled();
     });
 
@@ -331,7 +301,7 @@ describe('Wallet Approvals Routes', () => {
         .send({ decision: 'maybe' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('decision is required and must be one of: approve, reject, veto');
+      expect(response.body.message).toBe('decision is required and must be one of: approve, reject, veto');
       expect(mockCastVote).not.toHaveBeenCalled();
     });
 
@@ -352,7 +322,7 @@ describe('Wallet Approvals Routes', () => {
         .send({ decision: 'approve' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should not call audit when castVote throws', async () => {
@@ -454,7 +424,7 @@ describe('Wallet Approvals Routes', () => {
         .send({});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('A reason is required for owner override');
+      expect(response.body.message).toBe('A reason is required for owner override');
       expect(mockOwnerOverride).not.toHaveBeenCalled();
     });
 
@@ -464,7 +434,7 @@ describe('Wallet Approvals Routes', () => {
         .send({ reason: '' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('A reason is required for owner override');
+      expect(response.body.message).toBe('A reason is required for owner override');
       expect(mockOwnerOverride).not.toHaveBeenCalled();
     });
 
@@ -474,7 +444,7 @@ describe('Wallet Approvals Routes', () => {
         .send({ reason: '   ' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('A reason is required for owner override');
+      expect(response.body.message).toBe('A reason is required for owner override');
       expect(mockOwnerOverride).not.toHaveBeenCalled();
     });
 
@@ -484,7 +454,7 @@ describe('Wallet Approvals Routes', () => {
         .send({ reason: 123 });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('A reason is required for owner override');
+      expect(response.body.message).toBe('A reason is required for owner override');
       expect(mockOwnerOverride).not.toHaveBeenCalled();
     });
 
@@ -496,7 +466,7 @@ describe('Wallet Approvals Routes', () => {
         .send({ reason: 'Valid reason' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
 
     it('should not call audit when ownerOverride throws', async () => {

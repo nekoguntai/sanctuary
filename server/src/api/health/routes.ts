@@ -5,6 +5,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { asyncHandler } from '../../errors/errorHandler';
 import { circuitBreakerRegistry } from '../../services/circuitBreaker';
 import type { ComponentHealth, HealthStatus, HealthResponse } from './types';
 import { checkDatabase, checkDiskSpace, checkMemory } from './systemChecks';
@@ -47,7 +48,7 @@ function determineOverallStatus(components: Record<string, ComponentHealth>): He
  * GET /api/v1/health
  * Comprehensive health check
  */
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', asyncHandler(async (_req, res) => {
   const components = {
     database: await checkDatabase(),
     redis: await checkRedis(),
@@ -75,7 +76,7 @@ router.get('/', async (_req: Request, res: Response) => {
   // Return 503 for unhealthy, 200 for healthy/degraded
   const httpStatus = status === 'unhealthy' ? 503 : 200;
   res.status(httpStatus).json(response);
-});
+}));
 
 /**
  * GET /api/v1/health/live
@@ -89,7 +90,7 @@ router.get('/live', (_req: Request, res: Response) => {
  * GET /api/v1/health/ready
  * Kubernetes readiness probe - checks if ready to accept traffic
  */
-router.get('/ready', async (_req: Request, res: Response) => {
+router.get('/ready', asyncHandler(async (_req, res) => {
   const dbHealth = await checkDatabase();
 
   if (dbHealth.status === 'unhealthy') {
@@ -100,7 +101,7 @@ router.get('/ready', async (_req: Request, res: Response) => {
   }
 
   res.status(200).json({ status: 'ready' });
-});
+}));
 
 /**
  * GET /api/v1/health/circuits

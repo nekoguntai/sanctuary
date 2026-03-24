@@ -15,7 +15,7 @@
 import { executeWithRecovery, createRecoveryPolicy } from './recoveryPolicy';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('STARTUP');
+const log = createLogger('STARTUP:SVC');
 
 /**
  * Service startup result

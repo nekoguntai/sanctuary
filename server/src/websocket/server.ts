@@ -43,7 +43,7 @@ export { GatewayWebSocketServer } from './gatewayServer';
 // Re-export rate limit event getter
 export { getRateLimitEvents };
 
-const log = createLogger('WS');
+const log = createLogger('WS:SERVER');
 
 // ============================================================================
 // Client WebSocket Server Singleton

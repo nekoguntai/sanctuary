@@ -31,6 +31,7 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+import { errorHandler } from '../../../src/errors/errorHandler';
 import walletsTelegramRouter from '../../../src/api/wallets/telegram';
 
 describe('Wallets Telegram Routes', () => {
@@ -44,6 +45,7 @@ describe('Wallets Telegram Routes', () => {
       next();
     });
     app.use('/api/v1/wallets', walletsTelegramRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -97,10 +99,7 @@ describe('Wallets Telegram Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/telegram');
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to get Telegram settings',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('updates wallet telegram settings with explicit values', async () => {
@@ -151,9 +150,6 @@ describe('Wallets Telegram Routes', () => {
       .send({ enabled: true });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to update Telegram settings',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

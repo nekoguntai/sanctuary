@@ -8,8 +8,6 @@
 import type { Label } from '@prisma/client';
 import { labelRepository, LabelWithCounts, LabelWithAssociations } from '../repositories';
 import {
-  requireWalletAccess,
-  requireWalletEditAccess,
   requireTransactionAccess,
   requireTransactionEditAccess,
   requireAddressAccess,
@@ -18,7 +16,7 @@ import {
 import { NotFoundError, ConflictError, InvalidInputError } from '../errors';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('LABEL_SVC');
+const log = createLogger('LABEL:SVC');
 
 // ========================================
 // LABEL CRUD OPERATIONS
@@ -26,25 +24,24 @@ const log = createLogger('LABEL_SVC');
 
 /**
  * Get all labels for a wallet
+ *
+ * Access control: handled by requireWalletAccess('view') middleware at route level
  */
 export async function getLabelsForWallet(
-  walletId: string,
-  userId: string
+  walletId: string
 ): Promise<LabelWithCounts[]> {
-  await requireWalletAccess(walletId, userId);
   return labelRepository.findByWalletId(walletId);
 }
 
 /**
  * Get a specific label with all associations
+ *
+ * Access control: handled by requireWalletAccess('view') middleware at route level
  */
 export async function getLabel(
   walletId: string,
-  labelId: string,
-  userId: string
+  labelId: string
 ): Promise<LabelWithAssociations> {
-  await requireWalletAccess(walletId, userId);
-
   const label = await labelRepository.findByIdWithAssociations(labelId, walletId);
   if (!label) {
     throw new NotFoundError('Label not found');
@@ -55,14 +52,13 @@ export async function getLabel(
 
 /**
  * Create a new label
+ *
+ * Access control: handled by requireWalletAccess('edit') middleware at route level
  */
 export async function createLabel(
   walletId: string,
-  userId: string,
   data: { name: string; color?: string; description?: string }
 ): Promise<Label> {
-  await requireWalletEditAccess(walletId, userId);
-
   // Validate name
   if (!data.name || typeof data.name !== 'string' || data.name.trim().length === 0) {
     throw new InvalidInputError('Label name is required', 'name');
@@ -89,15 +85,14 @@ export async function createLabel(
 
 /**
  * Update a label
+ *
+ * Access control: handled by requireWalletAccess('edit') middleware at route level
  */
 export async function updateLabel(
   walletId: string,
   labelId: string,
-  userId: string,
   data: { name?: string; color?: string; description?: string }
 ): Promise<Label> {
-  await requireWalletEditAccess(walletId, userId);
-
   // Check label exists
   const existing = await labelRepository.findByIdInWallet(labelId, walletId);
   if (!existing) {
@@ -124,14 +119,13 @@ export async function updateLabel(
 
 /**
  * Delete a label
+ *
+ * Access control: handled by requireWalletAccess('edit') middleware at route level
  */
 export async function deleteLabel(
   walletId: string,
-  labelId: string,
-  userId: string
+  labelId: string
 ): Promise<void> {
-  await requireWalletEditAccess(walletId, userId);
-
   // Check label exists
   const label = await labelRepository.findByIdInWallet(labelId, walletId);
   if (!label) {

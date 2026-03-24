@@ -10,7 +10,7 @@ import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext, UTXOCreateData } from '../types';
 
-const log = createLogger('SYNC-UTXO-INSERT');
+const log = createLogger('BITCOIN:SVC_SYNC_UTXO_INSERT');
 
 /**
  * Execute insert UTXOs phase

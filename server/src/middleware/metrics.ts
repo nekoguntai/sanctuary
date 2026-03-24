@@ -28,7 +28,7 @@ import {
 } from '../observability/metrics';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('MetricsMW');
+const log = createLogger('MW:METRICS');
 
 /**
  * Metrics middleware options

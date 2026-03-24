@@ -15,7 +15,7 @@ import { getEnabledAutopilotWallets } from './settings';
 import { notificationChannelRegistry } from '../notifications/channels';
 import type { WalletAutopilotSettings, ConsolidationSuggestion, UtxoHealthProfile } from './types';
 
-const log = createLogger('AUTOPILOT:EVAL');
+const log = createLogger('AUTOPILOT:SVC_EVAL');
 
 /** Stability key tracks consecutive condition-met count (TTL: 30 min) */
 const STABILITY_KEY_PREFIX = 'autopilot:stability:';

@@ -22,7 +22,7 @@ import { processJobWithLock } from './jobProcessor';
 
 export type { WorkerJobQueueConfig } from './types';
 
-const log = createLogger('WorkerQueue');
+const log = createLogger('WORKER:QUEUE');
 
 export class WorkerJobQueue {
   private queues: Map<string, QueueInstance> = new Map();

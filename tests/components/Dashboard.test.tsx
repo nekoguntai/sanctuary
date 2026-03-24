@@ -9,11 +9,14 @@ vi.mock('../../src/api/transactions', () => ({
   getTransactions: vi.fn().mockResolvedValue([]),
   getRecentTransactions: vi.fn().mockResolvedValue([]),
   getPendingTransactions: vi.fn().mockResolvedValue([]),
+  getBalanceHistory: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../../src/api/wallets', () => ({
   getWallets: vi.fn().mockResolvedValue([]),
   getWallet: vi.fn(),
+  createWallet: vi.fn(),
+  importWallet: vi.fn(),
 }));
 
 vi.mock('../../src/api/bitcoin', () => ({

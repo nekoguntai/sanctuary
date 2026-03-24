@@ -17,7 +17,7 @@ import {
   AuthenticatedWebSocket,
 } from './types';
 
-const log = createLogger('WS_AUTH');
+const log = createLogger('WS:AUTH');
 
 /**
  * Callback interface for auth operations that need to interact with the server

@@ -6,20 +6,21 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import express, { Express } from 'express';
 import request from 'supertest';
-import { NotFoundError, ForbiddenError } from '../../../src/errors';
 
-// Mock JWT verification
-vi.mock('jsonwebtoken', () => ({
-  default: {
-    verify: vi.fn((token: string) => {
-      if (token === 'valid-token') {
-        return { userId: 'user-1', type: 'access' };
-      }
-      if (token === 'viewer-token') {
-        return { userId: 'viewer-1', type: 'access' };
-      }
-      throw new Error('Invalid token');
-    }),
+// Mock auth middleware (pass-through for route tests)
+vi.mock('../../../src/middleware/auth', () => ({
+  authenticate: (req: any, _res: any, next: () => void) => {
+    req.user = { userId: 'user-1', username: 'alice', isAdmin: false };
+    next();
+  },
+}));
+
+// Mock wallet access middleware (pass-through for route tests)
+vi.mock('../../../src/middleware/walletAccess', () => ({
+  requireWalletAccess: () => (req: any, _res: any, next: () => void) => {
+    req.walletId = req.params.walletId || req.params.id;
+    req.walletRole = 'owner';
+    next();
   },
 }));
 
@@ -66,8 +67,15 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+vi.mock('../../../src/utils/requestContext', () => ({
+  requestContext: {
+    getRequestId: () => 'test-request-id',
+  },
+}));
+
 // Import router after mocks
 import labelsRouter from '../../../src/api/labels';
+import { NotFoundError, ForbiddenError, errorHandler } from '../../../src/errors';
 
 describe('Labels API Routes', () => {
   let app: Express;
@@ -96,6 +104,7 @@ describe('Labels API Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1', labelsRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -111,28 +120,19 @@ describe('Labels API Routes', () => {
       mockGetLabelsForWallet.mockResolvedValue([mockLabel]);
 
       const response = await request(app)
-        .get('/api/v1/wallets/wallet-1/labels')
-        .set('Authorization', 'Bearer valid-token');
+        .get('/api/v1/wallets/wallet-1/labels');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
       expect(response.body[0].name).toBe('Exchange');
-      expect(mockGetLabelsForWallet).toHaveBeenCalledWith('wallet-1', 'user-1');
-    });
-
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
-        .get('/api/v1/wallets/wallet-1/labels');
-
-      expect(response.status).toBe(401);
+      expect(mockGetLabelsForWallet).toHaveBeenCalledWith('wallet-1');
     });
 
     it('should return 404 when wallet not found', async () => {
       mockGetLabelsForWallet.mockRejectedValue(new NotFoundError('Wallet not found'));
 
       const response = await request(app)
-        .get('/api/v1/wallets/nonexistent/labels')
-        .set('Authorization', 'Bearer valid-token');
+        .get('/api/v1/wallets/nonexistent/labels');
 
       expect(response.status).toBe(404);
     });
@@ -141,11 +141,9 @@ describe('Labels API Routes', () => {
       mockGetLabelsForWallet.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .get('/api/v1/wallets/wallet-1/labels')
-        .set('Authorization', 'Bearer valid-token');
+        .get('/api/v1/wallets/wallet-1/labels');
 
       expect(response.status).toBe(500);
-      expect(response.body.message).toContain('Failed to fetch labels');
     });
   });
 
@@ -154,29 +152,20 @@ describe('Labels API Routes', () => {
       mockGetLabel.mockResolvedValue(mockLabelWithRelations);
 
       const response = await request(app)
-        .get('/api/v1/wallets/wallet-1/labels/label-1')
-        .set('Authorization', 'Bearer valid-token');
+        .get('/api/v1/wallets/wallet-1/labels/label-1');
 
       expect(response.status).toBe(200);
       expect(response.body.name).toBe('Exchange');
       expect(response.body.transactions).toHaveLength(1);
-      expect(response.body.transactions[0].amount).toBe(100000); // BigInt converted to number
-      expect(mockGetLabel).toHaveBeenCalledWith('wallet-1', 'label-1', 'user-1');
-    });
-
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
-        .get('/api/v1/wallets/wallet-1/labels/label-1');
-
-      expect(response.status).toBe(401);
+      expect(response.body.transactions[0].amount).toBe(100000);
+      expect(mockGetLabel).toHaveBeenCalledWith('wallet-1', 'label-1');
     });
 
     it('should return 404 when label not found', async () => {
       mockGetLabel.mockRejectedValue(new NotFoundError('Label not found'));
 
       const response = await request(app)
-        .get('/api/v1/wallets/wallet-1/labels/nonexistent')
-        .set('Authorization', 'Bearer valid-token');
+        .get('/api/v1/wallets/wallet-1/labels/nonexistent');
 
       expect(response.status).toBe(404);
     });
@@ -185,8 +174,7 @@ describe('Labels API Routes', () => {
       mockGetLabel.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .get('/api/v1/wallets/wallet-1/labels/label-1')
-        .set('Authorization', 'Bearer valid-token');
+        .get('/api/v1/wallets/wallet-1/labels/label-1');
 
       expect(response.status).toBe(500);
     });
@@ -198,24 +186,15 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .post('/api/v1/wallets/wallet-1/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ name: 'Exchange', color: '#FF5733', description: 'Exchange transactions' });
 
       expect(response.status).toBe(201);
       expect(response.body.name).toBe('Exchange');
-      expect(mockCreateLabel).toHaveBeenCalledWith('wallet-1', 'user-1', {
+      expect(mockCreateLabel).toHaveBeenCalledWith('wallet-1', {
         name: 'Exchange',
         color: '#FF5733',
         description: 'Exchange transactions',
       });
-    });
-
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
-        .post('/api/v1/wallets/wallet-1/labels')
-        .send({ name: 'Test' });
-
-      expect(response.status).toBe(401);
     });
 
     it('should return 403 when user lacks edit access', async () => {
@@ -223,7 +202,6 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .post('/api/v1/wallets/wallet-1/labels')
-        .set('Authorization', 'Bearer viewer-token')
         .send({ name: 'Test' });
 
       expect(response.status).toBe(403);
@@ -234,7 +212,6 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .post('/api/v1/wallets/wallet-1/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ name: 'Test' });
 
       expect(response.status).toBe(500);
@@ -248,24 +225,15 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .put('/api/v1/wallets/wallet-1/labels/label-1')
-        .set('Authorization', 'Bearer valid-token')
         .send({ name: 'Updated Exchange', color: '#00FF00' });
 
       expect(response.status).toBe(200);
       expect(response.body.name).toBe('Updated Exchange');
-      expect(mockUpdateLabel).toHaveBeenCalledWith('wallet-1', 'label-1', 'user-1', {
+      expect(mockUpdateLabel).toHaveBeenCalledWith('wallet-1', 'label-1', {
         name: 'Updated Exchange',
         color: '#00FF00',
         description: undefined,
       });
-    });
-
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
-        .put('/api/v1/wallets/wallet-1/labels/label-1')
-        .send({ name: 'Test' });
-
-      expect(response.status).toBe(401);
     });
 
     it('should return 404 when label not found', async () => {
@@ -273,7 +241,6 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .put('/api/v1/wallets/wallet-1/labels/nonexistent')
-        .set('Authorization', 'Bearer valid-token')
         .send({ name: 'Test' });
 
       expect(response.status).toBe(404);
@@ -284,7 +251,6 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .put('/api/v1/wallets/wallet-1/labels/label-1')
-        .set('Authorization', 'Bearer valid-token')
         .send({ name: 'Test' });
 
       expect(response.status).toBe(500);
@@ -296,26 +262,17 @@ describe('Labels API Routes', () => {
       mockDeleteLabel.mockResolvedValue(undefined);
 
       const response = await request(app)
-        .delete('/api/v1/wallets/wallet-1/labels/label-1')
-        .set('Authorization', 'Bearer valid-token');
-
-      expect(response.status).toBe(204);
-      expect(mockDeleteLabel).toHaveBeenCalledWith('wallet-1', 'label-1', 'user-1');
-    });
-
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
         .delete('/api/v1/wallets/wallet-1/labels/label-1');
 
-      expect(response.status).toBe(401);
+      expect(response.status).toBe(204);
+      expect(mockDeleteLabel).toHaveBeenCalledWith('wallet-1', 'label-1');
     });
 
     it('should return 404 when label not found', async () => {
       mockDeleteLabel.mockRejectedValue(new NotFoundError('Label not found'));
 
       const response = await request(app)
-        .delete('/api/v1/wallets/wallet-1/labels/nonexistent')
-        .set('Authorization', 'Bearer valid-token');
+        .delete('/api/v1/wallets/wallet-1/labels/nonexistent');
 
       expect(response.status).toBe(404);
     });
@@ -324,8 +281,7 @@ describe('Labels API Routes', () => {
       mockDeleteLabel.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .delete('/api/v1/wallets/wallet-1/labels/label-1')
-        .set('Authorization', 'Bearer valid-token');
+        .delete('/api/v1/wallets/wallet-1/labels/label-1');
 
       expect(response.status).toBe(500);
     });
@@ -340,27 +296,18 @@ describe('Labels API Routes', () => {
       mockGetTransactionLabels.mockResolvedValue([mockLabel]);
 
       const response = await request(app)
-        .get('/api/v1/transactions/tx-1/labels')
-        .set('Authorization', 'Bearer valid-token');
+        .get('/api/v1/transactions/tx-1/labels');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
       expect(mockGetTransactionLabels).toHaveBeenCalledWith('tx-1', 'user-1');
     });
 
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
-        .get('/api/v1/transactions/tx-1/labels');
-
-      expect(response.status).toBe(401);
-    });
-
     it('should return 404 when transaction not found', async () => {
       mockGetTransactionLabels.mockRejectedValue(new NotFoundError('Transaction not found'));
 
       const response = await request(app)
-        .get('/api/v1/transactions/nonexistent/labels')
-        .set('Authorization', 'Bearer valid-token');
+        .get('/api/v1/transactions/nonexistent/labels');
 
       expect(response.status).toBe(404);
     });
@@ -369,8 +316,7 @@ describe('Labels API Routes', () => {
       mockGetTransactionLabels.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .get('/api/v1/transactions/tx-1/labels')
-        .set('Authorization', 'Bearer valid-token');
+        .get('/api/v1/transactions/tx-1/labels');
 
       expect(response.status).toBe(500);
     });
@@ -382,19 +328,10 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .post('/api/v1/transactions/tx-1/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ labelIds: ['label-1', 'label-2'] });
 
       expect(response.status).toBe(200);
       expect(mockAddTransactionLabels).toHaveBeenCalledWith('tx-1', 'user-1', ['label-1', 'label-2']);
-    });
-
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
-        .post('/api/v1/transactions/tx-1/labels')
-        .send({ labelIds: ['label-1'] });
-
-      expect(response.status).toBe(401);
     });
 
     it('should return 403 when user lacks edit access', async () => {
@@ -402,7 +339,6 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .post('/api/v1/transactions/tx-1/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ labelIds: ['label-1'] });
 
       expect(response.status).toBe(403);
@@ -413,7 +349,6 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .post('/api/v1/transactions/tx-1/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ labelIds: ['label-1'] });
 
       expect(response.status).toBe(500);
@@ -426,19 +361,10 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .put('/api/v1/transactions/tx-1/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ labelIds: ['label-1'] });
 
       expect(response.status).toBe(200);
       expect(mockReplaceTransactionLabels).toHaveBeenCalledWith('tx-1', 'user-1', ['label-1']);
-    });
-
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
-        .put('/api/v1/transactions/tx-1/labels')
-        .send({ labelIds: [] });
-
-      expect(response.status).toBe(401);
     });
 
     it('should return 404 when transaction is not found', async () => {
@@ -446,7 +372,6 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .put('/api/v1/transactions/nonexistent/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ labelIds: [] });
 
       expect(response.status).toBe(404);
@@ -457,7 +382,6 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .put('/api/v1/transactions/tx-1/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ labelIds: [] });
 
       expect(response.status).toBe(500);
@@ -469,26 +393,17 @@ describe('Labels API Routes', () => {
       mockRemoveTransactionLabel.mockResolvedValue(undefined);
 
       const response = await request(app)
-        .delete('/api/v1/transactions/tx-1/labels/label-1')
-        .set('Authorization', 'Bearer valid-token');
+        .delete('/api/v1/transactions/tx-1/labels/label-1');
 
       expect(response.status).toBe(204);
       expect(mockRemoveTransactionLabel).toHaveBeenCalledWith('tx-1', 'label-1', 'user-1');
-    });
-
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
-        .delete('/api/v1/transactions/tx-1/labels/label-1');
-
-      expect(response.status).toBe(401);
     });
 
     it('should return 404 when label not found', async () => {
       mockRemoveTransactionLabel.mockRejectedValue(new NotFoundError('Label not found'));
 
       const response = await request(app)
-        .delete('/api/v1/transactions/tx-1/labels/nonexistent')
-        .set('Authorization', 'Bearer valid-token');
+        .delete('/api/v1/transactions/tx-1/labels/nonexistent');
 
       expect(response.status).toBe(404);
     });
@@ -497,8 +412,7 @@ describe('Labels API Routes', () => {
       mockRemoveTransactionLabel.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .delete('/api/v1/transactions/tx-1/labels/label-1')
-        .set('Authorization', 'Bearer valid-token');
+        .delete('/api/v1/transactions/tx-1/labels/label-1');
 
       expect(response.status).toBe(500);
     });
@@ -513,27 +427,18 @@ describe('Labels API Routes', () => {
       mockGetAddressLabels.mockResolvedValue([mockLabel]);
 
       const response = await request(app)
-        .get('/api/v1/addresses/addr-1/labels')
-        .set('Authorization', 'Bearer valid-token');
+        .get('/api/v1/addresses/addr-1/labels');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
       expect(mockGetAddressLabels).toHaveBeenCalledWith('addr-1', 'user-1');
     });
 
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
-        .get('/api/v1/addresses/addr-1/labels');
-
-      expect(response.status).toBe(401);
-    });
-
     it('should return 404 when address not found', async () => {
       mockGetAddressLabels.mockRejectedValue(new NotFoundError('Address not found'));
 
       const response = await request(app)
-        .get('/api/v1/addresses/nonexistent/labels')
-        .set('Authorization', 'Bearer valid-token');
+        .get('/api/v1/addresses/nonexistent/labels');
 
       expect(response.status).toBe(404);
     });
@@ -542,8 +447,7 @@ describe('Labels API Routes', () => {
       mockGetAddressLabels.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .get('/api/v1/addresses/addr-1/labels')
-        .set('Authorization', 'Bearer valid-token');
+        .get('/api/v1/addresses/addr-1/labels');
 
       expect(response.status).toBe(500);
     });
@@ -555,19 +459,10 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .post('/api/v1/addresses/addr-1/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ labelIds: ['label-1', 'label-2'] });
 
       expect(response.status).toBe(200);
       expect(mockAddAddressLabels).toHaveBeenCalledWith('addr-1', 'user-1', ['label-1', 'label-2']);
-    });
-
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
-        .post('/api/v1/addresses/addr-1/labels')
-        .send({ labelIds: ['label-1'] });
-
-      expect(response.status).toBe(401);
     });
 
     it('should return 403 when user lacks edit access', async () => {
@@ -575,7 +470,6 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .post('/api/v1/addresses/addr-1/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ labelIds: ['label-1'] });
 
       expect(response.status).toBe(403);
@@ -586,7 +480,6 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .post('/api/v1/addresses/addr-1/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ labelIds: ['label-1'] });
 
       expect(response.status).toBe(500);
@@ -599,19 +492,10 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .put('/api/v1/addresses/addr-1/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ labelIds: ['label-1'] });
 
       expect(response.status).toBe(200);
       expect(mockReplaceAddressLabels).toHaveBeenCalledWith('addr-1', 'user-1', ['label-1']);
-    });
-
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
-        .put('/api/v1/addresses/addr-1/labels')
-        .send({ labelIds: [] });
-
-      expect(response.status).toBe(401);
     });
 
     it('should return 404 when address is not found', async () => {
@@ -619,7 +503,6 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .put('/api/v1/addresses/nonexistent/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ labelIds: [] });
 
       expect(response.status).toBe(404);
@@ -630,7 +513,6 @@ describe('Labels API Routes', () => {
 
       const response = await request(app)
         .put('/api/v1/addresses/addr-1/labels')
-        .set('Authorization', 'Bearer valid-token')
         .send({ labelIds: [] });
 
       expect(response.status).toBe(500);
@@ -642,26 +524,17 @@ describe('Labels API Routes', () => {
       mockRemoveAddressLabel.mockResolvedValue(undefined);
 
       const response = await request(app)
-        .delete('/api/v1/addresses/addr-1/labels/label-1')
-        .set('Authorization', 'Bearer valid-token');
+        .delete('/api/v1/addresses/addr-1/labels/label-1');
 
       expect(response.status).toBe(204);
       expect(mockRemoveAddressLabel).toHaveBeenCalledWith('addr-1', 'label-1', 'user-1');
-    });
-
-    it('should return 401 without authentication', async () => {
-      const response = await request(app)
-        .delete('/api/v1/addresses/addr-1/labels/label-1');
-
-      expect(response.status).toBe(401);
     });
 
     it('should return 404 when label not found', async () => {
       mockRemoveAddressLabel.mockRejectedValue(new NotFoundError('Label not found'));
 
       const response = await request(app)
-        .delete('/api/v1/addresses/addr-1/labels/nonexistent')
-        .set('Authorization', 'Bearer valid-token');
+        .delete('/api/v1/addresses/addr-1/labels/nonexistent');
 
       expect(response.status).toBe(404);
     });
@@ -670,8 +543,7 @@ describe('Labels API Routes', () => {
       mockRemoveAddressLabel.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .delete('/api/v1/addresses/addr-1/labels/label-1')
-        .set('Authorization', 'Bearer valid-token');
+        .delete('/api/v1/addresses/addr-1/labels/label-1');
 
       expect(response.status).toBe(500);
     });

@@ -15,7 +15,7 @@ import type {
   LoadBalancingStrategy,
 } from './types';
 
-const log = createLogger('ELECTRUM_POOL:SERVER_SELECTOR');
+const log = createLogger('ELECTRUM_POOL:SVC_SELECTOR');
 
 /**
  * Select a server based on load balancing strategy with backoff awareness

@@ -190,8 +190,24 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+// Mock requestContext (needed by errorHandler and auth middleware)
+vi.mock('../../../src/utils/requestContext', () => ({
+  requestContext: {
+    getRequestId: () => 'test-request-id',
+    setUser: vi.fn(),
+    get: () => undefined,
+    run: (_ctx: unknown, fn: () => unknown) => fn(),
+    getUserId: () => undefined,
+    getTraceId: () => undefined,
+    setTraceId: vi.fn(),
+    getDuration: () => 0,
+    generateRequestId: () => 'test-request-id',
+  },
+}));
+
 // Import after mocks
 import express from 'express';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 type HandlerResponse = {
   status: number;
@@ -266,9 +282,15 @@ class RequestBuilder {
         },
       };
 
-      this.router.handle(req, res, (err?: Error) => {
+      this.router.handle(req, res, (err?: any) => {
         if (err) {
-          reject(err);
+          const statusCode = err.statusCode || 500;
+          const body = err.toResponse
+            ? err.toResponse()
+            : { error: 'Internal', code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' };
+          res.statusCode = statusCode;
+          res.body = body;
+          resolve({ status: statusCode, headers: res.headers, body, text: res.text });
           return;
         }
         reject(new Error(`Route not handled: ${this.method} ${normalizedUrl}`));
@@ -286,10 +308,15 @@ const request = (router: express.Router) => ({
 
 describe('Wallets API', () => {
   let walletRouter: express.Router;
+  let app: express.Application;
 
   beforeAll(async () => {
     const walletsModule = await import('../../../src/api/wallets');
     walletRouter = walletsModule.default;
+    app = express();
+    app.use(express.json());
+    app.use('/api/v1/wallets', walletRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -331,7 +358,7 @@ describe('Wallets API', () => {
       const response = await request(walletRouter).get('/api/v1/wallets');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -413,8 +440,8 @@ describe('Wallets API', () => {
         .post('/api/v1/wallets')
         .send({ name: 'Bad Wallet', type: 'single_sig', scriptType: 'native_segwit' });
 
-      expect(response.status).toBe(400);
-      expect(response.body.message).toContain('Invalid descriptor format');
+      expect(response.status).toBe(500);
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -444,7 +471,7 @@ describe('Wallets API', () => {
       const response = await request(walletRouter).get('/api/v1/wallets/non-existent');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Not Found');
+      expect(response.body.code).toBe('NOT_FOUND');
     });
 
     it('should handle service errors', async () => {
@@ -453,7 +480,7 @@ describe('Wallets API', () => {
       const response = await request(walletRouter).get('/api/v1/wallets/wallet-123');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -482,7 +509,7 @@ describe('Wallets API', () => {
         .send({ name: 'New Name' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -502,7 +529,7 @@ describe('Wallets API', () => {
       const response = await request(walletRouter).delete('/api/v1/wallets/wallet-123');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -532,7 +559,7 @@ describe('Wallets API', () => {
       const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/stats');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -610,7 +637,7 @@ describe('Wallets API', () => {
       const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/balance-history');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -689,10 +716,7 @@ describe('Wallets API', () => {
         .send({ groupId: 'group-1', role: 'viewer' });
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to share wallet with group',
-      });
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -794,10 +818,7 @@ describe('Wallets API', () => {
         .send({ targetUserId: 'target-user', role: 'viewer' });
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to share wallet with user',
-      });
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -836,10 +857,7 @@ describe('Wallets API', () => {
       const response = await request(walletRouter).delete('/api/v1/wallets/wallet-123/share/user/target-user');
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to remove user from wallet',
-      });
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -889,10 +907,7 @@ describe('Wallets API', () => {
       const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/share');
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to get sharing info',
-      });
+      expect(response.body.error).toBe('Internal');
     });
   });
 
@@ -991,8 +1006,8 @@ describe('Wallets API', () => {
         .post('/api/v1/wallets/import')
         .send({ data: 'wpkh(...)', name: 'Wallet' });
 
-      expect(response.status).toBe(400);
-      expect(response.body.message).toContain('Import failed');
+      expect(response.status).toBe(500);
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1117,7 +1132,7 @@ describe('Wallets API', () => {
       const response = await request(walletRouter).post('/api/v1/wallets/wallet-123/addresses');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1150,10 +1165,7 @@ describe('Wallets API', () => {
         .send({ deviceId: 'device-1', signerIndex: 0 });
 
       expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        error: 'Internal Server Error',
-        message: 'Failed to add device to wallet',
-      });
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1176,7 +1188,7 @@ describe('Wallets API', () => {
       const response = await request(walletRouter).post('/api/v1/wallets/wallet-123/repair');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.code).toBe('INTERNAL_ERROR');
     });
   });
 

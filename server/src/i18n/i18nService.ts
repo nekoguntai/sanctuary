@@ -37,7 +37,7 @@ import esValidation from './locales/es/validation.json';
 import esNotifications from './locales/es/notifications.json';
 import esCommon from './locales/es/common.json';
 
-const log = createLogger('I18n');
+const log = createLogger('INFRA:I18N');
 
 /**
  * Extended translation options with locale

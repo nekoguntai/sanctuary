@@ -11,7 +11,7 @@ import { sendTelegramMessage } from './api';
 import { getWalletUsers, formatTransactionMessage, formatDraftMessage } from './formatting';
 import type { TelegramConfig, TransactionData, DraftData } from './types';
 
-const log = createLogger('TELEGRAM');
+const log = createLogger('TELEGRAM:SVC_NOTIFY');
 
 /**
  * Notify all eligible users about new transactions

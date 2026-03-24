@@ -1,11 +1,13 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import * as bitcoinApi from '../../src/api/bitcoin';
+import { createQueryKeys } from './factory';
 
 // Query key factory for bitcoin-related queries
 export const bitcoinKeys = {
-  all: ['bitcoin'] as const,
-  status: () => [...bitcoinKeys.all, 'status'] as const,
-  fees: () => [...bitcoinKeys.all, 'fees'] as const,
+  ...createQueryKeys('bitcoin'),
+  status: () => ['bitcoin', 'status'] as const,
+  fees: () => ['bitcoin', 'fees'] as const,
+  mempool: () => ['bitcoin', 'mempool'] as const,
 };
 
 /**
@@ -41,7 +43,7 @@ export function useFeeEstimates() {
  */
 export function useMempoolData() {
   return useQuery({
-    queryKey: [...bitcoinKeys.all, 'mempool'] as const,
+    queryKey: bitcoinKeys.mempool(),
     queryFn: bitcoinApi.getMempoolData,
     // Mempool changes frequently, refetch every 30 seconds
     refetchInterval: 30_000,

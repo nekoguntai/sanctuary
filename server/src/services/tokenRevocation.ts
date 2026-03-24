@@ -24,7 +24,7 @@ import { createLogger } from '../utils/logger';
 import { getNamespacedCache } from '../infrastructure/redis';
 import type { ICacheService } from './cache/cacheService';
 
-const log = createLogger('TOKEN_REVOCATION');
+const log = createLogger('TOKEN_REVOCATION:SVC');
 
 /**
  * Cleanup interval in milliseconds (5 minutes)

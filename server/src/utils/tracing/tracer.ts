@@ -47,7 +47,7 @@ import type {
   TracingConfig,
 } from './types';
 
-const log = createLogger('Tracing');
+const log = createLogger('UTIL:TRACING');
 
 // =============================================================================
 // Configuration

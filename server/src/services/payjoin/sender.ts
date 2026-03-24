@@ -11,7 +11,7 @@ import { getErrorMessage } from '../../utils/errors';
 import { validatePayjoinProposal } from '../bitcoin/psbtValidation';
 import { validatePayjoinUrl } from './ssrf';
 
-const log = createLogger('PAYJOIN:SEND');
+const log = createLogger('PAYJOIN:SVC_SEND');
 
 /**
  * Attempt to send a Payjoin transaction

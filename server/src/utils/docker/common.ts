@@ -8,7 +8,7 @@
 import { createLogger } from '../logger';
 import type { ContainerInfo } from './types';
 
-const log = createLogger('DOCKER');
+const log = createLogger('UTIL:DOCKER');
 
 // Docker proxy URL (set via environment variable)
 export const DOCKER_PROXY_URL = process.env.DOCKER_PROXY_URL || 'http://docker-proxy:2375';

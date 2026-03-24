@@ -9,7 +9,7 @@ import { getErrorMessage } from '../../utils/errors';
 import { createCircuitBreaker, CircuitOpenError } from '../circuitBreaker';
 import type { TelegramErrorResponse, TelegramGetUpdatesResponse } from './types';
 
-const log = createLogger('TELEGRAM');
+const log = createLogger('TELEGRAM:SVC_API');
 
 export const TELEGRAM_API = 'https://api.telegram.org/bot';
 

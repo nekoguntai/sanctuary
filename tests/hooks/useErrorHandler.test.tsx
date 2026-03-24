@@ -8,13 +8,16 @@ import { act,renderHook } from '@testing-library/react';
 import { ReactNode } from 'react';
 import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { NotificationProvider,useNotifications } from '../../contexts/NotificationContext';
+import { AppNotificationProvider } from '../../contexts/AppNotificationContext';
 import { useErrorHandler } from '../../hooks/useErrorHandler';
 import { ApiError } from '../../src/api/client';
 
-// Create a wrapper that provides the notification context
+// Create a wrapper that provides both notification contexts (useErrorHandler uses useNotify which needs both)
 const createWrapper = () => {
   return ({ children }: { children: ReactNode }) => (
-    <NotificationProvider>{children}</NotificationProvider>
+    <NotificationProvider>
+      <AppNotificationProvider>{children}</AppNotificationProvider>
+    </NotificationProvider>
   );
 };
 

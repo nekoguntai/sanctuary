@@ -10,7 +10,7 @@ import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { auditService, AuditCategory } from '../auditService';
 
-const log = createLogger('MAINTENANCE');
+const log = createLogger('MAINTENANCE:SVC_DB');
 
 /**
  * Run weekly database maintenance tasks

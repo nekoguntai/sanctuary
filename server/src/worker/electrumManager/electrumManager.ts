@@ -27,7 +27,7 @@ import {
   getHealthMetrics as buildHealthMetrics,
 } from './healthMonitoring';
 
-const log = createLogger('ElectrumMgr');
+const log = createLogger('WORKER:ELECTRUM_MGR');
 
 export class ElectrumSubscriptionManager {
   private networks: Map<BitcoinNetwork, NetworkState> = new Map();

@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import express, { type Express } from 'express';
 import request from 'supertest';
+import { errorHandler } from '../../../src/errors/errorHandler';
 
 const {
   mockIsDockerProxyAvailable,
@@ -98,6 +99,7 @@ describe('Admin Infrastructure Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/admin', infrastructureRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -171,7 +173,7 @@ describe('Admin Infrastructure Routes', () => {
     const response = await request(app).get('/api/v1/admin/tor-container/status');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to get Tor container status');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('starts tor container and handles failed start and exceptions', async () => {
@@ -190,7 +192,7 @@ describe('Admin Infrastructure Routes', () => {
     mockStartTor.mockRejectedValueOnce(new Error('start failed'));
     const errored = await request(app).post('/api/v1/admin/tor-container/start');
     expect(errored.status).toBe(500);
-    expect(errored.body.message).toBe('Failed to start Tor container');
+    expect(errored.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('stops tor container and handles failed stop and exceptions', async () => {
@@ -209,7 +211,7 @@ describe('Admin Infrastructure Routes', () => {
     mockStopTor.mockRejectedValueOnce(new Error('stop failed'));
     const errored = await request(app).post('/api/v1/admin/tor-container/stop');
     expect(errored.status).toBe(500);
-    expect(errored.body.message).toBe('Failed to stop Tor container');
+    expect(errored.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns cache metrics with calculated hit rate', async () => {
@@ -238,7 +240,7 @@ describe('Admin Infrastructure Routes', () => {
     const response = await request(app).get('/api/v1/admin/metrics/cache');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to get cache metrics');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns websocket stats and recent rate limit events', async () => {
@@ -270,7 +272,7 @@ describe('Admin Infrastructure Routes', () => {
     const response = await request(app).get('/api/v1/admin/websocket/stats');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to get WebSocket statistics');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns dead letter queue entries for all categories with truncation', async () => {
@@ -299,7 +301,7 @@ describe('Admin Infrastructure Routes', () => {
     const errorResponse = await request(app).get('/api/v1/admin/dlq');
 
     expect(errorResponse.status).toBe(500);
-    expect(errorResponse.body.message).toBe('Failed to get dead letter queue');
+    expect(errorResponse.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('deletes dead letter entries and returns not-found when missing', async () => {
@@ -315,7 +317,7 @@ describe('Admin Infrastructure Routes', () => {
     mockDlqRemove.mockRejectedValueOnce(new Error('delete failed'));
     const errored = await request(app).delete('/api/v1/admin/dlq/boom');
     expect(errored.status).toBe(500);
-    expect(errored.body.message).toBe('Failed to delete dead letter entry');
+    expect(errored.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('retries a sync DLQ entry and queues wallet sync', async () => {
@@ -431,7 +433,7 @@ describe('Admin Infrastructure Routes', () => {
     const response = await request(app).post('/api/v1/admin/dlq/some-id/retry');
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('Failed to retry dead letter entry');
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('clears dead letter categories with validation and error handling', async () => {
@@ -447,6 +449,6 @@ describe('Admin Infrastructure Routes', () => {
     mockDlqClearCategory.mockRejectedValueOnce(new Error('clear failed'));
     const errored = await request(app).delete('/api/v1/admin/dlq/category/push');
     expect(errored.status).toBe(500);
-    expect(errored.body.message).toBe('Failed to clear dead letter category');
+    expect(errored.body.code).toBe('INTERNAL_ERROR');
   });
 });

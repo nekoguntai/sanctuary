@@ -11,7 +11,7 @@ import {
 } from 'prom-client';
 import { createLogger } from '../../utils/logger';
 
-const log = createLogger('Metrics');
+const log = createLogger('INFRA:METRICS');
 
 // Use default registry for compatibility with prom-client ecosystem
 export const registry = defaultRegister;

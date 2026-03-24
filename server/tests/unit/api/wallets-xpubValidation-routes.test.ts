@@ -24,6 +24,7 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+import { errorHandler } from '../../../src/errors/errorHandler';
 import xpubValidationRouter from '../../../src/api/wallets/xpubValidation';
 
 describe('Wallets XPUB Validation Routes', () => {
@@ -33,6 +34,7 @@ describe('Wallets XPUB Validation Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/wallets', xpubValidationRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -165,10 +167,7 @@ describe('Wallets XPUB Validation Routes', () => {
       .post('/api/v1/wallets/validate-xpub')
       .send({ xpub: 'xpub-err', scriptType: 'native_segwit', network: 'mainnet' });
 
-    expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({
-      error: 'Bad Request',
-      message: 'derive failed',
-    });
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 });

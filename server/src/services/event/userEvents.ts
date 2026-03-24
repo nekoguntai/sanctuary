@@ -8,7 +8,7 @@ import { eventBus } from '../../events/eventBus';
 import { createLogger } from '../../utils/logger';
 import type { UserLoginData } from './types';
 
-const log = createLogger('EVENT_SVC');
+const log = createLogger('EVENT:SVC_USER');
 
 /**
  * Emit user login event

@@ -15,7 +15,7 @@ import {
 } from '../services/wallet';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('WALLET_ACCESS');
+const log = createLogger('MW:WALLET_ACCESS');
 
 // Extend Express Request type to include wallet info
 declare global {

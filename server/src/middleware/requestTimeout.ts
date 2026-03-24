@@ -12,7 +12,7 @@ import { Request, Response, NextFunction } from 'express';
 import { createLogger } from '../utils/logger';
 import { requestContext } from '../utils/requestContext';
 
-const log = createLogger('TIMEOUT');
+const log = createLogger('MW:TIMEOUT');
 
 /**
  * Default request timeout in milliseconds

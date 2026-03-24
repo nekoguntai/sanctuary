@@ -11,7 +11,7 @@ import { getErrorMessage } from '../../utils/errors';
 import { SUBSCRIPTION_BATCH_SIZE } from './types';
 import type { BitcoinNetwork, NetworkState } from './types';
 
-const log = createLogger('ElectrumMgr');
+const log = createLogger('WORKER:ELECTRUM_ADDR');
 
 /**
  * Subscribe to all wallet addresses across all networks.

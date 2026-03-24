@@ -4,15 +4,17 @@
  * API endpoints for testing connections to Electrum servers
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import net from 'net';
 import tls from 'tls';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
+import { asyncHandler } from '../errors/errorHandler';
+import { InvalidInputError } from '../errors/ApiError';
 
 const router = Router();
-const log = createLogger('NODE');
+const log = createLogger('NODE:ROUTE');
 
 // All routes require authentication
 router.use(authenticate);
@@ -144,59 +146,39 @@ async function testElectrumConnection(config: ElectrumTestConfig): Promise<{ suc
  * POST /api/v1/node/test
  * Test connection to an Electrum server
  */
-router.post('/test', async (req: Request, res: Response) => {
-  try {
-    const { nodeType, host, port, protocol } = req.body;
+router.post('/test', asyncHandler(async (req, res) => {
+  const { nodeType, host, port, protocol } = req.body;
 
-    log.debug('Testing connection', { nodeType, host, port, protocol });
+  log.debug('Testing connection', { nodeType, host, port, protocol });
 
-    // Validate required fields
-    if (!host || !port) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Missing required fields: host, port',
-      });
-    }
-
-    // Only Electrum is supported
-    if (nodeType && nodeType !== 'electrum') {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Only Electrum connection type is supported',
-      });
-    }
-
-    // Test Electrum connection
-    if (!protocol) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Missing required field: protocol (tcp or ssl)',
-      });
-    }
-
-    const portNum = parseInt(port, 10);
-    if (isNaN(portNum) || portNum <= 0 || portNum > 65535) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Invalid port number',
-      });
-    }
-
-    const result = await testElectrumConnection({
-      host,
-      port: portNum,
-      protocol: protocol as 'tcp' | 'ssl',
-    });
-
-    log.debug('Test result', { result });
-    res.json(result);
-  } catch (error) {
-    log.error('Test connection error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to test node connection',
-    });
+  // Validate required fields
+  if (!host || !port) {
+    throw new InvalidInputError('Missing required fields: host, port');
   }
-});
+
+  // Only Electrum is supported
+  if (nodeType && nodeType !== 'electrum') {
+    throw new InvalidInputError('Only Electrum connection type is supported');
+  }
+
+  // Test Electrum connection
+  if (!protocol) {
+    throw new InvalidInputError('Missing required field: protocol (tcp or ssl)');
+  }
+
+  const portNum = parseInt(port, 10);
+  if (isNaN(portNum) || portNum <= 0 || portNum > 65535) {
+    throw new InvalidInputError('Invalid port number');
+  }
+
+  const result = await testElectrumConnection({
+    host,
+    port: portNum,
+    protocol: protocol as 'tcp' | 'ssl',
+  });
+
+  log.debug('Test result', { result });
+  res.json(result);
+}));
 
 export default router;

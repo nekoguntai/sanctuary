@@ -11,7 +11,7 @@ import { createLogger } from '../utils/logger';
 import { getNamespacedCache } from '../infrastructure/redis';
 import type { ICacheService } from './cache/cacheService';
 
-const log = createLogger('ACCESS');
+const log = createLogger('ACCESS_CONTROL:SVC');
 
 // Roles that can edit wallet data (labels, memos, etc.)
 const EDIT_ROLES = ['owner', 'signer'];

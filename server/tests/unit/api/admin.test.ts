@@ -173,6 +173,46 @@ vi.mock('fs', () => {
 });
 
 /**
+ * Call an async route handler that may throw ApiErrors.
+ * Handles both asyncHandler-wrapped routes (which fire-and-forget the promise)
+ * and direct async handlers. Simulates Express error handling for thrown errors.
+ */
+async function callHandler(handler: any, req: any, res: any): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const originalJson = res.json.bind(res);
+    const originalSend = res.send?.bind(res);
+
+    // Intercept res.json/res.send to know when response is ready
+    res.json = (body: any) => {
+      originalJson(body);
+      resolve();
+    };
+    if (originalSend) {
+      res.send = (body: any) => {
+        originalSend(body);
+        resolve();
+      };
+    }
+
+    const next = (err?: any) => {
+      if (err) {
+        // Simulate errorHandler behavior for ApiErrors
+        if (err.statusCode && err.toResponse) {
+          res.status(err.statusCode);
+          res.json(err.toResponse());
+        } else {
+          res.status(500);
+          res.json({ error: 'Internal', code: 'INTERNAL_ERROR', message: err.message });
+        }
+      }
+      resolve();
+    };
+
+    handler(req, res, next);
+  });
+}
+
+/**
  * Find a route layer in an Express router, searching both direct routes
  * and sub-routers mounted with router.use('/', subRouter).
  */
@@ -1715,7 +1755,7 @@ describe('Admin API', () => {
         const routeLayer = findRouteLayer(adminRouter, '/encryption-keys', 'post');
         expect(routeLayer).toBeDefined();
         const handler = routeLayer.route.stack[2].handle;
-        await handler(req, res);
+        await callHandler(handler, req, res);
         const response = getResponse();
         expect(response.statusCode).toBe(200);
         expect(response.body.encryptionKey).toBe('test-encryption-key-32-chars-long!');
@@ -1734,7 +1774,7 @@ describe('Admin API', () => {
         const routeLayer = findRouteLayer(adminRouter, '/encryption-keys', 'post');
         expect(routeLayer).toBeDefined();
         const handler = routeLayer.route.stack[2].handle;
-        await handler(req, res);
+        await callHandler(handler, req, res);
         const response = getResponse();
         expect(response.statusCode).toBe(400);
         expect(response.body.message).toBe('Password confirmation required to view encryption keys');
@@ -1753,7 +1793,7 @@ describe('Admin API', () => {
         const routeLayer = findRouteLayer(adminRouter, '/encryption-keys', 'post');
         expect(routeLayer).toBeDefined();
         const handler = routeLayer.route.stack[2].handle;
-        await handler(req, res);
+        await callHandler(handler, req, res);
         const response = getResponse();
         expect(response.statusCode).toBe(401);
         expect(response.body.message).toBe('Incorrect password');
@@ -1773,7 +1813,7 @@ describe('Admin API', () => {
         const routeLayer = findRouteLayer(adminRouter, '/encryption-keys', 'post');
         expect(routeLayer).toBeDefined();
         const handler = routeLayer.route.stack[2].handle;
-        await handler(req, res);
+        await callHandler(handler, req, res);
         expect(mockAuditLogFromRequest).toHaveBeenCalledWith(
           req,
           'admin.encryption_keys_view',
@@ -1800,7 +1840,7 @@ describe('Admin API', () => {
         const routeLayer = findRouteLayer(adminRouter, '/encryption-keys', 'post');
         expect(routeLayer).toBeDefined();
         const handler = routeLayer.route.stack[2].handle;
-        await handler(req, res);
+        await callHandler(handler, req, res);
         const response = getResponse();
         expect(response.statusCode).toBe(200);
         expect(response.body.encryptionKey).toBe('');

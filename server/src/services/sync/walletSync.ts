@@ -22,7 +22,7 @@ import { walletSyncsTotal, walletSyncDuration } from '../../observability/metric
 import type { SyncState, SyncResult } from './types';
 import { processQueue } from './syncQueue';
 
-const log = createLogger('SYNC:WALLET');
+const log = createLogger('SYNC:SVC_WALLET');
 
 /**
  * Acquire a distributed lock for a wallet sync.

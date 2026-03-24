@@ -22,7 +22,7 @@ import type {
   PolicyEvaluationResult,
 } from './types';
 
-const log = createLogger('APPROVAL_SVC');
+const log = createLogger('VAULT_POLICY:SVC_APPROVAL');
 
 // ========================================
 // CREATE APPROVAL REQUESTS

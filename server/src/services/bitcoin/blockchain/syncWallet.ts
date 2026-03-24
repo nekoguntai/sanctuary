@@ -12,7 +12,7 @@ import { walletLog } from '../../../websocket/notifications';
 import { executeSyncPipeline, defaultSyncPhases } from '../sync';
 import type { SyncWalletResult } from './types';
 
-const log = createLogger('BLOCKCHAIN');
+const log = createLogger('BITCOIN:SVC_SYNC_WALLET');
 
 /**
  * Sync all addresses for a wallet using the modular sync pipeline

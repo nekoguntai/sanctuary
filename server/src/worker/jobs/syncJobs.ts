@@ -29,7 +29,7 @@ import { getConfig } from '../../config';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 
-const log = createLogger('SyncJobs');
+const log = createLogger('JOB:SYNC');
 const appConfig = getConfig();
 
 // Keep lock alive beyond expected sync duration to avoid concurrent sync overlap.

@@ -10,7 +10,7 @@ import { getErrorMessage } from '../../../utils/errors';
 import { getMempoolApiBase } from './config';
 import type { MempoolBlock, MempoolInfo, FeeEstimates, ProjectedMempoolBlock } from './types';
 
-const log = createLogger('MEMPOOL');
+const log = createLogger('BITCOIN:SVC_MEMPOOL');
 
 /**
  * Get recent blocks from mempool.space

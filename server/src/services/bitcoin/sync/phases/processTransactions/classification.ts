@@ -10,7 +10,7 @@ import { createLogger } from '../../../../../utils/logger';
 import { getBlockTimestamp } from '../../../utils/blockHeight';
 import type { SyncContext, TransactionCreateData } from '../../types';
 
-const log = createLogger('SYNC-TX');
+const log = createLogger('BITCOIN:SVC_SYNC_TX');
 
 /**
  * Helper to check if output matches an address

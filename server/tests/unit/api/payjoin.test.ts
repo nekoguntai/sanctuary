@@ -92,6 +92,7 @@ vi.mock('../../../src/utils/logger', () => ({
 }));
 
 // Import router and mocked modules after mocks
+import { errorHandler } from '../../../src/errors/errorHandler';
 import payjoinRouter from '../../../src/api/payjoin';
 import prisma from '../../../src/models/prisma';
 import {
@@ -130,6 +131,7 @@ describe('Payjoin API Routes', () => {
     app.use(express.text({ type: 'text/plain' }));
     app.use(express.json());
     app.use('/api/v1/payjoin', payjoinRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -424,7 +426,7 @@ describe('Payjoin API Routes', () => {
         .set('Authorization', 'Bearer test-token');
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toContain('not found');
+      expect(res.body.error).toBe('NotFound');
     });
 
     it('should return 401 without authentication', async () => {
@@ -441,7 +443,7 @@ describe('Payjoin API Routes', () => {
         .set('Authorization', 'Bearer test-token');
 
       expect(res.status).toBe(500);
-      expect(res.body.error).toContain('eligibility');
+      expect(res.body.error).toBe('Internal');
     });
   });
 
@@ -512,7 +514,7 @@ describe('Payjoin API Routes', () => {
         .set('Authorization', 'Bearer test-token');
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toContain('not found');
+      expect(res.body.error).toBe('NotFound');
     });
 
     it('should return 401 without authentication', async () => {
@@ -529,7 +531,7 @@ describe('Payjoin API Routes', () => {
         .set('Authorization', 'Bearer test-token');
 
       expect(res.status).toBe(500);
-      expect(res.body.error).toContain('generate');
+      expect(res.body.error).toBe('Internal');
     });
   });
 
@@ -578,7 +580,7 @@ describe('Payjoin API Routes', () => {
         .send({});
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toContain('required');
+      expect(res.body.message).toContain('required');
     });
 
     it('should return 400 for invalid URI format', async () => {
@@ -592,7 +594,7 @@ describe('Payjoin API Routes', () => {
         .send({ uri: 'not-a-valid-uri' });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toContain('Invalid');
+      expect(res.body.error).toBe('InvalidInput');
     });
 
     it('should return 401 without authentication', async () => {
@@ -653,7 +655,7 @@ describe('Payjoin API Routes', () => {
         });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toContain('required');
+      expect(res.body.message).toContain('required');
     });
 
     it('should return 400 when payjoinUrl is missing', async () => {
@@ -665,7 +667,7 @@ describe('Payjoin API Routes', () => {
         });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toContain('required');
+      expect(res.body.message).toContain('required');
     });
 
     it('should return 400 for invalid network', async () => {
@@ -679,7 +681,7 @@ describe('Payjoin API Routes', () => {
         });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toContain('network');
+      expect(res.body.message).toContain('network');
     });
 
     it('should accept valid network parameter', async () => {
@@ -713,7 +715,7 @@ describe('Payjoin API Routes', () => {
         });
 
       expect(res.status).toBe(500);
-      expect(res.body.error).toContain('failed');
+      expect(res.body.error).toBe('Internal');
     });
 
     it('should return 401 without authentication', async () => {

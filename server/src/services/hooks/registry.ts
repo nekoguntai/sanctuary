@@ -18,7 +18,7 @@ import type {
 } from './types';
 import { HookPriorities } from './types';
 
-const log = createLogger('HOOKS:REGISTRY');
+const log = createLogger('HOOK:REGISTRY');
 
 /**
  * Generate unique hook ID

@@ -26,7 +26,7 @@ import type {
   AIPullModelResponse,
 } from './types';
 
-const log = createLogger('AI');
+const log = createLogger('AI:SVC');
 
 const AI_CONTAINER_URL = getContainerUrl();
 

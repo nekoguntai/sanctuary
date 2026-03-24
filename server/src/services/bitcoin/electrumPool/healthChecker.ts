@@ -19,7 +19,7 @@ import type {
 } from './types';
 import { MAX_HEALTH_HISTORY } from './types';
 
-const log = createLogger('ELECTRUM_POOL:HEALTH');
+const log = createLogger('ELECTRUM_POOL:SVC_HEALTH');
 
 /**
  * Record a health check result to a server's history

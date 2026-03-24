@@ -10,7 +10,7 @@ import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext } from '../types';
 
-const log = createLogger('SYNC-CHECK');
+const log = createLogger('BITCOIN:SVC_SYNC_CHECK');
 
 /**
  * Execute check existing phase

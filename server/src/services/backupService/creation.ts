@@ -12,7 +12,7 @@ import { serializeRecord } from './serialization';
 import { BACKUP_FORMAT_VERSION, TABLE_ORDER, CACHE_TABLES, LARGE_TABLES, BACKUP_PAGE_SIZE } from './constants';
 import type { BackupRecord, SanctuaryBackup, BackupOptions } from './types';
 
-const log = createLogger('BACKUP');
+const log = createLogger('BACKUP:SVC');
 
 /**
  * Create a complete database backup

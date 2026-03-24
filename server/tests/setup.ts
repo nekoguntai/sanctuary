@@ -33,8 +33,16 @@ vi.mock('../src/utils/logger', () => ({
 // Mock the requestContext
 vi.mock('../src/utils/requestContext', () => ({
   requestContext: {
+    run: vi.fn((_ctx: unknown, fn: () => unknown) => fn()),
+    get: vi.fn(() => undefined),
+    getRequestId: vi.fn(() => 'test-request-id'),
+    getUserId: vi.fn(() => undefined),
+    getTraceId: vi.fn(() => undefined),
+    setTraceId: vi.fn(),
     setUser: vi.fn(),
     getUser: vi.fn(() => ({ userId: 'test-user-id', username: 'testuser' })),
+    getDuration: vi.fn(() => 0),
+    generateRequestId: vi.fn(() => 'test-request-id'),
     clear: vi.fn(),
   },
 }));

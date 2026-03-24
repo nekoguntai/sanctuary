@@ -6,9 +6,11 @@
  * modified PSBT with the receiver's input added.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { requireFeature, isFeatureEnabledAsync } from '../middleware/featureGate';
+import { asyncHandler } from '../errors/errorHandler';
+import { InvalidInputError, NotFoundError } from '../errors/ApiError';
 import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
 import { getConfig } from '../config';
@@ -20,7 +22,7 @@ import {
   generateBip21Uri,
 } from '../services/payjoinService';
 
-const log = createLogger('PAYJOIN-API');
+const log = createLogger('PAYJOIN:ROUTE');
 
 const router = Router();
 
@@ -41,224 +43,204 @@ const payjoinRateLimiter = rateLimitByIpAndKey(
  * Check if Payjoin is enabled and properly configured
  * NOT gated by requireFeature so the frontend can determine visibility
  */
-router.get('/status', authenticate, async (_req: Request, res: Response) => {
-  try {
-    const enabled = await isFeatureEnabledAsync('payjoinSupport');
-    const config = getConfig();
-    const configured = !!config.payjoin.publicUrl;
+router.get('/status', authenticate, asyncHandler(async (_req, res) => {
+  const enabled = await isFeatureEnabledAsync('payjoinSupport');
+  const config = getConfig();
+  const configured = !!config.payjoin.publicUrl;
 
-    res.json({ enabled, configured });
-  } catch (error) {
-    log.error('Error checking Payjoin status', { error: String(error) });
-    res.status(500).json({ error: 'Failed to check Payjoin status' });
-  }
-});
+  res.json({ enabled, configured });
+}));
 
 /**
  * GET /api/v1/payjoin/eligibility/:walletId
  * Check if wallet is eligible for Payjoin receives
  */
-router.get('/eligibility/:walletId', authenticate, requireFeature('payjoinSupport'), async (req: Request, res: Response) => {
-  try {
-    const { walletId } = req.params;
-    const userId = req.user?.userId;
+router.get('/eligibility/:walletId', authenticate, requireFeature('payjoinSupport'), asyncHandler(async (req, res) => {
+  const { walletId } = req.params;
+  const userId = req.user?.userId;
 
-    // Verify wallet access
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    });
+  // Verify wallet access
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      OR: [
+        { users: { some: { userId } } },
+        { group: { members: { some: { userId } } } },
+      ],
+    },
+  });
 
-    if (!wallet) {
-      return res.status(404).json({ error: 'Wallet not found or access denied' });
-    }
-
-    // Count UTXOs by eligibility status
-    const [eligibleCount, totalCount, frozenCount, unconfirmedCount, lockedCount] = await Promise.all([
-      // Eligible: confirmed, not frozen, not locked
-      prisma.uTXO.count({
-        where: {
-          walletId,
-          spent: false,
-          frozen: false,
-          confirmations: { gt: 0 },
-          draftLock: null,
-        },
-      }),
-      // Total unspent
-      prisma.uTXO.count({
-        where: { walletId, spent: false },
-      }),
-      // Frozen
-      prisma.uTXO.count({
-        where: { walletId, spent: false, frozen: true },
-      }),
-      // Unconfirmed
-      prisma.uTXO.count({
-        where: { walletId, spent: false, confirmations: 0 },
-      }),
-      // Locked by draft
-      prisma.uTXO.count({
-        where: { walletId, spent: false, draftLock: { isNot: null } },
-      }),
-    ]);
-
-    // Determine status and reason
-    let status: string;
-    let reason: string | null = null;
-
-    if (eligibleCount > 0) {
-      status = 'ready';
-    } else if (totalCount === 0) {
-      status = 'no-utxos';
-      reason = 'You need bitcoin in this wallet to enable Payjoin.';
-    } else if (frozenCount === totalCount) {
-      status = 'all-frozen';
-      reason = 'All coins are frozen. Unfreeze at least one to enable Payjoin.';
-    } else if (unconfirmedCount > 0 && unconfirmedCount + frozenCount + lockedCount >= totalCount) {
-      status = 'pending-confirmations';
-      reason = 'Waiting for confirmations. Your coins need at least 1 confirmation.';
-    } else if (lockedCount > 0 && lockedCount + frozenCount >= totalCount) {
-      status = 'all-locked';
-      reason = 'All coins are locked by draft transactions.';
-    } else {
-      status = 'unavailable';
-      reason = 'No eligible coins available.';
-    }
-
-    res.json({
-      eligible: eligibleCount > 0,
-      status,
-      eligibleUtxoCount: eligibleCount,
-      totalUtxoCount: totalCount,
-      reason,
-    });
-  } catch (error) {
-    log.error('Error checking Payjoin eligibility', { error: String(error) });
-    res.status(500).json({ error: 'Failed to check eligibility' });
+  if (!wallet) {
+    throw new NotFoundError('Wallet not found or access denied');
   }
-});
+
+  // Count UTXOs by eligibility status
+  const [eligibleCount, totalCount, frozenCount, unconfirmedCount, lockedCount] = await Promise.all([
+    // Eligible: confirmed, not frozen, not locked
+    prisma.uTXO.count({
+      where: {
+        walletId,
+        spent: false,
+        frozen: false,
+        confirmations: { gt: 0 },
+        draftLock: null,
+      },
+    }),
+    // Total unspent
+    prisma.uTXO.count({
+      where: { walletId, spent: false },
+    }),
+    // Frozen
+    prisma.uTXO.count({
+      where: { walletId, spent: false, frozen: true },
+    }),
+    // Unconfirmed
+    prisma.uTXO.count({
+      where: { walletId, spent: false, confirmations: 0 },
+    }),
+    // Locked by draft
+    prisma.uTXO.count({
+      where: { walletId, spent: false, draftLock: { isNot: null } },
+    }),
+  ]);
+
+  // Determine status and reason
+  let status: string;
+  let reason: string | null = null;
+
+  if (eligibleCount > 0) {
+    status = 'ready';
+  } else if (totalCount === 0) {
+    status = 'no-utxos';
+    reason = 'You need bitcoin in this wallet to enable Payjoin.';
+  } else if (frozenCount === totalCount) {
+    status = 'all-frozen';
+    reason = 'All coins are frozen. Unfreeze at least one to enable Payjoin.';
+  } else if (unconfirmedCount > 0 && unconfirmedCount + frozenCount + lockedCount >= totalCount) {
+    status = 'pending-confirmations';
+    reason = 'Waiting for confirmations. Your coins need at least 1 confirmation.';
+  } else if (lockedCount > 0 && lockedCount + frozenCount >= totalCount) {
+    status = 'all-locked';
+    reason = 'All coins are locked by draft transactions.';
+  } else {
+    status = 'unavailable';
+    reason = 'No eligible coins available.';
+  }
+
+  res.json({
+    eligible: eligibleCount > 0,
+    status,
+    eligibleUtxoCount: eligibleCount,
+    totalUtxoCount: totalCount,
+    reason,
+  });
+}));
 
 /**
  * GET /api/v1/payjoin/address/:addressId/uri
  * Generate a BIP21 URI with Payjoin endpoint for an address
  */
-router.get('/address/:addressId/uri', authenticate, requireFeature('payjoinSupport'), async (req: Request, res: Response) => {
-  try {
-    const { addressId } = req.params;
-    const { amount, label, message } = req.query;
-    const userId = req.user?.userId;
+router.get('/address/:addressId/uri', authenticate, requireFeature('payjoinSupport'), asyncHandler(async (req, res) => {
+  const { addressId } = req.params;
+  const { amount, label, message } = req.query;
+  const userId = req.user?.userId;
 
-    // Get address and verify access
-    const address = await prisma.address.findFirst({
-      where: {
-        id: addressId,
-        wallet: {
-          OR: [
-            { users: { some: { userId } } },
-            { group: { members: { some: { userId } } } },
-          ],
-        },
+  // Get address and verify access
+  const address = await prisma.address.findFirst({
+    where: {
+      id: addressId,
+      wallet: {
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
       },
-    });
+    },
+  });
 
-    if (!address) {
-      return res.status(404).json({ error: 'Address not found or access denied' });
-    }
-
-    // Generate Payjoin URL using configured public URL or fallback to request host
-    const config = getConfig();
-    const baseUrl = config.payjoin.publicUrl || `${req.protocol}://${req.get('host')}`;
-    const payjoinUrl = `${baseUrl}/api/v1/payjoin/${addressId}`;
-
-    const uri = generateBip21Uri(address.address, {
-      amount: amount ? parseInt(amount as string, 10) : undefined,
-      label: label as string,
-      message: message as string,
-      payjoinUrl,
-    });
-
-    res.json({
-      uri,
-      address: address.address,
-      payjoinUrl,
-    });
-  } catch (error) {
-    log.error('Error generating Payjoin URI', { error: String(error) });
-    res.status(500).json({ error: 'Failed to generate Payjoin URI' });
+  if (!address) {
+    throw new NotFoundError('Address not found or access denied');
   }
-});
+
+  // Generate Payjoin URL using configured public URL or fallback to request host
+  const config = getConfig();
+  const baseUrl = config.payjoin.publicUrl || `${req.protocol}://${req.get('host')}`;
+  const payjoinUrl = `${baseUrl}/api/v1/payjoin/${addressId}`;
+
+  const uri = generateBip21Uri(address.address, {
+    amount: amount ? parseInt(amount as string, 10) : undefined,
+    label: label as string,
+    message: message as string,
+    payjoinUrl,
+  });
+
+  res.json({
+    uri,
+    address: address.address,
+    payjoinUrl,
+  });
+}));
 
 /**
  * POST /api/v1/payjoin/parse-uri
  * Parse a BIP21 URI to extract address and Payjoin URL
  */
-router.post('/parse-uri', authenticate, requireFeature('payjoinSupport'), async (req: Request, res: Response) => {
-  try {
-    const { uri } = req.body;
+router.post('/parse-uri', authenticate, requireFeature('payjoinSupport'), asyncHandler(async (req, res) => {
+  const { uri } = req.body;
 
-    if (!uri || typeof uri !== 'string') {
-      return res.status(400).json({ error: 'URI is required' });
-    }
-
-    const parsed = parseBip21Uri(uri);
-
-    res.json({
-      address: parsed.address,
-      amount: parsed.amount,
-      label: parsed.label,
-      message: parsed.message,
-      payjoinUrl: parsed.payjoinUrl,
-      hasPayjoin: !!parsed.payjoinUrl,
-    });
-  } catch (error) {
-    log.error('Error parsing BIP21 URI', { error: String(error) });
-    res.status(400).json({ error: 'Invalid URI format' });
+  if (!uri || typeof uri !== 'string') {
+    throw new InvalidInputError('URI is required');
   }
-});
+
+  let parsed;
+  try {
+    parsed = parseBip21Uri(uri);
+  } catch {
+    throw new InvalidInputError('Invalid URI format');
+  }
+
+  res.json({
+    address: parsed.address,
+    amount: parsed.amount,
+    label: parsed.label,
+    message: parsed.message,
+    payjoinUrl: parsed.payjoinUrl,
+    hasPayjoin: !!parsed.payjoinUrl,
+  });
+}));
 
 /**
  * POST /api/v1/payjoin/attempt
  * Attempt to perform a Payjoin send
  */
-router.post('/attempt', authenticate, requireFeature('payjoinSupport'), async (req: Request, res: Response) => {
-  try {
-    const { psbt, payjoinUrl, network } = req.body;
+router.post('/attempt', authenticate, requireFeature('payjoinSupport'), asyncHandler(async (req, res) => {
+  const { psbt, payjoinUrl, network } = req.body;
 
-    if (!psbt || !payjoinUrl) {
-      return res.status(400).json({ error: 'psbt and payjoinUrl are required' });
-    }
-
-    // Validate network parameter
-    if (network && !['mainnet', 'testnet', 'regtest'].includes(network)) {
-      return res.status(400).json({ error: 'Invalid network. Must be mainnet, testnet, or regtest' });
-    }
-
-    const payjoinService = await import('../services/payjoinService');
-    const { getNetwork } = await import('../services/bitcoin/utils');
-
-    // Use provided network or default to mainnet
-    const networkStr = (network || 'mainnet') as 'mainnet' | 'testnet' | 'regtest';
-    const networkObj = getNetwork(networkStr);
-
-    const result = await payjoinService.attemptPayjoinSend(
-      psbt,
-      payjoinUrl,
-      [0], // Assume first input is sender's
-      networkObj
-    );
-
-    res.json(result);
-  } catch (error) {
-    log.error('Error attempting Payjoin', { error: String(error) });
-    res.status(500).json({ error: 'Payjoin attempt failed' });
+  if (!psbt || !payjoinUrl) {
+    throw new InvalidInputError('psbt and payjoinUrl are required');
   }
-});
+
+  // Validate network parameter
+  if (network && !['mainnet', 'testnet', 'regtest'].includes(network)) {
+    throw new InvalidInputError('Invalid network. Must be mainnet, testnet, or regtest');
+  }
+
+  const payjoinService = await import('../services/payjoinService');
+  const { getNetwork } = await import('../services/bitcoin/utils');
+
+  // Use provided network or default to mainnet
+  const networkStr = (network || 'mainnet') as 'mainnet' | 'testnet' | 'regtest';
+  const networkObj = getNetwork(networkStr);
+
+  const result = await payjoinService.attemptPayjoinSend(
+    psbt,
+    payjoinUrl,
+    [0], // Assume first input is sender's
+    networkObj
+  );
+
+  res.json(result);
+}));
 
 // ========================================
 // BIP78 Payjoin endpoint (unauthenticated)
@@ -282,13 +264,13 @@ router.post('/attempt', authenticate, requireFeature('payjoinSupport'), async (r
  * Body: Original PSBT (text/plain, base64)
  * Returns: Proposal PSBT (text/plain, base64)
  */
-router.post('/:addressId', async (req: Request, res: Response, next) => {
+router.post('/:addressId', async (req, res, next) => {
   const enabled = await isFeatureEnabledAsync('payjoinSupport');
   if (!enabled) {
     return res.status(403).type('text/plain').send(PayjoinErrors.RECEIVER_ERROR);
   }
   next();
-}, payjoinRateLimiter, async (req: Request, res: Response) => {
+}, payjoinRateLimiter, async (req, res) => {
   const { addressId } = req.params;
   const { v, minfeerate } = req.query;
 

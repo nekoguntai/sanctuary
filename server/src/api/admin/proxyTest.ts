@@ -4,14 +4,16 @@
  * Endpoint for testing SOCKS5/Tor proxy connectivity with comprehensive verification.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import https from 'node:https';
 import { authenticate, requireAdmin } from '../../middleware/auth';
+import { asyncHandler } from '../../errors/errorHandler';
+import { InvalidInputError } from '../../errors/ApiError';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 
 const router = Router();
-const log = createLogger('ADMIN:PROXY');
+const log = createLogger('ADMIN_PROXY:ROUTE');
 
 /**
  * POST /api/v1/admin/proxy/test
@@ -19,120 +21,108 @@ const log = createLogger('ADMIN:PROXY');
  * 1. Connect to a .onion address (proves Tor routing works)
  * 2. Check torproject.org to confirm Tor exit and get exit IP
  */
-router.post('/proxy/test', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.post('/proxy/test', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const { host, port, username, password } = req.body;
+
+  // Validation
+  if (!host || !port) {
+    throw new InvalidInputError('Proxy host and port are required');
+  }
+
+  const proxyPort = parseInt(port.toString(), 10);
+  const { SocksClient } = await import('socks');
+
+  // Step 1: Test .onion connectivity (definitive proof Tor works)
+  const onionTarget = {
+    host: 'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion',
+    port: 143, // TCP Electrum port
+  };
+
+  const socksOptions = {
+    proxy: {
+      host,
+      port: proxyPort,
+      type: 5 as const,
+      ...(username && password ? { userId: username, password } : {}),
+    },
+    command: 'connect' as const,
+    destination: onionTarget,
+    timeout: 30000,
+  };
+
   try {
-    const { host, port, username, password } = req.body;
-
-    // Validation
-    if (!host || !port) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Proxy host and port are required',
-      });
-    }
-
-    const proxyPort = parseInt(port.toString(), 10);
-    const { SocksClient } = await import('socks');
-
-    // Step 1: Test .onion connectivity (definitive proof Tor works)
-    const onionTarget = {
-      host: 'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion',
-      port: 143, // TCP Electrum port
-    };
-
-    const socksOptions = {
-      proxy: {
-        host,
-        port: proxyPort,
-        type: 5 as const,
-        ...(username && password ? { userId: username, password } : {}),
-      },
-      command: 'connect' as const,
-      destination: onionTarget,
-      timeout: 30000,
-    };
-
-    try {
-      const { socket } = await SocksClient.createConnection(socksOptions);
-      socket.destroy();
-    } catch (onionError) {
-      log.error('.onion connection failed', { error: String(onionError) });
-      return res.status(500).json({
-        success: false,
-        error: 'Tor Verification Failed',
-        message: 'Could not reach .onion address - Tor may not be working',
-      });
-    }
-
-    // Step 2: Check torproject.org to get exit IP
-    let exitIp = 'unknown';
-    let isTorExit = false;
-
-    try {
-      // Dynamic import for SOCKS proxy agent
-      const socksModule = await import('socks-proxy-agent') as Record<string, unknown>;
-      const SocksProxyAgent =
-        (socksModule as Record<string, unknown>).SocksProxyAgent ??
-        ((socksModule as Record<string, Record<string, unknown>>).default)?.SocksProxyAgent ??
-        (socksModule as Record<string, unknown>).default;
-
-      const proxyUrl = username && password
-        ? `socks5://${username}:${password}@${host}:${proxyPort}`
-        : `socks5://${host}:${proxyPort}`;
-
-      // @ts-expect-error - SocksProxyAgent constructor is dynamically resolved
-      const agent = new SocksProxyAgent(proxyUrl);
-
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
-
-      try {
-        const body = await new Promise<string>((resolve, reject) => {
-          const req = https.get(
-            'https://check.torproject.org/api/ip',
-            { agent, signal: controller.signal },
-            (res) => {
-              let data = '';
-              res.on('data', (chunk: Buffer) => { data += chunk; });
-              res.on('end', () => {
-                if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                  resolve(data);
-                } else {
-                  reject(new Error(`HTTP ${res.statusCode}`));
-                }
-              });
-            }
-          );
-          req.on('error', reject);
-        });
-
-        const parsed = JSON.parse(body) as { IsTor: boolean; IP: string };
-        isTorExit = parsed.IsTor;
-        exitIp = parsed.IP;
-      } finally {
-        clearTimeout(timer);
-      }
-    } catch (ipError) {
-      // Non-fatal - .onion test already passed, just couldn't get exit IP
-      log.warn('Could not fetch exit IP from torproject.org', { error: String(ipError) });
-    }
-
-    res.json({
-      success: true,
-      message: isTorExit
-        ? `Tor verified! Exit node IP: ${exitIp}`
-        : `.onion reachable, but exit check inconclusive. IP: ${exitIp}`,
-      exitIp,
-      isTorExit,
-    });
-  } catch (error) {
-    log.error('Tor verification failed', { error: String(error) });
-    res.status(500).json({
+    const { socket } = await SocksClient.createConnection(socksOptions);
+    socket.destroy();
+  } catch (onionError) {
+    log.error('.onion connection failed', { error: String(onionError) });
+    return res.status(500).json({
       success: false,
       error: 'Tor Verification Failed',
-      message: getErrorMessage(error, 'Failed to verify Tor connection'),
+      message: 'Could not reach .onion address - Tor may not be working',
     });
   }
-});
+
+  // Step 2: Check torproject.org to get exit IP
+  let exitIp = 'unknown';
+  let isTorExit = false;
+
+  try {
+    // Dynamic import for SOCKS proxy agent
+    const socksModule = await import('socks-proxy-agent') as Record<string, unknown>;
+    const SocksProxyAgent =
+      (socksModule as Record<string, unknown>).SocksProxyAgent ??
+      ((socksModule as Record<string, Record<string, unknown>>).default)?.SocksProxyAgent ??
+      (socksModule as Record<string, unknown>).default;
+
+    const proxyUrl = username && password
+      ? `socks5://${username}:${password}@${host}:${proxyPort}`
+      : `socks5://${host}:${proxyPort}`;
+
+    // @ts-expect-error - SocksProxyAgent constructor is dynamically resolved
+    const agent = new SocksProxyAgent(proxyUrl);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const body = await new Promise<string>((resolve, reject) => {
+        const req = https.get(
+          'https://check.torproject.org/api/ip',
+          { agent, signal: controller.signal },
+          (res) => {
+            let data = '';
+            res.on('data', (chunk: Buffer) => { data += chunk; });
+            res.on('end', () => {
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                resolve(data);
+              } else {
+                reject(new Error(`HTTP ${res.statusCode}`));
+              }
+            });
+          }
+        );
+        req.on('error', reject);
+      });
+
+      const parsed = JSON.parse(body) as { IsTor: boolean; IP: string };
+      isTorExit = parsed.IsTor;
+      exitIp = parsed.IP;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (ipError) {
+    // Non-fatal - .onion test already passed, just couldn't get exit IP
+    log.warn('Could not fetch exit IP from torproject.org', { error: String(ipError) });
+  }
+
+  res.json({
+    success: true,
+    message: isTorExit
+      ? `Tor verified! Exit node IP: ${exitIp}`
+      : `.onion reachable, but exit check inconclusive. IP: ${exitIp}`,
+    exitIp,
+    isTorExit,
+  });
+}));
 
 export default router;

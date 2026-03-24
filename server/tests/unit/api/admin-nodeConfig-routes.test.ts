@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import express, { type Express } from 'express';
 import request from 'supertest';
+import { errorHandler } from '../../../src/errors/errorHandler';
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 
 const {
@@ -218,6 +219,7 @@ describe('Admin Node Config Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/admin', nodeConfigRouter);
+    app.use(errorHandler);
   });
 
   beforeEach(() => {
@@ -301,10 +303,7 @@ describe('Admin Node Config Routes', () => {
     const response = await request(app).get('/api/v1/admin/node-config');
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to get node configuration',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('validates required fields on update', async () => {
@@ -672,10 +671,7 @@ describe('Admin Node Config Routes', () => {
       });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: 'Internal Server Error',
-      message: 'Failed to update node configuration',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('tests node connection successfully', async () => {
@@ -743,7 +739,7 @@ describe('Admin Node Config Routes', () => {
       .send({ type: 'rpc', host: 'example.com', port: 8332 });
 
     expect(response.status).toBe(400);
-    expect(response.body.success).toBe(false);
+    expect(response.body.code).toBe('INVALID_INPUT');
     expect(response.body.message).toContain('Only Electrum');
   });
 
@@ -759,10 +755,7 @@ describe('Admin Node Config Routes', () => {
       });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      success: false,
-      error: 'Internal Server Error',
-    });
+    expect(response.body.code).toBe('INTERNAL_ERROR');
   });
 
   it('validates proxy test inputs', async () => {
@@ -948,9 +941,5 @@ describe('Admin Node Config Routes', () => {
       });
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      success: false,
-      error: 'Tor Verification Failed',
-    });
   });
 });

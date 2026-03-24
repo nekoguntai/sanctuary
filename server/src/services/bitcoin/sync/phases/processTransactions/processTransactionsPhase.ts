@@ -20,7 +20,7 @@ import { storeTransactionIO } from './transactionIO';
 import { applyAddressLabels } from './addressLabels';
 import { sendNotifications } from './notifications';
 
-const log = createLogger('SYNC-TX');
+const log = createLogger('BITCOIN:SVC_SYNC_TX');
 
 /** Number of transactions to process per batch (optimized for Electrum server limits) */
 const TX_BATCH_SIZE = 25;

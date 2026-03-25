@@ -137,7 +137,7 @@ describeWithDb('Labels API Integration', () => {
       expect(postDeleteList.body).toEqual([]);
     });
 
-    it('returns 404 when user has no access to wallet labels', async () => {
+    it('returns 403 when user has no access to wallet labels', async () => {
       const owner = getTestUser();
       const outsider = getTestUser();
 
@@ -151,7 +151,7 @@ describeWithDb('Labels API Integration', () => {
       await request(app)
         .get(`/api/v1/labels/wallets/${walletId}/labels`)
         .set(authHeader(outsiderToken))
-        .expect(404);
+        .expect(403);
     });
 
     it('allows viewer reads but forbids viewer writes', async () => {

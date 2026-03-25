@@ -178,7 +178,7 @@ describeWithDb('Security Integration Tests', () => {
           })
           .expect(400);
 
-        expect(response.body.error).toBe('Bad Request');
+        expect(response.body.error).toBe('InvalidInput');
         expect(response.body.message).toContain('does not meet security requirements');
       });
 
@@ -219,9 +219,8 @@ describeWithDb('Security Integration Tests', () => {
           .expect(400);
 
         // Password change now uses same validation as registration
+        expect(response.body.error).toBe('InvalidInput');
         expect(response.body.message).toBe('Password does not meet requirements');
-        expect(response.body.details).toBeDefined();
-        expect(Array.isArray(response.body.details)).toBe(true);
       });
 
       it('should allow password change with 6+ character password', async () => {

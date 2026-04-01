@@ -1,7 +1,12 @@
 import { render,screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
 import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { Dashboard } from '../../../components/Dashboard/Dashboard';
+
+vi.mock('react-router-dom', () => ({
+  Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
+}));
 
 const mocks = vi.hoisted(() => ({
   dashboardData: {} as any,
@@ -332,6 +337,31 @@ describe('Dashboard render branches', () => {
 
     const feeLabels = screen.getAllByText('--- sat/vB');
     expect(feeLabels).toHaveLength(3);
+  });
+
+  it('renders high mempool pressure when fees are high', () => {
+    mocks.dashboardData = makeDashboardState({
+      fees: { fast: 150, medium: 80, slow: 30 },
+    });
+    render(<Dashboard />);
+    expect(screen.getByText('High fees')).toBeInTheDocument();
+  });
+
+  it('renders moderate mempool pressure when fees are moderate', () => {
+    mocks.dashboardData = makeDashboardState({
+      fees: { fast: 50, medium: 25, slow: 10 },
+    });
+    render(<Dashboard />);
+    expect(screen.getByText('Moderate fees')).toBeInTheDocument();
+  });
+
+  it('renders welcome state when no wallets exist', () => {
+    mocks.dashboardData = makeDashboardState({
+      filteredWallets: [],
+    });
+    render(<Dashboard />);
+    expect(screen.getByText('Welcome to Sanctuary')).toBeInTheDocument();
+    expect(screen.getByText('Create Your First Wallet')).toBeInTheDocument();
   });
 
   it('renders signet placeholder copy and symbol', () => {

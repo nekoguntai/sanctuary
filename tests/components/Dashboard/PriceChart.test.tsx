@@ -16,7 +16,12 @@ vi.mock('recharts', () => ({
   Area: () => <span data-testid="area" />,
   XAxis: () => <span data-testid="x-axis" />,
   YAxis: () => <span data-testid="y-axis" />,
-  Tooltip: () => <span data-testid="tooltip" />,
+  Tooltip: ({ content }: { content: React.ReactElement }) => (
+    <div data-testid="tooltip">
+      <div data-testid="tooltip-inactive">{React.cloneElement(content, { active: false, payload: [], label: '' })}</div>
+      <div data-testid="tooltip-active">{React.cloneElement(content, { active: true, payload: [{ value: 42000 }], label: 'Jan 1' })}</div>
+    </div>
+  ),
 }));
 
 describe('PriceChart', () => {
@@ -40,6 +45,24 @@ describe('PriceChart', () => {
 
     await user.click(screen.getByRole('button', { name: '1M' }));
     expect(setTimeframe).toHaveBeenCalledWith('1M');
+  });
+
+  it('renders chart tooltip with active and inactive states', () => {
+    render(
+      <PriceChart
+        totalBalance={100}
+        chartReady={true}
+        timeframe="1D"
+        setTimeframe={vi.fn()}
+        chartData={[{ name: 'Jan', sats: 1000 }]}
+      />
+    );
+
+    // Inactive tooltip renders nothing
+    expect(screen.getByTestId('tooltip-inactive')).toBeEmptyDOMElement();
+    // Active tooltip renders the value
+    expect(screen.getByTestId('tooltip-active')).toHaveTextContent('42,000 sats');
+    expect(screen.getByTestId('tooltip-active')).toHaveTextContent('Jan 1');
   });
 
   it('hides chart body when chartReady is false', () => {

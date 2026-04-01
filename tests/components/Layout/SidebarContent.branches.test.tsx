@@ -103,4 +103,22 @@ describe('SidebarContent branch coverage', () => {
     expect(activeClasses.some((value) => value.includes('text-warning-700'))).toBe(true);
     expect(activeClasses.some((value) => value.includes('text-success-700'))).toBe(true);
   });
+
+  it('covers all wallet sync status branches', () => {
+    render(
+      <SidebarContent
+        {...buildProps({
+          wallets: [
+            { id: 'w-sync', name: 'Syncing', type: 'single_sig', syncInProgress: true, lastSyncStatus: null },
+            { id: 'w-done', name: 'Synced', type: 'single_sig', syncInProgress: false, lastSyncStatus: 'success' },
+            { id: 'w-fail', name: 'Failed', type: 'single_sig', syncInProgress: false, lastSyncStatus: 'failed' },
+          ] as any,
+        })}
+      />
+    );
+
+    expect(screen.getByText('Failed')).toBeInTheDocument();
+    expect(screen.getByText('Synced')).toBeInTheDocument();
+    expect(screen.getByText('Syncing')).toBeInTheDocument();
+  });
 });

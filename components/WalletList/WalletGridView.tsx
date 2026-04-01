@@ -50,10 +50,10 @@ export const WalletGridView: React.FC<WalletGridViewProps> = ({
           <div
             key={wallet.id}
             onClick={() => navigate(`/wallets/${wallet.id}`)}
-            className={`group surface-elevated rounded-2xl p-6 border shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer relative overflow-hidden ${
+            className={`group surface-elevated card-interactive rounded-2xl p-6 border cursor-pointer relative overflow-hidden ${
               isMultisig
-                ? 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-warning-300 dark:hover:border-warning-600'
-                : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-success-300 dark:hover:border-success-600'
+                ? 'card-accent-warning border-sanctuary-200 dark:border-sanctuary-800 hover:border-warning-300 dark:hover:border-warning-600'
+                : 'card-accent-success border-sanctuary-200 dark:border-sanctuary-800 hover:border-success-300 dark:hover:border-success-600'
             }`}
           >
             <div className="flex justify-between items-start mb-6">
@@ -122,7 +122,26 @@ export const WalletGridView: React.FC<WalletGridViewProps> = ({
               )}
             </div>
 
-            <div className="flex items-center justify-between text-xs border-t border-sanctuary-100 dark:border-sanctuary-800 pt-3 mt-4">
+            {/* Mini sparkline decoration — visual rhythm element */}
+            <div className="h-8 w-full mt-2 opacity-30 overflow-hidden">
+              <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="w-full h-full">
+                <defs>
+                  <linearGradient id={`spark-${wallet.id}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={isMultisig ? 'var(--color-warning-500)' : 'var(--color-success-500)'} stopOpacity="0.4" />
+                    <stop offset="100%" stopColor={isMultisig ? 'var(--color-warning-500)' : 'var(--color-success-500)'} stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d={`M0,20 Q10,${15 + (wallet.balance % 7)} 20,${18 - (wallet.balance % 5)} T40,${14 + (wallet.balance % 8)} T60,${10 + (wallet.balance % 6)} T80,${16 - (wallet.balance % 4)} T100,${12 + (wallet.balance % 5)}`}
+                  fill={`url(#spark-${wallet.id})`}
+                  stroke={isMultisig ? 'var(--color-warning-500)' : 'var(--color-success-500)'}
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+
+            <div className="flex items-center justify-between text-xs border-t border-sanctuary-100 dark:border-sanctuary-800 pt-3 mt-2">
               <div className="flex items-center text-sanctuary-500">
                 <span className="text-sanctuary-400 capitalize">{(wallet.scriptType ?? '').replace('_', ' ')}</span>
                 <span className="mx-2 text-sanctuary-300">•</span>

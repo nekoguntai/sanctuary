@@ -28,6 +28,7 @@ import { NavItem } from './NavItem';
 import { SubNavItem } from './SubNavItem';
 import { ExpandedState } from './types';
 import { EmptyState } from '../ui/EmptyState';
+import { BlockHeightIndicator } from './BlockHeightIndicator';
 
 interface SidebarContentProps {
   user: { username: string; isAdmin?: boolean } | null;
@@ -60,14 +61,19 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     <>
       <div className="flex items-center h-20 flex-shrink-0 px-6 border-b border-sanctuary-200 dark:border-sanctuary-800">
         <SanctuaryLogo className="h-8 w-8 text-primary-700 dark:text-primary-500 mr-3" />
-        <span className="text-xl font-light tracking-wide text-sanctuary-800 dark:text-sanctuary-200">Sanctuary</span>
+        <span className="text-xl font-display italic tracking-wide text-sanctuary-800 dark:text-sanctuary-200">Sanctuary</span>
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
         <NavItem to="/" icon={LayoutDashboard} label="Dashboard" />
 
         {/* Wallets Section */}
-        <div className="space-y-1 pt-2">
+        <div className="pt-5 pb-1.5">
+          <div className="px-4 text-[9px] font-semibold text-sanctuary-400 dark:text-sanctuary-500 uppercase tracking-[0.15em]">
+            Wallets
+          </div>
+        </div>
+        <div className="space-y-1">
           <NavItem
             to="/wallets"
             icon={WalletIcon}
@@ -87,6 +93,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                 // Use semantic colors (success/warning) to respect theme settings
                 const activeColor = isMultisig ? 'text-warning-700 dark:text-warning-400' : 'text-success-700 dark:text-success-400';
                 const walletNotifCount = getWalletCount(w.id);
+                const syncStatus = w.syncInProgress ? 'syncing' as const
+                  : w.lastSyncStatus === 'success' ? 'synced' as const
+                  : w.lastSyncStatus === 'failed' ? 'error' as const
+                  : 'pending' as const;
                 return (
                   <SubNavItem
                     key={w.id}
@@ -96,6 +106,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                     activeColorClass={activeColor}
                     badgeCount={walletNotifCount}
                     badgeSeverity="warning"
+                    statusDot={syncStatus}
                   />
                 );
               })}
@@ -104,7 +115,12 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
         </div>
 
         {/* Devices Section */}
-        <div className="space-y-1 pt-2">
+        <div className="pt-4 pb-1.5">
+          <div className="px-4 text-[9px] font-semibold text-sanctuary-400 dark:text-sanctuary-500 uppercase tracking-[0.15em]">
+            Hardware
+          </div>
+        </div>
+        <div className="space-y-1">
            <NavItem
               to="/devices"
               icon={Cpu}
@@ -230,17 +246,20 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
               className="p-2 rounded-lg text-sanctuary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 hover:text-sanctuary-600 dark:hover:text-sanctuary-300 transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
               title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {darkMode ? <Sun className="h-4 w-4 theme-toggle-icon" /> : <Moon className="h-4 w-4 theme-toggle-icon" />}
             </button>
             <NotificationBell />
           </div>
-          <button
-            onClick={onVersionClick}
-            className="text-[11px] text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300 transition-colors cursor-pointer"
-            title="Version info & support"
-          >
-            v{version}
-          </button>
+          <div className="flex items-center gap-3">
+            <BlockHeightIndicator />
+            <button
+              onClick={onVersionClick}
+              className="text-[11px] text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300 transition-colors cursor-pointer"
+              title="Version info & support"
+            >
+              v{version}
+            </button>
+          </div>
         </div>
       </div>
     </>

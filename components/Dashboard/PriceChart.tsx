@@ -3,6 +3,19 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 import { Amount } from '../Amount';
 import { Timeframe } from './hooks/useDashboardData';
 
+// Custom themed tooltip matching the app's surface system
+const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="surface-elevated rounded-xl px-3 py-2 shadow-lg border border-sanctuary-200 dark:border-sanctuary-700" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
+      <p className="text-[10px] uppercase tracking-wider text-sanctuary-400 mb-0.5">{label}</p>
+      <p className="text-sm font-semibold font-mono tabular-nums" style={{ color: 'var(--color-primary-600)' }}>
+        {Number(payload[0].value).toLocaleString()} sats
+      </p>
+    </div>
+  );
+};
+
 // Animated number component for smooth price transitions
 const AnimatedPrice: React.FC<{ value: number | null; symbol: string }> = ({ value, symbol }) => {
   const [displayValue, setDisplayValue] = useState<number | null>(value);
@@ -151,11 +164,17 @@ export const PriceChart: React.FC<PriceChartProps> = ({
                   </defs>
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#a39e93'}} />
                   <YAxis hide />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '8px', color: '#fff' }}
-                    itemStyle={{ color: 'var(--color-primary-400)' }}
+                  <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'var(--color-primary-300)', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                  <Area
+                    type="monotone"
+                    dataKey="sats"
+                    stroke="var(--color-primary-500)"
+                    strokeWidth={2.5}
+                    fillOpacity={1}
+                    fill="url(#colorSats)"
+                    animationDuration={1200}
+                    animationEasing="ease-out"
                   />
-                  <Area type="monotone" dataKey="sats" stroke="var(--color-primary-400)" strokeWidth={2} fillOpacity={1} fill="url(#colorSats)" />
                 </AreaChart>
               </ResponsiveContainer>
             )}

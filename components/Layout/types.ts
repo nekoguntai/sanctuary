@@ -27,6 +27,7 @@ export interface SubNavItemProps {
   activeColorClass?: string;
   badgeCount?: number;
   badgeSeverity?: 'info' | 'warning' | 'critical';
+  statusDot?: 'synced' | 'syncing' | 'error' | 'pending';
 }
 
 export interface ExpandedState {

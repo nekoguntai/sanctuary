@@ -139,7 +139,8 @@ describe('Layout', () => {
       renderLayout();
 
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
-      expect(screen.getByText('Wallets')).toBeInTheDocument();
+      // "Wallets" appears as both section label and nav link
+      expect(screen.getAllByText('Wallets').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Devices')).toBeInTheDocument();
     });
 
@@ -177,16 +178,19 @@ describe('Layout', () => {
     it('shows wallet count', () => {
       renderLayout();
 
-      // Wallet section should show number of wallets
-      expect(screen.getByText('Wallets')).toBeInTheDocument();
+      // Wallet section should show — "Wallets" appears as section label and nav link
+      const walletElements = screen.getAllByText('Wallets');
+      expect(walletElements.length).toBeGreaterThanOrEqual(1);
     });
 
     it('expands wallet list when clicking expand button', async () => {
       const user = userEvent.setup();
       renderLayout();
 
-      // Click on Wallets section toggle
-      const walletsSection = screen.getByText('Wallets').closest('div');
+      // Click on Wallets nav item toggle — find the one inside a nav link
+      const walletLinks = screen.getAllByText('Wallets');
+      const walletsNavLink = walletLinks.find(el => el.closest('a'));
+      const walletsSection = walletsNavLink?.closest('div[class*="group"]') || walletLinks[walletLinks.length - 1].closest('div');
       const toggleButton = walletsSection?.querySelector('button');
 
       if (toggleButton) {
@@ -465,7 +469,9 @@ describe('Layout', () => {
     it('highlights active nav item based on route', () => {
       renderLayout('/wallets');
 
-      const walletsLink = screen.getByText('Wallets').closest('a');
+      // "Wallets" appears as section label and nav link — find the one inside an <a>
+      const walletElements = screen.getAllByText('Wallets');
+      const walletsLink = walletElements.find(el => el.closest('a'))?.closest('a');
       // Active link should have different styling
       expect(walletsLink?.className).toMatch(/primary|active/i);
     });
@@ -480,7 +486,8 @@ describe('Layout', () => {
     it('navigates to wallets page', () => {
       renderLayout();
 
-      const walletsLink = screen.getByText('Wallets').closest('a');
+      const walletElements = screen.getAllByText('Wallets');
+      const walletsLink = walletElements.find(el => el.closest('a'))?.closest('a');
       expect(walletsLink).toHaveAttribute('href', '/wallets');
     });
 

@@ -8,16 +8,62 @@ const Skeleton: React.FC<SkeletonProps> = ({ className = '' }) => (
   <div className={`rounded-lg animate-shimmer ${className}`} />
 );
 
-/** Dashboard-shaped skeleton with cards and activity list */
+/** Dashboard-shaped skeleton matching the actual dashboard layout */
 export const DashboardSkeleton: React.FC = () => (
   <div className="space-y-6 animate-fade-in">
-    {/* Network status bar */}
+    {/* Mempool pressure bar */}
+    <div className="flex items-center gap-3 px-1">
+      <Skeleton className="h-3 w-16" />
+      <Skeleton className="h-1 flex-1 rounded-full" />
+    </div>
+
+    {/* Network tabs */}
+    <div className="flex gap-2">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Skeleton key={i} className="h-8 w-24 rounded-lg" />
+      ))}
+    </div>
+
+    {/* Block visualizer */}
     <div className="surface-elevated rounded-2xl p-4 border border-sanctuary-200 dark:border-sanctuary-800">
       <Skeleton className="h-4 w-48 mb-3" />
       <div className="flex gap-3 overflow-hidden">
         {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="w-28 h-32 flex-shrink-0 rounded-lg" />
+          <Skeleton key={i} className="w-28 h-32 flex-shrink-0 rounded-xl" />
         ))}
+      </div>
+    </div>
+
+    {/* Top Stats Row - 3 cards matching BTC Price / Fee / Node layout */}
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="surface-elevated rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="flex justify-between mb-4">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="w-9 h-9 rounded-xl" />
+          </div>
+          <Skeleton className="h-8 w-32 mb-3" />
+          <div className="flex justify-between">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-3 w-12" />
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* Balance chart card */}
+    <div className="surface-elevated rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+        <div>
+          <Skeleton className="h-3 w-20 mb-2" />
+          <Skeleton className="h-7 w-36" />
+        </div>
+        <div className="flex-1 lg:w-2/3">
+          <div className="flex justify-end mb-2">
+            <Skeleton className="h-7 w-48 rounded-lg" />
+          </div>
+          <Skeleton className="h-32 w-full rounded-lg" />
+        </div>
       </div>
     </div>
 

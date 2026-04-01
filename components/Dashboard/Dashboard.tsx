@@ -6,7 +6,7 @@ import { MempoolSection } from './MempoolSection';
 import { AnimatedPrice, PriceChart } from './PriceChart';
 import { WalletSummary } from './WalletSummary';
 import { RecentTransactions } from './RecentTransactions';
-import { SanctuarySpinner } from '../ui/CustomIcons';
+import { SanctuarySpinner, SanctuaryLogo } from '../ui/CustomIcons';
 
 export const Dashboard: React.FC = () => {
   const {
@@ -53,8 +53,41 @@ export const Dashboard: React.FC = () => {
     );
   }
 
+  // Mempool pressure: derive from fee rates
+  const mempoolPressure = (() => {
+    if (!fees?.fast) return 'low';
+    if (fees.fast > 100) return 'high';
+    if (fees.fast > 30) return 'moderate';
+    return 'low';
+  })();
+  const pressureColors = {
+    low: 'bg-success-500',
+    moderate: 'bg-warning-500',
+    high: 'bg-rose-500',
+  };
+  const pressureWidths = {
+    low: 'w-1/4',
+    moderate: 'w-1/2',
+    high: 'w-3/4',
+  };
+  const pressureLabels = {
+    low: 'Low fees',
+    moderate: 'Moderate fees',
+    high: 'High fees',
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-12">
+
+      {/* Mempool Pressure Indicator */}
+      {isMainnet && fees && (
+        <div className="flex items-center gap-3 px-1 animate-fade-in-up-1">
+          <span className="text-[10px] uppercase tracking-wider font-medium text-sanctuary-400">{pressureLabels[mempoolPressure]}</span>
+          <div className="flex-1 h-1 rounded-full bg-sanctuary-100 dark:bg-sanctuary-800 overflow-hidden">
+            <div className={`h-full rounded-full ${pressureColors[mempoolPressure]} ${pressureWidths[mempoolPressure]} transition-all duration-1000 ease-out`} />
+          </div>
+        </div>
+      )}
 
       {/* Update Available Banner */}
       {versionInfo?.updateAvailable && !updateDismissed && (
@@ -122,7 +155,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Top Stats Row - 3 columns */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 stagger-enter">
 
         {/* BTC Price Card - Compact with animated price */}
         <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive animate-fade-in-up-1">
@@ -362,25 +395,50 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Total Balance Card - Full Width */}
-      <div className="animate-fade-in-up-5">
-        <PriceChart
-          totalBalance={totalBalance}
-          chartReady={chartReady}
-          timeframe={timeframe}
-          setTimeframe={setTimeframe}
-          chartData={chartData}
-        />
-      </div>
+      {/* Welcome state or Balance/Wallets */}
+      {filteredWallets.length === 0 ? (
+        <div className="animate-fade-in-up-5 surface-elevated rounded-2xl p-12 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 text-center relative overflow-hidden">
+          {/* Ambient glow */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-primary-100/40 dark:bg-primary-900/15 blur-3xl pointer-events-none" />
+          <div className="relative z-10">
+            <SanctuaryLogo className="h-16 w-16 mx-auto text-primary-500 dark:text-primary-400 mb-6 logo-breathe" />
+            <h2 className="text-2xl text-sanctuary-800 dark:text-sanctuary-200 mb-2">
+              Welcome to Sanctuary
+            </h2>
+            <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400 max-w-md mx-auto mb-6">
+              Your self-hosted Bitcoin wallet coordinator. Create or import a wallet to begin managing your Bitcoin with full sovereignty.
+            </p>
+            <a
+              href="/wallets/create"
+              className="inline-flex items-center px-5 py-2.5 text-sm font-medium rounded-xl bg-primary-800 text-white hover:bg-primary-700 dark:bg-sanctuary-800 dark:text-sanctuary-100 dark:hover:bg-sanctuary-700 dark:border dark:border-sanctuary-700 transition-colors"
+            >
+              Create Your First Wallet
+            </a>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Total Balance Card - Full Width */}
+          <div className="animate-fade-in-up-5">
+            <PriceChart
+              totalBalance={totalBalance}
+              chartReady={chartReady}
+              timeframe={timeframe}
+              setTimeframe={setTimeframe}
+              chartData={chartData}
+            />
+          </div>
 
-      {/* Wallet Breakdown Section (Table View) */}
-      <div className="animate-fade-in-up-6">
-        <WalletSummary
-          selectedNetwork={selectedNetwork}
-          filteredWallets={filteredWallets}
-          totalBalance={totalBalance}
-        />
-      </div>
+          {/* Wallet Breakdown Section (Table View) */}
+          <div className="animate-fade-in-up-6">
+            <WalletSummary
+              selectedNetwork={selectedNetwork}
+              filteredWallets={filteredWallets}
+              totalBalance={totalBalance}
+            />
+          </div>
+        </>
+      )}
 
       {/* Recent Activity */}
       <div className="animate-fade-in-up-7">

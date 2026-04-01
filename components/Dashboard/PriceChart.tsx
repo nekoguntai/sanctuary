@@ -7,9 +7,9 @@ import { Timeframe } from './hooks/useDashboardData';
 const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="surface-elevated rounded-xl px-3 py-2 shadow-lg border border-sanctuary-200 dark:border-sanctuary-700" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
+    <div className="surface-elevated font-sans rounded-xl px-3 py-2 shadow-lg border border-sanctuary-200 dark:border-sanctuary-700">
       <p className="text-[10px] uppercase tracking-wider text-sanctuary-400 mb-0.5">{label}</p>
-      <p className="text-sm font-semibold font-mono tabular-nums" style={{ color: 'var(--color-primary-600)' }}>
+      <p className="text-sm font-semibold font-mono tabular-nums text-primary-600">
         {Number(payload[0].value).toLocaleString()} sats
       </p>
     </div>

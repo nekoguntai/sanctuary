@@ -1,6 +1,8 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { NetworkTabs } from '../NetworkTabs';
 import { TrendingUp, TrendingDown, Zap, CheckCircle2, XCircle, Bitcoin, Download, X } from 'lucide-react';
+import { Button } from '../ui/Button';
 import { useDashboardData } from './hooks/useDashboardData';
 import { MempoolSection } from './MempoolSection';
 import { AnimatedPrice, PriceChart } from './PriceChart';
@@ -408,12 +410,11 @@ export const Dashboard: React.FC = () => {
             <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400 max-w-md mx-auto mb-6">
               Your self-hosted Bitcoin wallet coordinator. Create or import a wallet to begin managing your Bitcoin with full sovereignty.
             </p>
-            <a
-              href="/wallets/create"
-              className="inline-flex items-center px-5 py-2.5 text-sm font-medium rounded-xl bg-primary-800 text-white hover:bg-primary-700 dark:bg-sanctuary-800 dark:text-sanctuary-100 dark:hover:bg-sanctuary-700 dark:border dark:border-sanctuary-700 transition-colors"
-            >
-              Create Your First Wallet
-            </a>
+            <Link to="/wallets/create">
+              <Button variant="primary" size="lg">
+                Create Your First Wallet
+              </Button>
+            </Link>
           </div>
         </div>
       ) : (

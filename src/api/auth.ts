@@ -77,6 +77,7 @@ export async function register(data: RegisterRequest): Promise<AuthResponse> {
  * Returns either a full auth response or a 2FA required response
  */
 export async function login(data: LoginRequest): Promise<LoginResponse> {
+  // Disable retries — auto-retrying failed logins worsens server-side rate limiting
   const response = await apiClient.post<LoginResponse>('/auth/login', data, { retry: { enabled: false } });
 
   // Only set token if full auth (not 2FA pending)

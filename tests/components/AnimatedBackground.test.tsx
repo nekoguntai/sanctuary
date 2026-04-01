@@ -7,12 +7,17 @@
 import { render,waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 
-const { useSakuraPetalsMock } = vi.hoisted(() => ({
+const { useSakuraPetalsMock, useFirefliesMock } = vi.hoisted(() => ({
   useSakuraPetalsMock: vi.fn(),
+  useFirefliesMock: vi.fn(),
 }));
 
 vi.mock('../../components/animations/sakuraPetals.ts', () => ({
   useSakuraPetals: useSakuraPetalsMock,
+}));
+
+vi.mock('../../components/animations/fireflies.ts', () => ({
+  useFireflies: useFirefliesMock,
 }));
 
 import {
@@ -199,6 +204,27 @@ describe('AnimatedBackground', () => {
     it('returns null for non-animated pattern', () => {
       const { container } = render(<AnimatedBackground pattern="minimal" darkMode={false} />);
       expect(container.firstChild).toBeNull();
+    });
+
+    it('clears active hook when switching between animated patterns to prevent hook count mismatch', async () => {
+      const { container, rerender } = render(
+        <AnimatedBackground pattern="sakura-petals" darkMode={true} opacity={70} />
+      );
+
+      await waitFor(() => {
+        expect(useSakuraPetalsMock).toHaveBeenCalled();
+      });
+
+      // Switch to a different animated pattern — should not throw
+      // "Cannot read properties of undefined (reading 'length')"
+      rerender(<AnimatedBackground pattern="fireflies" darkMode={true} opacity={70} />);
+
+      // Canvas should still be present during transition
+      expect(container.querySelector('canvas')).not.toBeNull();
+
+      await waitFor(() => {
+        expect(useFirefliesMock).toHaveBeenCalled();
+      });
     });
   });
 });

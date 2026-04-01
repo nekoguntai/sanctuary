@@ -318,6 +318,7 @@ jobs:
           GATEWAY_SECRET=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
           POSTGRES_PASSWORD=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
           AI_CONFIG_SECRET=$(openssl rand -hex 32)
+          REDIS_PASSWORD=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
 
           # Generate SSL certs
           cd docker/nginx/ssl && ./generate-certs.sh localhost && cd ../../..
@@ -325,7 +326,7 @@ jobs:
           # Start containers
           JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
             GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-            AI_CONFIG_SECRET="$AI_CONFIG_SECRET" \
+            AI_CONFIG_SECRET="$AI_CONFIG_SECRET" REDIS_PASSWORD="$REDIS_PASSWORD" \
             HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
             docker compose up -d --build
 
@@ -386,6 +387,7 @@ jobs:
           GATEWAY_SECRET=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
           POSTGRES_PASSWORD=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
           AI_CONFIG_SECRET=$(openssl rand -hex 32)
+          REDIS_PASSWORD=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
 
           # Generate SSL certs
           cd docker/nginx/ssl && ./generate-certs.sh localhost && cd ../../..
@@ -393,7 +395,7 @@ jobs:
           # Start containers with higher rate limits for testing
           JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
             GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-            AI_CONFIG_SECRET="$AI_CONFIG_SECRET" \
+            AI_CONFIG_SECRET="$AI_CONFIG_SECRET" REDIS_PASSWORD="$REDIS_PASSWORD" \
             HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
             RATE_LIMIT_LOGIN=100 RATE_LIMIT_PASSWORD_CHANGE=100 \
             docker compose up -d --build

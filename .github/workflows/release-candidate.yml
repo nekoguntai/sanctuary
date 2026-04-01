@@ -158,19 +158,23 @@ jobs:
           HTTPS_PORT: ${{ env.HTTPS_PORT }}
           HTTP_PORT: ${{ env.HTTP_PORT }}
         run: |
-          # Generate all 4 required secrets
+          # Generate all required secrets
           JWT_SECRET=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
           ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
           GATEWAY_SECRET=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
           POSTGRES_PASSWORD=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
+          AI_CONFIG_SECRET=$(openssl rand -hex 32)
+          REDIS_PASSWORD=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
           cd docker/nginx/ssl && ./generate-certs.sh localhost && cd ../../..
           # Build first, then start (migrate container needs backend image)
           JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
             GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            AI_CONFIG_SECRET="$AI_CONFIG_SECRET" REDIS_PASSWORD="$REDIS_PASSWORD" \
             HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
             docker compose build
           JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
             GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            AI_CONFIG_SECRET="$AI_CONFIG_SECRET" REDIS_PASSWORD="$REDIS_PASSWORD" \
             HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
             docker compose up -d
 
@@ -245,16 +249,20 @@ jobs:
           ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
           GATEWAY_SECRET=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
           POSTGRES_PASSWORD=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
+          AI_CONFIG_SECRET=$(openssl rand -hex 32)
+          REDIS_PASSWORD=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
           cd docker/nginx/ssl && ./generate-certs.sh localhost && cd ../../..
           # Build first, then start (migrate container needs backend image)
           # Raise auth rate limits for stressy auth-flow test sequences
           JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
             GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            AI_CONFIG_SECRET="$AI_CONFIG_SECRET" REDIS_PASSWORD="$REDIS_PASSWORD" \
             HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
             RATE_LIMIT_LOGIN=100 RATE_LIMIT_PASSWORD_CHANGE=100 \
             docker compose build
           JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
             GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            AI_CONFIG_SECRET="$AI_CONFIG_SECRET" REDIS_PASSWORD="$REDIS_PASSWORD" \
             HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
             RATE_LIMIT_LOGIN=100 RATE_LIMIT_PASSWORD_CHANGE=100 \
             docker compose up -d

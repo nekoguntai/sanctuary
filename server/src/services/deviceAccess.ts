@@ -376,7 +376,7 @@ export async function shareDeviceWithGroup(
     where: { id: deviceId },
     data: {
       groupId: groupId,
-      groupRole: groupId ? 'viewer' : 'viewer',
+      groupRole: 'viewer',
     },
   });
 

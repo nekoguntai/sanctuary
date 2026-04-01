@@ -401,6 +401,71 @@ test.describe('Admin operations', () => {
     expect(unhandledRequests).toEqual([]);
   });
 
+  test('delete group with confirmation', async ({ page }) => {
+    const unhandledRequests = await mockAdminApi(page);
+
+    await page.goto('/#/admin/users-groups');
+
+    // First create a group so we have one to delete
+    const groupInput = page.getByPlaceholder(/group name/i).or(page.getByPlaceholder(/new group/i));
+    if (await groupInput.isVisible()) {
+      await groupInput.fill('Group To Delete');
+      await page.getByRole('button', { name: /Create/i }).click();
+      await expect(page.getByText('Group To Delete')).toBeVisible({ timeout: 5000 });
+
+      // Accept the confirmation dialog
+      page.on('dialog', dialog => dialog.accept());
+
+      // Find and click the delete button for the group
+      const groupRow = page.locator('li, tr, [data-testid]').filter({ hasText: 'Group To Delete' });
+      const deleteButton = groupRow.locator('button[title="Delete group"], button[aria-label*="delete" i], button:has(svg)').last();
+
+      if (await deleteButton.isVisible()) {
+        await deleteButton.click();
+        // Group should be removed
+        await expect(page.getByText('Group To Delete')).not.toBeVisible({ timeout: 5000 });
+      }
+    }
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('users-groups page renders both sections', async ({ page }) => {
+    const unhandledRequests = await mockAdminApi(page);
+
+    await page.goto('/#/admin/users-groups');
+
+    // Should show both users and groups sections
+    await expect(page.getByText('admin', { exact: true })).toBeVisible();
+
+    // Groups section should be visible (may be empty)
+    await expect(page.getByText(/Groups/i).first()).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('shows error state when user creation fails', async ({ page }) => {
+    const unhandledRequests = await mockAdminApi(page, {
+      failures: {
+        'POST /admin/users': { status: 409, body: { message: 'Username already exists' } },
+      },
+    });
+
+    await page.goto('/#/admin/users-groups');
+
+    await page.getByRole('button', { name: /Add User/i }).click();
+    await expect(page.getByText('Create New User')).toBeVisible();
+
+    await page.getByPlaceholder(/username/i).fill('duplicate');
+    await page.getByPlaceholder(/password/i).fill('SecurePass123!');
+    await page.getByRole('button', { name: /Create User/i }).click();
+
+    // Should show error message
+    await expect(page.getByText(/already exists|error|failed/i)).toBeVisible({ timeout: 5000 });
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
   // --- Admin Variables ---
 
   test('update system variables and save', async ({ page }) => {

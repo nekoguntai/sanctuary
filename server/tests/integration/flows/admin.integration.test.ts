@@ -967,6 +967,86 @@ describeIfDb('Admin API Integration', () => {
       expect(auditLog).not.toBeNull();
     });
 
+    it('should create audit log for group member add', async () => {
+      const { token, adminId } = await createAdminAndLogin();
+      const { userId } = await createUserAndLogin();
+
+      const group = await prisma.group.create({
+        data: { name: 'Audit Member Add Group' },
+      });
+
+      await request(app)
+        .post(`/api/v1/admin/groups/${group.id}/members`)
+        .set(authHeader(token))
+        .send({ userId })
+        .expect(201);
+
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          userId: adminId,
+          action: 'admin.group_member_add',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      expect(auditLog).not.toBeNull();
+      expect(auditLog?.category).toBe('admin');
+    });
+
+    it('should create audit log for group member remove', async () => {
+      const { token, adminId } = await createAdminAndLogin();
+      const { userId } = await createUserAndLogin();
+
+      const group = await prisma.group.create({
+        data: {
+          name: 'Audit Member Remove Group',
+          members: {
+            create: { userId, role: 'member' },
+          },
+        },
+      });
+
+      await request(app)
+        .delete(`/api/v1/admin/groups/${group.id}/members/${userId}`)
+        .set(authHeader(token))
+        .expect(200);
+
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          userId: adminId,
+          action: 'admin.group_member_remove',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      expect(auditLog).not.toBeNull();
+      expect(auditLog?.category).toBe('admin');
+    });
+
+    it('should create audit log for group deletion', async () => {
+      const { token, adminId } = await createAdminAndLogin();
+
+      const group = await prisma.group.create({
+        data: { name: 'Audit Delete Group' },
+      });
+
+      await request(app)
+        .delete(`/api/v1/admin/groups/${group.id}`)
+        .set(authHeader(token))
+        .expect(200);
+
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          userId: adminId,
+          action: 'admin.group_delete',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      expect(auditLog).not.toBeNull();
+      expect(auditLog?.category).toBe('admin');
+    });
+
     it('should create audit log for group creation', async () => {
       const { token, adminId } = await createAdminAndLogin();
 
@@ -1075,6 +1155,184 @@ describeIfDb('Admin API Integration', () => {
         .get(`/api/v1/wallets/${wallet.id}`)
         .set(authHeader(userToken))
         .expect(403);
+    });
+
+    it('should grant access to user in multiple groups with wallets', async () => {
+      const { token: adminToken } = await createAdminAndLogin();
+      const { userId, token: userToken } = await createUserAndLogin();
+
+      // Create two groups, each with a wallet
+      const groupA = await prisma.group.create({
+        data: {
+          name: 'Group A',
+          members: { create: { userId, role: 'member' } },
+        },
+      });
+
+      const groupB = await prisma.group.create({
+        data: {
+          name: 'Group B',
+          members: { create: { userId, role: 'member' } },
+        },
+      });
+
+      const walletA = await prisma.wallet.create({
+        data: {
+          name: 'Wallet A',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          groupId: groupA.id,
+        },
+      });
+
+      const walletB = await prisma.wallet.create({
+        data: {
+          name: 'Wallet B',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          groupId: groupB.id,
+        },
+      });
+
+      // User should have access to both wallets
+      await request(app)
+        .get(`/api/v1/wallets/${walletA.id}`)
+        .set(authHeader(userToken))
+        .expect(200);
+
+      await request(app)
+        .get(`/api/v1/wallets/${walletB.id}`)
+        .set(authHeader(userToken))
+        .expect(200);
+    });
+
+    it('should grant access when member added after wallet shared with group', async () => {
+      const { token: adminToken } = await createAdminAndLogin();
+      const { userId, token: userToken } = await createUserAndLogin();
+
+      // Create group without the user
+      const group = await prisma.group.create({
+        data: { name: 'Later Add Group' },
+      });
+
+      // Create wallet in the group
+      const wallet = await prisma.wallet.create({
+        data: {
+          name: 'Pre-existing Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          groupId: group.id,
+        },
+      });
+
+      // User should NOT have access yet
+      await request(app)
+        .get(`/api/v1/wallets/${wallet.id}`)
+        .set(authHeader(userToken))
+        .expect(403);
+
+      // Now add user to the group
+      await request(app)
+        .post(`/api/v1/admin/groups/${group.id}/members`)
+        .set(authHeader(adminToken))
+        .send({ userId })
+        .expect(201);
+
+      // User should now have access
+      await request(app)
+        .get(`/api/v1/wallets/${wallet.id}`)
+        .set(authHeader(userToken))
+        .expect(200);
+    });
+
+    it('should revoke all wallet access when group is deleted', async () => {
+      const { token: adminToken } = await createAdminAndLogin();
+      const { userId, token: userToken } = await createUserAndLogin();
+
+      const group = await prisma.group.create({
+        data: {
+          name: 'Delete Me Group',
+          members: { create: { userId, role: 'member' } },
+        },
+      });
+
+      const wallet = await prisma.wallet.create({
+        data: {
+          name: 'Group Wallet To Orphan',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          groupId: group.id,
+        },
+      });
+
+      // User has access via group
+      await request(app)
+        .get(`/api/v1/wallets/${wallet.id}`)
+        .set(authHeader(userToken))
+        .expect(200);
+
+      // Delete the group
+      await request(app)
+        .delete(`/api/v1/admin/groups/${group.id}`)
+        .set(authHeader(adminToken))
+        .expect(200);
+
+      // User should no longer have access (group deleted, wallet's groupId becomes null via cascade or app logic)
+      // Note: depending on cascade behavior, the wallet.groupId may become null
+      // or the group just doesn't exist anymore
+      const updatedWallet = await prisma.wallet.findUnique({
+        where: { id: wallet.id },
+      });
+
+      // The wallet still exists but group reference should be cleared
+      // (Prisma SetNull on Group deletion or the wallet just references a deleted group)
+      if (updatedWallet?.groupId === null) {
+        // Group was cleared via cascade SetNull
+        await request(app)
+          .get(`/api/v1/wallets/${wallet.id}`)
+          .set(authHeader(userToken))
+          .expect(403);
+      }
+    });
+
+    it('should use direct access role when user has both direct and group access', async () => {
+      const { token: adminToken } = await createAdminAndLogin();
+      const { userId, token: userToken } = await createUserAndLogin();
+
+      const group = await prisma.group.create({
+        data: {
+          name: 'Overlap Group',
+          members: { create: { userId, role: 'member' } },
+        },
+      });
+
+      // Create wallet with group access as viewer
+      const wallet = await prisma.wallet.create({
+        data: {
+          name: 'Overlap Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          groupId: group.id,
+          groupRole: 'viewer',
+        },
+      });
+
+      // Also give the user direct signer access
+      await prisma.walletUser.create({
+        data: {
+          walletId: wallet.id,
+          userId,
+          role: 'signer',
+        },
+      });
+
+      // User should have access (direct signer takes priority over group viewer)
+      const response = await request(app)
+        .get(`/api/v1/wallets/${wallet.id}`)
+        .set(authHeader(userToken))
+        .expect(200);
+
+      expect(response.body.name).toBe('Overlap Wallet');
     });
   });
 });

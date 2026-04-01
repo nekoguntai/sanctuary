@@ -161,6 +161,37 @@ describe('Device Access Service', () => {
       });
     });
 
+    it('returns viewer access metadata', async () => {
+      mockPrismaClient.deviceUser.findFirst.mockResolvedValue({
+        id: 'du-1',
+        deviceId,
+        userId,
+        role: 'viewer',
+      });
+
+      const result = await checkDeviceAccessWithRole(deviceId, userId);
+      expect(result).toEqual({
+        hasAccess: true,
+        isOwner: false,
+        role: 'viewer',
+      });
+    });
+
+    it('returns group viewer access metadata', async () => {
+      mockPrismaClient.deviceUser.findFirst.mockResolvedValue(null);
+      mockPrismaClient.device.findFirst.mockResolvedValue({
+        id: deviceId,
+        groupRole: 'viewer',
+      });
+
+      const result = await checkDeviceAccessWithRole(deviceId, userId);
+      expect(result).toEqual({
+        hasAccess: true,
+        isOwner: false,
+        role: 'viewer',
+      });
+    });
+
     it('returns no access metadata when user has no role', async () => {
       mockPrismaClient.deviceUser.findFirst.mockResolvedValue(null);
       mockPrismaClient.device.findFirst.mockResolvedValue(null);

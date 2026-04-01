@@ -681,5 +681,93 @@ describe('Access Control Service', () => {
         await expect(clearAccessCache()).resolves.toBeUndefined();
       });
     });
+
+    describe('cache invalidation causes DB re-query', () => {
+      it('should use cached role without hitting DB', async () => {
+        mockCache.get.mockResolvedValueOnce({ role: 'owner' });
+
+        const role = await getUserWalletRole(walletId, userId);
+
+        expect(role).toBe('owner');
+        expect(prisma.walletUser.findFirst).not.toHaveBeenCalled();
+        expect(prisma.wallet.findFirst).not.toHaveBeenCalled();
+      });
+
+      it('should query DB after cache returns null (cache miss)', async () => {
+        mockCache.get.mockResolvedValueOnce(null);
+        vi.mocked(prisma.walletUser.findFirst).mockResolvedValue({
+          id: faker.string.uuid(),
+          walletId,
+          userId,
+          role: 'signer',
+          addedAt: new Date(),
+        });
+
+        const role = await getUserWalletRole(walletId, userId);
+
+        expect(role).toBe('signer');
+        expect(prisma.walletUser.findFirst).toHaveBeenCalledWith({
+          where: { walletId, userId },
+        });
+        // Should cache the result for next lookup
+        expect(mockCache.set).toHaveBeenCalled();
+      });
+
+      it('should re-query DB after wallet cache invalidation', async () => {
+        // First call: cache hit
+        mockCache.get.mockResolvedValueOnce({ role: 'viewer' });
+        const role1 = await getUserWalletRole(walletId, userId);
+        expect(role1).toBe('viewer');
+        expect(prisma.walletUser.findFirst).not.toHaveBeenCalled();
+
+        // Invalidate cache
+        await invalidateWalletAccessCache(walletId);
+
+        // Second call: cache miss, should query DB
+        mockCache.get.mockResolvedValueOnce(null);
+        vi.mocked(prisma.walletUser.findFirst).mockResolvedValue({
+          id: faker.string.uuid(),
+          walletId,
+          userId,
+          role: 'owner',
+          addedAt: new Date(),
+        });
+
+        const role2 = await getUserWalletRole(walletId, userId);
+        expect(role2).toBe('owner');
+        expect(prisma.walletUser.findFirst).toHaveBeenCalled();
+      });
+
+      it('should re-query DB after user cache invalidation', async () => {
+        // First call: cache hit
+        mockCache.get.mockResolvedValueOnce({ role: 'viewer' });
+        const role1 = await getUserWalletRole(walletId, userId);
+        expect(role1).toBe('viewer');
+        expect(prisma.walletUser.findFirst).not.toHaveBeenCalled();
+
+        // Invalidate user cache (simulating group membership change)
+        await invalidateUserAccessCache(userId);
+
+        // Second call: cache miss, should query DB
+        mockCache.get.mockResolvedValueOnce(null);
+        vi.mocked(prisma.walletUser.findFirst).mockResolvedValue(null);
+        vi.mocked(prisma.wallet.findFirst).mockResolvedValue({
+          id: walletId,
+          groupRole: 'signer',
+        } as never);
+
+        const role2 = await getUserWalletRole(walletId, userId);
+        expect(role2).toBe('signer');
+        expect(prisma.wallet.findFirst).toHaveBeenCalled();
+      });
+
+      it('should handle consecutive invalidations without errors', async () => {
+        await invalidateWalletAccessCache(walletId);
+        await invalidateWalletAccessCache(walletId);
+        await invalidateUserAccessCache(userId);
+        await invalidateUserAccessCache(userId);
+        // Should complete without errors
+      });
+    });
   });
 });

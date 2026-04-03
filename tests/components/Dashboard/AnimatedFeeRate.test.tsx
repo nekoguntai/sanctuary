@@ -54,6 +54,16 @@ describe('AnimatedFeeRate', () => {
     expect(span?.className).not.toContain('number-transition-down');
   });
 
+  it('does not flash when values are non-numeric strings', () => {
+    const { rerender, container } = render(<AnimatedFeeRate value="loading" />);
+
+    rerender(<AnimatedFeeRate value="pending" />);
+
+    const span = container.querySelector('span');
+    expect(span?.className).not.toContain('number-transition-up');
+    expect(span?.className).not.toContain('number-transition-down');
+  });
+
   it('does not flash when value is unchanged', () => {
     const { rerender, container } = render(<AnimatedFeeRate value="20" />);
 

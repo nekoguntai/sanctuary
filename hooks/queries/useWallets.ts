@@ -205,7 +205,6 @@ export function useWalletSparklines(
   const query = useQuery({
     queryKey: ['walletSparklines', walletIdsKey],
     queryFn: async () => {
-      if (wallets.length === 0) return {};
       const results = await Promise.all(
         wallets.map(w =>
           transactionsApi.getBalanceHistory('1W', w.balance, [w.id])

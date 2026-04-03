@@ -209,6 +209,65 @@ describe('WalletGridView', () => {
     expect(paths?.[1].getAttribute('fill')).toBe('none');
   });
 
+  it('renders real sparkline for multisig wallet', () => {
+    const { container } = render(
+      <WalletGridView
+        wallets={[
+          {
+            id: 'w-multi-spark',
+            name: 'Multi Spark',
+            type: 'multi_sig',
+            balance: 2000,
+            scriptType: 'native_segwit',
+            deviceCount: 2,
+            quorum: 2,
+            totalSigners: 3,
+            isShared: false,
+            lastSyncStatus: 'success',
+            syncInProgress: false,
+          } as any,
+        ]}
+        pendingByWallet={{}}
+        sparklineData={{ 'w-multi-spark': [500, 800, 600] }}
+      />
+    );
+
+    const svg = container.querySelector('svg');
+    const paths = svg?.querySelectorAll('path');
+    // Area + line paths for real sparkline
+    expect(paths?.length).toBe(2);
+    // Stroke should use warning color for multisig
+    expect(paths?.[1].getAttribute('stroke')).toContain('warning');
+  });
+
+  it('handles sparkline data with fewer than 2 points as fallback', () => {
+    const { container } = render(
+      <WalletGridView
+        wallets={[
+          {
+            id: 'w-one-point',
+            name: 'One Point',
+            type: 'single_sig',
+            balance: 1000,
+            scriptType: 'native_segwit',
+            deviceCount: 1,
+            isShared: false,
+            lastSyncStatus: 'success',
+            syncInProgress: false,
+          } as any,
+        ]}
+        pendingByWallet={{}}
+        sparklineData={{ 'w-one-point': [100] }}
+      />
+    );
+
+    const svg = container.querySelector('svg');
+    const paths = svg?.querySelectorAll('path');
+    // sparklinePath returns '' for < 2 values, so area/line paths are empty
+    // Still renders 2 paths but with empty d attributes
+    expect(paths?.length).toBe(2);
+  });
+
   it('falls back to decorative sparkline without sparklineData', () => {
     const { container } = render(
       <WalletGridView

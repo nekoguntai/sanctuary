@@ -11,6 +11,7 @@ usePendingTransactions,
 useRecentTransactions,
 useUpdateWallet,
 useUpdateWalletSyncStatus,
+useWalletSparklines,
 useWallets,
 walletKeys,
 } from '../../../hooks/queries/useWallets';
@@ -307,5 +308,88 @@ describe('useBalanceHistory', () => {
 
     expect(mockGetBalanceHistory).toHaveBeenCalledWith('1M', 1200, ['w1']);
     expect(result.current.data[1].value).toBe(1200);
+  });
+});
+
+describe('useWalletSparklines', () => {
+  let queryClient: QueryClient;
+  beforeEach(() => {
+    queryClient = createTestQueryClient();
+    vi.clearAllMocks();
+  });
+
+  it('returns sparkline data per wallet', async () => {
+    mockGetBalanceHistory
+      .mockResolvedValueOnce([
+        { name: 'Mon', value: 100 },
+        { name: 'Tue', value: 200 },
+        { name: 'Wed', value: 150 },
+      ] as any)
+      .mockResolvedValueOnce([
+        { name: 'Mon', value: 500 },
+        { name: 'Tue', value: 600 },
+      ] as any);
+
+    const wallets = [
+      { id: 'w1', balance: 150 },
+      { id: 'w2', balance: 600 },
+    ];
+    const { result } = renderHook(() => useWalletSparklines(wallets), { wrapper: createWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(Object.keys(result.current).length).toBe(2);
+    });
+
+    expect(result.current['w1']).toEqual([100, 200, 150]);
+    expect(result.current['w2']).toEqual([500, 600]);
+  });
+
+  it('returns empty object for empty wallets', () => {
+    const { result } = renderHook(() => useWalletSparklines([]), { wrapper: createWrapper(queryClient) });
+    expect(result.current).toEqual({});
+  });
+
+  it('excludes wallets with fewer than 2 data points', async () => {
+    mockGetBalanceHistory
+      .mockResolvedValueOnce([{ name: 'Now', value: 100 }] as any) // only 1 point
+      .mockResolvedValueOnce([
+        { name: 'Mon', value: 200 },
+        { name: 'Tue', value: 300 },
+      ] as any);
+
+    const wallets = [
+      { id: 'w1', balance: 100 },
+      { id: 'w2', balance: 300 },
+    ];
+    const { result } = renderHook(() => useWalletSparklines(wallets), { wrapper: createWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(Object.keys(result.current).length).toBe(1);
+    });
+
+    expect(result.current['w1']).toBeUndefined();
+    expect(result.current['w2']).toEqual([200, 300]);
+  });
+
+  it('handles API errors gracefully', async () => {
+    mockGetBalanceHistory
+      .mockRejectedValueOnce(new Error('network error'))
+      .mockResolvedValueOnce([
+        { name: 'Mon', value: 400 },
+        { name: 'Tue', value: 500 },
+      ] as any);
+
+    const wallets = [
+      { id: 'w-fail', balance: 0 },
+      { id: 'w-ok', balance: 500 },
+    ];
+    const { result } = renderHook(() => useWalletSparklines(wallets), { wrapper: createWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(Object.keys(result.current).length).toBe(1);
+    });
+
+    expect(result.current['w-fail']).toBeUndefined();
+    expect(result.current['w-ok']).toEqual([400, 500]);
   });
 });

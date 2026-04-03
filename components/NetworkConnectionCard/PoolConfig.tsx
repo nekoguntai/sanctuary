@@ -87,7 +87,7 @@ export const PoolConfig: React.FC<PoolConfigProps> = ({
 
     {/* Pool Settings (hidden by default) */}
     {showAdvanced && (
-      <div className="p-4 surface-muted rounded-xl">
+      <div className="p-4 surface-muted rounded-lg">
         <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Min Connections</label>
@@ -97,7 +97,7 @@ export const PoolConfig: React.FC<PoolConfigProps> = ({
               onChange={(e) => onUpdateConfig('poolMin', parseInt(e.target.value, 10) || 1)}
               min={1}
               max={poolMax}
-              className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm"
+              className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm"
             />
           </div>
           <div>
@@ -108,7 +108,7 @@ export const PoolConfig: React.FC<PoolConfigProps> = ({
               onChange={(e) => onUpdateConfig('poolMax', parseInt(e.target.value, 10) || 5)}
               min={poolMin}
               max={20}
-              className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm"
+              className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm"
             />
           </div>
           <div>
@@ -116,7 +116,7 @@ export const PoolConfig: React.FC<PoolConfigProps> = ({
             <select
               value={poolLoadBalancing}
               onChange={(e) => onUpdateConfig('poolLoadBalancing', e.target.value)}
-              className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm"
+              className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm"
             >
               <option value="round_robin">Round Robin</option>
               <option value="least_connections">Least Connections</option>
@@ -143,7 +143,7 @@ export const PoolConfig: React.FC<PoolConfigProps> = ({
       </div>
 
       {servers.length === 0 && !isAddingServer && (
-        <div className="p-4 text-center text-sanctuary-500 surface-muted rounded-xl">
+        <div className="p-4 text-center text-sanctuary-500 surface-muted rounded-lg">
           <Server className="w-8 h-8 mx-auto mb-2 opacity-50" />
           <p className="text-sm">No servers configured</p>
           <div className="flex flex-wrap justify-center gap-2 mt-3">

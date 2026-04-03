@@ -115,7 +115,7 @@ export const NetworkSyncActions: React.FC<NetworkSyncActionsProps> = ({
         {/* Resync Confirmation Dialog */}
         {showResyncDialog && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 max-w-md mx-4 shadow-2xl border border-sanctuary-200 dark:border-sanctuary-700">
+            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 max-w-md mx-4 shadow-2xl border border-sanctuary-200 dark:border-sanctuary-700">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center">
                   <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg mr-3">
@@ -220,7 +220,7 @@ export const NetworkSyncActions: React.FC<NetworkSyncActionsProps> = ({
       {/* Resync Confirmation Dialog */}
       {showResyncDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 max-w-md mx-4 shadow-2xl border border-sanctuary-200 dark:border-sanctuary-700">
+          <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 max-w-md mx-4 shadow-2xl border border-sanctuary-200 dark:border-sanctuary-700">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center">
                 <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg mr-3">

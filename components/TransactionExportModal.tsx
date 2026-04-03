@@ -44,7 +44,7 @@ export function TransactionExportModal({ walletId, walletName, onClose }: Transa
       onClick={onClose}
     >
       <div
-        className="surface-elevated rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-modal-enter"
+        className="surface-elevated rounded-xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-modal-enter"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-6">
@@ -65,7 +65,7 @@ export function TransactionExportModal({ walletId, walletName, onClose }: Transa
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setFormat('csv')}
-              className={`flex flex-col items-center p-4 rounded-xl border-2 transition-all ${
+              className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all ${
                 format === 'csv'
                   ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
                   : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-300 dark:hover:border-sanctuary-600'
@@ -79,7 +79,7 @@ export function TransactionExportModal({ walletId, walletName, onClose }: Transa
             </button>
             <button
               onClick={() => setFormat('json')}
-              className={`flex flex-col items-center p-4 rounded-xl border-2 transition-all ${
+              className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all ${
                 format === 'json'
                   ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
                   : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-300 dark:hover:border-sanctuary-600'
@@ -107,7 +107,7 @@ export function TransactionExportModal({ walletId, walletName, onClose }: Transa
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 text-sm surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
             <div>
@@ -116,7 +116,7 @@ export function TransactionExportModal({ walletId, walletName, onClose }: Transa
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 text-sm surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
           </div>

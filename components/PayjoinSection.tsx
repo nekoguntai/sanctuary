@@ -112,7 +112,7 @@ export function PayjoinSection({ walletId, enabled, onToggle, className = '' }: 
   return (
     <div className={`relative ${className}`}>
       {/* Main row - minimal by default */}
-      <div className="flex items-center justify-between p-3 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 surface-muted">
+      <div className="flex items-center justify-between p-3 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 surface-muted">
         <div className="flex items-center gap-2">
           <Shield className={`w-4 h-4 ${enabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-sanctuary-400'}`} />
           <span className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
@@ -165,7 +165,7 @@ export function PayjoinSection({ walletId, enabled, onToggle, className = '' }: 
       {showTooltip && (
         <div
           ref={tooltipRef}
-          className="absolute left-0 right-0 mt-2 p-4 rounded-xl surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 shadow-lg z-20"
+          className="absolute left-0 right-0 mt-2 p-4 rounded-lg surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 shadow-lg z-20"
         >
           <div className="flex items-start justify-between mb-3">
             <h4 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
@@ -254,7 +254,7 @@ function PayjoinEducationModal({ onClose }: { onClose: () => void }) {
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-lg surface-elevated rounded-2xl shadow-xl max-h-[80vh] overflow-y-auto">
+      <div className="w-full max-w-lg surface-elevated rounded-xl shadow-xl max-h-[80vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 flex items-center justify-between p-4 border-b border-sanctuary-100 dark:border-sanctuary-800 surface-elevated">
           <div className="flex items-center gap-2">

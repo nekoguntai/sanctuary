@@ -33,7 +33,7 @@ export const LabelEditor: React.FC<LabelEditorProps> = ({
   onAISuggestion,
 }) => {
   return (
-    <div className="surface-muted p-4 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800">
+    <div className="surface-muted p-4 rounded-lg border border-sanctuary-100 dark:border-sanctuary-800">
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs font-medium text-sanctuary-500 uppercase">Labels</p>
         {!editingLabels ? (

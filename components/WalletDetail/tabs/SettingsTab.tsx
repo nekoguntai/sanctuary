@@ -138,7 +138,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                   type="text"
                   value={editedName}
                   onChange={(e) => onSetEditedName(e.target.value)}
-                  className="flex-1 px-3 py-2 text-sm border border-sanctuary-300 dark:border-sanctuary-600 rounded-lg bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="flex-1 px-3 py-2 text-sm border border-sanctuary-300 dark:border-sanctuary-600 rounded-md bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Enter wallet name"
                   autoFocus
                   onKeyDown={(e) => {

@@ -19,7 +19,7 @@ export const SetupTwoFactorModal: React.FC<SetupTwoFactorModalProps> = ({
 }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-md w-full max-h-[90vh] overflow-y-auto">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800 flex items-center justify-between">
           <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">
             {backupCodes.length > 0 ? 'Save Backup Codes' : 'Set Up Two-Factor Authentication'}
@@ -36,7 +36,7 @@ export const SetupTwoFactorModal: React.FC<SetupTwoFactorModalProps> = ({
           {backupCodes.length > 0 ? (
             /* Show backup codes after successful setup */
             <>
-              <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+              <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
                 <p className="text-sm text-amber-800 dark:text-amber-300">
                   <strong>Important:</strong> Save these backup codes in a secure place. You won't be able to see them again!
                 </p>
@@ -61,7 +61,7 @@ export const SetupTwoFactorModal: React.FC<SetupTwoFactorModalProps> = ({
                     <p className="text-sm text-sanctuary-600 dark:text-sanctuary-400 mb-4">
                       Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
                     </p>
-                    <div className="inline-block p-4 bg-white rounded-xl">
+                    <div className="inline-block p-4 bg-white rounded-lg">
                       <img src={setupData.qrCodeDataUrl} alt="2FA QR Code" className="w-48 h-48" />
                     </div>
                   </div>
@@ -90,7 +90,7 @@ export const SetupTwoFactorModal: React.FC<SetupTwoFactorModalProps> = ({
                       value={setupVerifyCode}
                       onChange={(e) => onSetupVerifyCodeChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
                       placeholder="000000"
-                      className="w-full px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-center text-2xl tracking-[0.5em] font-mono text-sanctuary-900 dark:text-sanctuary-100"
+                      className="w-full px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-center text-2xl tracking-[0.5em] font-mono text-sanctuary-900 dark:text-sanctuary-100"
                       maxLength={6}
                     />
                   </div>

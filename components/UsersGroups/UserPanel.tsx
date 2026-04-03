@@ -32,7 +32,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({
         </Button>
       </div>
 
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <ul className="divide-y divide-sanctuary-100 dark:divide-sanctuary-800 max-h-96 overflow-y-auto">
           {users.length === 0 ? (
             <li className="p-8 text-center text-sanctuary-400">No users found</li>

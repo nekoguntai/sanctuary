@@ -19,12 +19,12 @@ export const ConnectionMethodSelector: React.FC<ConnectionMethodSelectorProps> =
   onSelectMethod,
 }) => {
   return (
-    <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
+    <div className="surface-elevated p-6 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
       <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-4">2. Connection Method</h3>
 
       {/* Untested Device Warning */}
       {!selectedModel.integrationTested && (
-        <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl">
+        <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-lg">
           <div className="flex items-start">
             <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mr-2 flex-shrink-0 mt-0.5" />
             <div>
@@ -40,7 +40,7 @@ export const ConnectionMethodSelector: React.FC<ConnectionMethodSelectorProps> =
       )}
 
       {/* Device Capabilities Preview */}
-      <div className="mb-4 p-3 surface-muted rounded-xl">
+      <div className="mb-4 p-3 surface-muted rounded-lg">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center space-x-3">
             {getDeviceIcon(selectedModel.name, "w-6 h-6")}
@@ -77,7 +77,7 @@ export const ConnectionMethodSelector: React.FC<ConnectionMethodSelectorProps> =
             <button
               key={m}
               onClick={() => onSelectMethod(m)}
-              className={`p-3 rounded-xl border text-left transition-all ${
+              className={`p-3 rounded-lg border text-left transition-all ${
                 selectedMethod === m
                   ? 'border-sanctuary-800 bg-sanctuary-50 dark:border-sanctuary-200 dark:bg-sanctuary-800 ring-1 ring-sanctuary-500'
                   : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-400'

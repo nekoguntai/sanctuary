@@ -53,7 +53,7 @@ export const SharingSection: React.FC<SharingSectionProps> = ({
                 <select
                   value={selectedGroupToAdd}
                   onChange={(e) => setSelectedGroupToAdd(e.target.value)}
-                  className="text-sm surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-2 py-1.5"
+                  className="text-sm surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-md px-2 py-1.5"
                 >
                   <option value="">Add group...</option>
                   {groups.map(g => (
@@ -78,11 +78,11 @@ export const SharingSection: React.FC<SharingSectionProps> = ({
                 value={userSearchQuery}
                 onChange={(e) => onSearchUsers(e.target.value)}
                 placeholder="Add user..."
-                className="w-full text-sm surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-2 py-1.5"
+                className="w-full text-sm surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-md px-2 py-1.5"
               />
               {searchingUsers && (
                 <div className="absolute right-2 top-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent" />
+                  <div className="animate-spin rounded-full h-4 w-4 border border-primary-500 border-t-transparent" />
                 </div>
               )}
               {userSearchResults.length > 0 && (

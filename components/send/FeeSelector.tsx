@@ -54,7 +54,7 @@ export function FeeSelector({
         <p className="text-sm text-sanctuary-500 mb-4">
           {disabled ? 'Fee rate is locked for draft transactions.' : 'Click a block below to target its confirmation speed, or select a preset.'}
         </p>
-        <div className={`surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-2 mb-4 overflow-hidden ${disabled ? 'pointer-events-none' : ''}`}>
+        <div className={`surface-elevated rounded-lg border border-sanctuary-200 dark:border-sanctuary-800 p-2 mb-4 overflow-hidden ${disabled ? 'pointer-events-none' : ''}`}>
           <BlockVisualizer
             blocks={mempoolBlocks}
             queuedBlocksSummary={queuedBlocksSummary}
@@ -64,7 +64,7 @@ export function FeeSelector({
         </div>
       </div>
 
-      <div className="surface-elevated p-3 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated p-3 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
         <div className="flex flex-wrap items-center gap-2">
           {presets.map((opt) => (
             <button
@@ -85,7 +85,7 @@ export function FeeSelector({
               value={feeRate}
               onChange={(e) => !disabled && setFeeRate(parseFloat(e.target.value) || 0)}
               disabled={disabled}
-              className={`w-20 px-2 py-1.5 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 bg-transparent focus:ring-2 focus:ring-sanctuary-500 ${disabled ? 'cursor-not-allowed' : ''}`}
+              className={`w-20 px-2 py-1.5 text-sm rounded-md border border-sanctuary-300 dark:border-sanctuary-700 bg-transparent focus:ring-2 focus:ring-sanctuary-500 ${disabled ? 'cursor-not-allowed' : ''}`}
             />
             <span className="text-xs text-sanctuary-400">sat/vB</span>
           </div>

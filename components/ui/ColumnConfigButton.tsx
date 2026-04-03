@@ -136,7 +136,7 @@ export const ColumnConfigButton: React.FC<ColumnConfigButtonProps> = ({
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-56 surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 shadow-lg z-50">
+        <div className="absolute right-0 mt-2 w-56 surface-elevated rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 shadow-lg z-50">
           <div className="p-2">
             <div className="text-xs font-medium text-sanctuary-500 uppercase tracking-wider px-2 py-1 mb-1">
               Columns

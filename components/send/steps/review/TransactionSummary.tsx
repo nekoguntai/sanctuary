@@ -83,7 +83,7 @@ export function TransactionSummary({
       )}
 
       {/* Transaction Summary Card */}
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         {/* Type Badge */}
         <div className="px-4 py-3 surface-secondary border-b border-sanctuary-200 dark:border-sanctuary-700 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -244,7 +244,7 @@ export function TransactionSummary({
       </div>
 
       {/* Options Summary */}
-      <div className="surface-secondary rounded-xl p-4 space-y-2">
+      <div className="surface-secondary rounded-lg p-4 space-y-2">
         <div className="flex items-center justify-between text-sm">
           <span className="text-sanctuary-500">RBF (Replace-By-Fee)</span>
           <span className="text-sanctuary-900 dark:text-sanctuary-100">

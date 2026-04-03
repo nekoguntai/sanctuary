@@ -38,7 +38,7 @@ export const ExternalServicesSection: React.FC<ExternalServicesSectionProps> = (
                 value={nodeConfig.explorerUrl || ''}
                 onChange={(e) => onConfigChange({ ...nodeConfig, explorerUrl: e.target.value })}
                 placeholder="https://mempool.space"
-                className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
               />
             </div>
             <div className="flex gap-1 pt-5">
@@ -95,7 +95,7 @@ export const ExternalServicesSection: React.FC<ExternalServicesSectionProps> = (
                   value={nodeConfig.feeEstimatorUrl}
                   onChange={(e) => onConfigChange({ ...nodeConfig, feeEstimatorUrl: e.target.value })}
                   placeholder="https://mempool.space"
-                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                 />
               </div>
             </div>
@@ -111,7 +111,7 @@ export const ExternalServicesSection: React.FC<ExternalServicesSectionProps> = (
               <select
                 value={nodeConfig.mempoolEstimator || 'mempool_space'}
                 onChange={(e) => onConfigChange({ ...nodeConfig, mempoolEstimator: e.target.value as 'simple' | 'mempool_space' })}
-                className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
               >
                 <option value="mempool_space">Projected Blocks (Accurate)</option>
                 <option value="simple">Simple Fee Buckets (Fast)</option>

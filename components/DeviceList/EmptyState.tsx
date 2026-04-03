@@ -21,7 +21,7 @@ export const EmptyState: React.FC = () => {
         </div>
       </div>
 
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-12 text-center">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 p-12 text-center">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full surface-secondary mb-4">
           <HardDrive className="w-8 h-8 text-sanctuary-400" />
         </div>

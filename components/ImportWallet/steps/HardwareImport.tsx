@@ -188,7 +188,7 @@ export const HardwareImport: React.FC<HardwareImportProps> = ({
         )}
 
         {/* Device Connection */}
-        <div className="surface-secondary rounded-xl p-6">
+        <div className="surface-secondary rounded-lg p-6">
           {!deviceConnected ? (
             <div className="text-center">
               <div className="mx-auto w-16 h-16 surface-elevated rounded-full flex items-center justify-center mb-4">
@@ -270,7 +270,7 @@ export const HardwareImport: React.FC<HardwareImportProps> = ({
                   setAccountIndex(Math.max(0, parseInt(e.target.value, 10) || 0));
                   setXpubData(null); // Clear xpub when account changes
                 }}
-                className="w-32 px-4 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 surface-elevated focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-32 px-4 py-2 rounded-md border border-sanctuary-300 dark:border-sanctuary-700 surface-elevated focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <p className="text-xs text-sanctuary-500 mt-1">
                 Use 0 for first account, 1 for second, etc.
@@ -308,7 +308,7 @@ export const HardwareImport: React.FC<HardwareImportProps> = ({
 
             {/* Xpub Result */}
             {xpubData && (
-              <div className="surface-secondary rounded-xl p-4 border border-success-200 dark:border-success-800">
+              <div className="surface-secondary rounded-lg p-4 border border-success-200 dark:border-success-800">
                 <div className="flex items-center gap-2 mb-3">
                   <CheckCircle className="w-4 h-4 text-success-600 dark:text-success-400" />
                   <p className="text-sm font-medium text-success-700 dark:text-success-400">

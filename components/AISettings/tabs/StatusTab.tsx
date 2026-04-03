@@ -19,7 +19,7 @@ export function StatusTab({
   return (
     <div className="space-y-6">
       {/* Security Notice */}
-      <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+      <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
         <div className="flex items-start space-x-3">
           <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
           <div>
@@ -35,7 +35,7 @@ export function StatusTab({
       </div>
 
       {/* Enable/Disable Toggle */}
-      <div className="flex items-center justify-between p-4 rounded-xl surface-secondary">
+      <div className="flex items-center justify-between p-4 rounded-lg surface-secondary">
         <div className="flex items-start space-x-4">
           <div className="space-y-1">
             <label className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">
@@ -106,7 +106,7 @@ export function StatusTab({
 
       {/* Next Step Hint */}
       {aiEnabled && (
-        <div className="p-4 rounded-xl bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700">
+        <div className="p-4 rounded-lg bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700">
           <p className="text-sm text-primary-700 dark:text-primary-700">
             <span className="font-medium">Next:</span> Go to the <button onClick={onNavigateToSettings} className="underline font-medium">Settings</button> tab to configure your AI endpoint.
           </p>

@@ -57,7 +57,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   walletBalance,
 }) => {
   return (
-    <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
+    <div className="surface-elevated rounded-xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
       {/* Header with Export Button and AI Query */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
         {/* AI Natural Language Query - only show when AI is enabled */}
@@ -128,7 +128,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
           >
             {loadingMoreTx ? (
               <span className="flex items-center justify-center">
-                <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent mr-2" />
+                <span className="animate-spin rounded-full h-4 w-4 border border-primary-500 border-t-transparent mr-2" />
                 Loading...
               </span>
             ) : (

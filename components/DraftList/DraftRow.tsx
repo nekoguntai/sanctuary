@@ -116,7 +116,7 @@ export const DraftRow: React.FC<DraftRowProps> = ({
 
   return (
     <div
-      className={`surface-elevated rounded-xl p-4 border ${
+      className={`surface-elevated rounded-lg p-4 border ${
         expired
           ? 'border-rose-300 dark:border-rose-800 opacity-75'
           : 'border-sanctuary-200 dark:border-sanctuary-700'

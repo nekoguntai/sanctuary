@@ -30,7 +30,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative surface-elevated rounded-2xl shadow-2xl border border-sanctuary-200 dark:border-sanctuary-700 max-w-md w-full max-h-[90vh] overflow-y-auto animate-modal-enter">
+      <div className="relative surface-elevated rounded-xl shadow-2xl border border-sanctuary-200 dark:border-sanctuary-700 max-w-md w-full max-h-[90vh] overflow-y-auto animate-modal-enter">
         {/* Header */}
         <div className="p-6 border-b border-sanctuary-200 dark:border-sanctuary-800">
           <div className="flex items-center justify-between">
@@ -63,7 +63,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({
             </h3>
             {versionLoading ? (
               <div className="flex items-center space-x-2 text-sanctuary-500">
-                <div className="animate-spin h-4 w-4 border-2 border-sanctuary-300 border-t-sanctuary-600 rounded-full" />
+                <div className="animate-spin h-4 w-4 border border-sanctuary-300 border-t-sanctuary-600 rounded-full" />
                 <span className="text-sm">Checking for updates...</span>
               </div>
             ) : versionInfo?.updateAvailable ? (

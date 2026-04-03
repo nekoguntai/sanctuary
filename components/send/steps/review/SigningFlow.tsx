@@ -62,7 +62,7 @@ export function SigningFlow({
         return (
           <div
             key={device.id}
-            className={`rounded-xl border transition-all ${
+            className={`rounded-lg border transition-all ${
               hasSigned
                 ? 'bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/20'
                 : 'surface-muted border-sanctuary-200 dark:border-sanctuary-800'

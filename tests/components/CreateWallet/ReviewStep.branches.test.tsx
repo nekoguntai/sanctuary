@@ -32,7 +32,7 @@ describe('CreateWallet ReviewStep branch coverage', () => {
     });
 
     expect(screen.getByText('Mainnet')).toBeInTheDocument();
-    expect(container.querySelector('.bg-mainnet-800')).toBeInTheDocument();
+    expect(container.querySelector('.text-mainnet-700')).toBeInTheDocument();
     expect(screen.getByText('Script')).toBeInTheDocument();
     expect(screen.getByText('nested segwit')).toBeInTheDocument();
     expect(screen.queryByText('Quorum')).not.toBeInTheDocument();
@@ -47,7 +47,7 @@ describe('CreateWallet ReviewStep branch coverage', () => {
     });
 
     expect(screen.getByText('Testnet')).toBeInTheDocument();
-    expect(container.querySelector('.bg-testnet-800')).toBeInTheDocument();
+    expect(container.querySelector('.text-testnet-700')).toBeInTheDocument();
     expect(screen.getByText('Quorum')).toBeInTheDocument();
     expect(screen.getByText('2 of 2')).toBeInTheDocument();
     expect(screen.queryByText('Script')).not.toBeInTheDocument();
@@ -59,6 +59,6 @@ describe('CreateWallet ReviewStep branch coverage', () => {
     });
 
     expect(screen.getByText('Signet')).toBeInTheDocument();
-    expect(container.querySelector('.bg-signet-800')).toBeInTheDocument();
+    expect(container.querySelector('.text-signet-700')).toBeInTheDocument();
   });
 });

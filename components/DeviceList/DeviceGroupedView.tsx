@@ -58,7 +58,7 @@ export const DeviceGroupedView: React.FC<DeviceGroupedViewProps> = ({
        {(Object.entries(groupedDevices) as [string, Device[]][]).map(([type, groupDevices]) => {
           const deviceType = type as HardwareDevice;
           return (
-            <div key={type} className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden flex flex-col h-full">
+            <div key={type} className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden flex flex-col h-full">
                 {/* Header */}
                 <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800 surface-secondary flex items-center justify-between">
                    <div className="flex items-center space-x-3">
@@ -83,7 +83,7 @@ export const DeviceGroupedView: React.FC<DeviceGroupedViewProps> = ({
                              <li
                                key={device.id}
                                onClick={() => navigate(`/devices/${device.id}`)}
-                               className="p-3 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800 hover:border-sanctuary-300 dark:hover:border-sanctuary-600 transition-colors surface-elevated cursor-pointer"
+                               className="p-3 rounded-lg border border-sanctuary-100 dark:border-sanctuary-800 hover:border-sanctuary-300 dark:hover:border-sanctuary-600 transition-colors surface-elevated cursor-pointer"
                              >
                                  <div className="flex justify-between items-start mb-2">
                                     <div className="flex-1 min-w-0">

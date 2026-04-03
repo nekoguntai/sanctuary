@@ -26,7 +26,7 @@ export const AddressQRModal: React.FC<AddressQRModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="surface-elevated rounded-2xl max-w-sm w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-modal-enter"
+        className="surface-elevated rounded-xl max-w-sm w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-modal-enter"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-4">
@@ -42,7 +42,7 @@ export const AddressQRModal: React.FC<AddressQRModalProps> = ({
         </div>
 
         <div className="flex flex-col items-center">
-          <div className="bg-white p-4 rounded-xl mb-4">
+          <div className="bg-white p-4 rounded-lg mb-4">
             <QRCodeSVG value={address} size={200} level="M" />
           </div>
 

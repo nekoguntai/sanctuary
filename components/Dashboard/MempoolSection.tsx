@@ -36,17 +36,17 @@ export const MempoolSection: React.FC<MempoolSectionProps> = ({
   const navigate = useNavigate();
 
   return (
-    <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive">
+    <div className="surface-elevated rounded-xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive">
        <div className="flex items-center justify-between px-2 mb-2">
           <div className="flex items-center space-x-2">
-             <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">
+             <h4 className="text-[11px] font-semibold text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-[0.08em]">
                 {selectedNetwork === 'mainnet' ? 'Bitcoin' : selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)} Network Status
              </h4>
              {!isMainnet && (
                 <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                    selectedNetwork === 'testnet'
-                      ? 'bg-testnet-800 dark:bg-testnet-100 text-testnet-200 dark:text-testnet-800'
-                      : 'bg-signet-800 dark:bg-signet-100 text-signet-200 dark:text-signet-800'
+                      ? 'bg-testnet-500/8 dark:bg-testnet-400/10 text-testnet-600 dark:text-testnet-400'
+                      : 'bg-signet-500/8 dark:bg-signet-400/10 text-signet-600 dark:text-signet-400'
                 }`}>
                    {selectedNetwork.toUpperCase()}
                 </span>
@@ -77,7 +77,7 @@ export const MempoolSection: React.FC<MempoolSectionProps> = ({
                       </>
                    ) : wsState === 'connecting' ? (
                       <>
-                         <div className="w-3.5 h-3.5 rounded-full border-2 border-warning-500 border-t-transparent animate-spin mr-1.5"></div>
+                         <div className="w-3.5 h-3.5 rounded-full border border-warning-500 border-t-transparent animate-spin mr-1.5"></div>
                          <span className="text-warning-600 dark:text-warning-400 font-medium">Connecting</span>
                       </>
                    ) : (
@@ -105,7 +105,7 @@ export const MempoolSection: React.FC<MempoolSectionProps> = ({
           />
        ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-             <div className={`p-4 rounded-2xl mb-4 ${
+             <div className={`p-4 rounded-xl mb-4 ${
                 selectedNetwork === 'testnet'
                    ? 'bg-testnet-100 dark:bg-testnet-900/20'
                    : 'bg-signet-100 dark:bg-signet-900/20'
@@ -124,11 +124,7 @@ export const MempoolSection: React.FC<MempoolSectionProps> = ({
              </p>
              <button
                 onClick={() => navigate('/settings/node')}
-                className={`mt-4 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                   selectedNetwork === 'testnet'
-                      ? 'bg-testnet-800 dark:bg-testnet-100 text-testnet-200 dark:text-testnet-800 hover:bg-testnet-700 dark:hover:bg-testnet-200'
-                      : 'bg-signet-800 dark:bg-signet-100 text-signet-200 dark:text-signet-800 hover:bg-signet-700 dark:hover:bg-signet-200'
-                }`}
+                className="mt-4 px-4 py-2 rounded-md text-sm font-medium transition-colors text-sanctuary-500 dark:text-sanctuary-400 border border-sanctuary-200 dark:border-sanctuary-700/50 hover:text-sanctuary-700 dark:hover:text-sanctuary-200 hover:border-sanctuary-300 dark:hover:border-sanctuary-600"
              >
                 Configure Node
              </button>

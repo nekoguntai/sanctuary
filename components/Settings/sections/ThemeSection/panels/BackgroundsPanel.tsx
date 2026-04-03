@@ -83,7 +83,7 @@ export const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({
   const filteredBackgrounds = getFilteredBackgrounds();
 
   return (
-    <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+    <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
       <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
         <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Backgrounds</h3>
         <p className="text-sm text-sanctuary-500 mt-1">Select a background for your wallet</p>
@@ -97,7 +97,7 @@ export const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search backgrounds..."
-            className="w-full pl-10 pr-10 py-2.5 surface-secondary border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sm text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+            className="w-full pl-10 pr-10 py-2.5 surface-secondary border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
           />
           {searchQuery && (
             <button
@@ -168,7 +168,7 @@ export const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({
                 <div
                   key={bg.id}
                   className={`
-                    relative rounded-xl border transition-all h-20 group
+                    relative rounded-lg border transition-all h-20 group
                     ${currentBg === bg.id
                       ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/50 ring-1 ring-primary-500 dark:ring-primary-400'
                       : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-primary-300'
@@ -219,7 +219,7 @@ export const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({
         {/* Time-Based / Seasonal - Collapsible */}
         <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
           {/* Collapsible Header with Toggle */}
-          <div className="flex items-center justify-between p-3 -mx-3 rounded-xl hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors">
+          <div className="flex items-center justify-between p-3 -mx-3 rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors">
             <button
               onClick={() => setSeasonalExpanded(!seasonalExpanded)}
               className="flex items-center space-x-2 flex-1"
@@ -268,7 +268,7 @@ export const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({
           {seasonalExpanded && (
             <div className="mt-3 space-y-4">
               {/* Current Season Info */}
-              <div className="flex items-center p-3 surface-secondary rounded-xl">
+              <div className="flex items-center p-3 surface-secondary rounded-lg">
                 <div className="flex items-center space-x-3">
                   {(() => {
                     const SeasonIcon = seasonIcons[currentSeason];
@@ -302,7 +302,7 @@ export const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({
                   return (
                     <div
                       key={season}
-                      className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                      className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
                         isCurrentSeason
                           ? 'border-primary-500 bg-primary-50/50 dark:bg-primary-900/30'
                           : 'border-sanctuary-200 dark:border-sanctuary-700'
@@ -318,7 +318,7 @@ export const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({
                       <select
                         value={currentSeasonBg}
                         onChange={(e) => onUpdateSeasonBackground(season, e.target.value)}
-                        className="text-sm bg-transparent border border-sanctuary-300 dark:border-sanctuary-600 rounded-lg px-3 py-1.5 text-sanctuary-700 dark:text-sanctuary-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="text-sm bg-transparent border border-sanctuary-300 dark:border-sanctuary-600 rounded-md px-3 py-1.5 text-sanctuary-700 dark:text-sanctuary-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
                       >
                         {animatedBackgrounds.map(bg => (
                           <option key={bg.id} value={bg.id}>

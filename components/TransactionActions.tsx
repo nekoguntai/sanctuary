@@ -181,7 +181,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
     <div className="space-y-4">
       {/* Success Message */}
       {success && (
-        <div className="flex items-center p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-500/20 text-green-800 dark:text-green-200 rounded-xl">
+        <div className="flex items-center p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-500/20 text-green-800 dark:text-green-200 rounded-lg">
           <CheckCircle className="w-5 h-5 mr-3 flex-shrink-0" />
           <span className="text-sm">{success}</span>
         </div>
@@ -189,14 +189,14 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
 
       {/* Error Message */}
       {error && (
-        <div className="flex items-center p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-800 dark:text-rose-200 rounded-xl">
+        <div className="flex items-center p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-800 dark:text-rose-200 rounded-lg">
           <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0" />
           <span className="text-sm">{error}</span>
         </div>
       )}
 
       {/* Action Buttons */}
-      <div className="surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated p-4 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
         <h4 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-3">
           Transaction Actions
         </h4>
@@ -245,13 +245,13 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
       {/* RBF Modal */}
       {showRBFModal && rbfStatus?.replaceable && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="surface-elevated rounded-2xl p-6 max-w-md w-full border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="surface-elevated rounded-xl p-6 max-w-md w-full border border-sanctuary-200 dark:border-sanctuary-800">
             <h3 className="text-xl font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-4">
               Bump Transaction Fee (RBF)
             </h3>
 
             <div className="space-y-4">
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-sm text-blue-900 dark:text-blue-100">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-900 dark:text-blue-100">
                 <p className="font-medium mb-1">Replace-By-Fee (RBF)</p>
                 <p className="text-xs text-blue-700 dark:text-blue-300">
                   Creates a new version of this transaction with a higher fee to speed up confirmation.
@@ -275,7 +275,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
                   onChange={(e) => setNewFeeRate(parseFloat(e.target.value) || 0)}
                   min={rbfStatus.minNewFeeRate || 0.1}
                   step={0.01}
-                  className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
+                  className="block w-full px-4 py-3 rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
                 />
                 {rbfStatus.minNewFeeRate && (
                   <p className="text-xs text-sanctuary-500">
@@ -319,13 +319,13 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
       {/* CPFP Modal */}
       {showCPFPModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="surface-elevated rounded-2xl p-6 max-w-md w-full border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="surface-elevated rounded-xl p-6 max-w-md w-full border border-sanctuary-200 dark:border-sanctuary-800">
             <h3 className="text-xl font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-4">
               Accelerate Transaction (CPFP)
             </h3>
 
             <div className="space-y-4">
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-sm text-blue-900 dark:text-blue-100">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-900 dark:text-blue-100">
                 <p className="font-medium mb-1">Child-Pays-For-Parent (CPFP)</p>
                 <p className="text-xs text-blue-700 dark:text-blue-300">
                   Creates a new transaction spending from this one with a higher fee, incentivizing miners to confirm both.
@@ -343,7 +343,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
                   min={0.1}
                   step={0.01}
                   placeholder="e.g., 50"
-                  className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
+                  className="block w-full px-4 py-3 rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
                 />
                 <p className="text-xs text-sanctuary-500">
                   The effective fee rate for both transactions combined

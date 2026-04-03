@@ -1,3 +1,5 @@
+import { useRef, useState, useEffect, useCallback } from 'react';
+
 // Networks we support tabs for (excluding regtest which is dev-only)
 export type TabNetwork = 'mainnet' | 'testnet' | 'signet';
 
@@ -10,29 +12,21 @@ interface NetworkTabsProps {
 
 interface NetworkConfig {
   label: string;
-  borderColor: string;
-  activeColor: string;
-  activeBg: string;
+  dotColor: string;
 }
 
 const networkConfigs: Record<TabNetwork, NetworkConfig> = {
   mainnet: {
     label: 'Mainnet',
-    borderColor: 'border-mainnet-600 dark:border-mainnet-300',
-    activeColor: 'text-mainnet-200 dark:text-mainnet-800',
-    activeBg: 'bg-mainnet-800 dark:bg-mainnet-100',
+    dotColor: 'bg-mainnet-500',
   },
   testnet: {
     label: 'Testnet',
-    borderColor: 'border-testnet-600 dark:border-testnet-300',
-    activeColor: 'text-testnet-200 dark:text-testnet-800',
-    activeBg: 'bg-testnet-800 dark:bg-testnet-100',
+    dotColor: 'bg-testnet-500',
   },
   signet: {
     label: 'Signet',
-    borderColor: 'border-signet-600 dark:border-signet-300',
-    activeColor: 'text-signet-200 dark:text-signet-800',
-    activeBg: 'bg-signet-800 dark:bg-signet-100',
+    dotColor: 'bg-signet-500',
   },
 };
 
@@ -43,45 +37,66 @@ export const NetworkTabs = ({
   className = '',
 }: NetworkTabsProps) => {
   const networks: TabNetwork[] = ['mainnet', 'testnet', 'signet'];
+  const navRef = useRef<HTMLElement>(null);
+  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
+
+  const updateIndicator = useCallback(() => {
+    /* v8 ignore start -- defensive guard; ref is always attached after mount */
+    if (!navRef.current) return;
+    /* v8 ignore stop */
+    const activeEl = navRef.current.querySelector('[data-active="true"]') as HTMLElement | null;
+    if (activeEl) {
+      setIndicator({
+        left: activeEl.offsetLeft,
+        width: activeEl.offsetWidth,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    updateIndicator();
+  }, [selectedNetwork, updateIndicator]);
+
+  useEffect(() => {
+    window.addEventListener('resize', updateIndicator);
+    return () => window.removeEventListener('resize', updateIndicator);
+  }, [updateIndicator]);
 
   return (
-    <div className={`flex space-x-2 ${className}`}>
-      {networks.map((network) => {
-        const config = networkConfigs[network];
-        const count = walletCounts[network] || 0;
-        const isSelected = selectedNetwork === network;
+    <div className={className}>
+      <nav ref={navRef} className="relative inline-flex gap-0.5 p-0.5 surface-secondary rounded-md" aria-label="Network tabs">
+        {/* Sliding indicator */}
+        <div
+          className="absolute top-0.5 bottom-0.5 rounded bg-white dark:bg-sanctuary-700 shadow-sm transition-all duration-300 ease-out z-0"
+          style={{ left: indicator.left, width: indicator.width }}
+        />
+        {networks.map((network) => {
+          const config = networkConfigs[network];
+          const count = walletCounts[network] || 0;
+          const isSelected = selectedNetwork === network;
 
-        return (
-          <button
-            key={network}
-            onClick={() => onNetworkChange(network)}
-            className={`
-              relative px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200
-              border-2
-              ${isSelected
-                ? `${config.activeBg} ${config.activeColor} ${config.borderColor} shadow-sm`
-                : 'bg-transparent text-sanctuary-400 dark:text-sanctuary-600 border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-300 dark:hover:border-sanctuary-700'
-              }
-            `}
-          >
-            <span className="flex items-center space-x-2">
-              <span>{config.label}</span>
-              <span className={`
-                px-1.5 py-0.5 rounded-md text-xs font-semibold
+          return (
+            <button
+              key={network}
+              data-active={isSelected}
+              onClick={() => onNetworkChange(network)}
+              className={`
+                relative z-10 px-3 py-1.5 text-xs font-medium rounded transition-colors duration-200
                 ${isSelected
-                  ? 'bg-black/20 text-inherit'
-                  : 'bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-500 dark:text-sanctuary-400'
+                  ? 'text-sanctuary-900 dark:text-sanctuary-50'
+                  : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'
                 }
-              `}>
-                {count}
+              `}
+            >
+              <span className="flex items-center gap-1.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} aria-hidden="true" />
+                <span>{config.label}</span>
+                <span className="text-sanctuary-400 text-[10px] tabular-nums">{count}</span>
               </span>
-            </span>
-            <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 rounded-full ${config.activeBg} border-2 ${config.borderColor} transition-all duration-200 ${
-              isSelected ? 'opacity-100 scale-100' : 'opacity-0 scale-0'
-            }`} />
-          </button>
-        );
-      })}
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 };

@@ -9,7 +9,7 @@ export function ContainerControls({
   onRefreshContainerStatus,
 }: ContainerControlsProps) {
   return (
-    <div className="p-4 rounded-xl surface-secondary">
+    <div className="p-4 rounded-lg surface-secondary">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className={`w-3 h-3 rounded-full ${containerStatus.running ? 'bg-emerald-500' : 'bg-sanctuary-400'}`} />

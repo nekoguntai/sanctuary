@@ -46,7 +46,7 @@ export const ConfigurationStep: React.FC<ConfigurationStepProps> = ({
                   value={walletName}
                   onChange={(e) => setWalletName(e.target.value)}
                   placeholder={walletType === WalletType.SINGLE_SIG ? "e.g., My ColdCard Wallet" : "e.g., Family Savings"}
-                  className="w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-elevated focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                  className="w-full px-4 py-3 rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 surface-elevated focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
                   autoFocus
               />
           </div>
@@ -63,10 +63,10 @@ export const ConfigurationStep: React.FC<ConfigurationStepProps> = ({
                           className={`flex-1 py-2 px-4 rounded-lg border text-sm font-medium transition-colors ${
                               network === net
                                   ? net === 'mainnet'
-                                      ? 'border-mainnet-500 bg-mainnet-800 text-mainnet-200 dark:border-mainnet-500 dark:bg-mainnet-100 dark:text-mainnet-800'
+                                      ? 'bg-mainnet-100/50 dark:bg-mainnet-900/20 text-mainnet-700 dark:text-mainnet-300 border border-mainnet-200 dark:border-mainnet-700'
                                       : net === 'testnet'
-                                      ? 'border-testnet-500 bg-testnet-800 text-testnet-200 dark:border-testnet-500 dark:bg-testnet-100 dark:text-testnet-800'
-                                      : 'border-signet-500 bg-signet-800 text-signet-200 dark:border-signet-500 dark:bg-signet-100 dark:text-signet-800'
+                                      ? 'bg-testnet-100/50 dark:bg-testnet-900/20 text-testnet-700 dark:text-testnet-300 border border-testnet-200 dark:border-testnet-700'
+                                      : 'bg-signet-100/50 dark:bg-signet-900/20 text-signet-700 dark:text-signet-300 border border-signet-200 dark:border-signet-700'
                                   : 'border-sanctuary-200 dark:border-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 hover:border-sanctuary-400'
                           }`}
                       >
@@ -114,7 +114,7 @@ export const ConfigurationStep: React.FC<ConfigurationStepProps> = ({
           {walletType === WalletType.MULTI_SIG && (
               <div>
                   <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-2">Quorum (M of N)</label>
-                  <div className="surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
+                  <div className="surface-elevated p-4 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
                       <div className="flex justify-between items-center mb-4">
                           <span className="text-sm">Required Signatures: <span className="font-bold">{quorumM}</span></span>
                           <span className="text-sm text-sanctuary-500">Total Signers: {selectedDeviceCount}</span>

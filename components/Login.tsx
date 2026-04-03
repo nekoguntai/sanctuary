@@ -192,7 +192,7 @@ export const Login: React.FC = () => {
       <LoginBackground darkMode={darkMode}>
         {/* #1: Staggered entrance */}
         <div className="text-center login-reveal-1">
-          <div className="mx-auto h-20 w-20 bg-sanctuary-200/80 dark:bg-sanctuary-800/80 rounded-2xl flex items-center justify-center mb-6 shadow-inner backdrop-blur-sm login-logo-enter">
+          <div className="mx-auto h-20 w-20 bg-sanctuary-200/80 dark:bg-sanctuary-800/80 rounded-xl flex items-center justify-center mb-6 shadow-inner backdrop-blur-sm login-logo-enter">
             <Shield className="h-10 w-10 text-primary-600 dark:text-primary-400" />
           </div>
           <h2 className="mt-6 text-3xl font-light text-sanctuary-900 dark:text-sanctuary-100 tracking-tight">
@@ -204,7 +204,7 @@ export const Login: React.FC = () => {
         </div>
 
         <form className="mt-8 space-y-6 login-reveal-2" onSubmit={handle2FASubmit}>
-          <div className="rounded-xl surface-elevated shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 p-6 space-y-4">
+          <div className="rounded-lg surface-elevated shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 p-6 space-y-4">
             {/* #4: Input ripple effect */}
             <div className="input-ripple">
               <label htmlFor="twoFactorCode" className="block text-xs font-medium text-sanctuary-500 uppercase mb-1">
@@ -219,7 +219,7 @@ export const Login: React.FC = () => {
                 required
                 value={twoFactorCode}
                 onChange={(e) => setTwoFactorCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
-                className="appearance-none rounded-lg block w-full px-4 py-3 border border-sanctuary-300 dark:border-sanctuary-700 placeholder-sanctuary-400 text-sanctuary-900 dark:text-sanctuary-100 surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500 focus:border-sanctuary-500 text-center text-2xl tracking-[0.3em] font-mono transition-colors"
+                className="appearance-none rounded-md block w-full px-4 py-3 border border-sanctuary-300 dark:border-sanctuary-700 placeholder-sanctuary-400 text-sanctuary-900 dark:text-sanctuary-100 surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500 focus:border-sanctuary-500 text-center text-2xl tracking-[0.3em] font-mono transition-colors"
                 placeholder="000000"
                 maxLength={8}
               />
@@ -264,7 +264,7 @@ export const Login: React.FC = () => {
     <LoginBackground darkMode={darkMode}>
       {/* #1: Staggered entrance - Logo */}
       <div className="text-center login-reveal-1">
-        <div className="mx-auto h-20 w-20 bg-sanctuary-200/80 dark:bg-sanctuary-800/80 rounded-2xl flex items-center justify-center mb-6 shadow-inner backdrop-blur-sm login-logo-enter">
+        <div className="mx-auto h-20 w-20 bg-sanctuary-200/80 dark:bg-sanctuary-800/80 rounded-xl flex items-center justify-center mb-6 shadow-inner backdrop-blur-sm login-logo-enter">
           {/* #2: Breathing logo */}
           <SanctuaryLogo className="h-10 w-10 text-primary-600 dark:text-primary-400 logo-breathe" />
         </div>
@@ -305,7 +305,7 @@ export const Login: React.FC = () => {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="appearance-none rounded-lg block w-full pl-10 pr-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 placeholder-sanctuary-400 text-sanctuary-900 dark:text-sanctuary-100 surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500 focus:border-sanctuary-500 sm:text-sm transition-colors"
+                className="appearance-none rounded-md block w-full pl-10 pr-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 placeholder-sanctuary-400 text-sanctuary-900 dark:text-sanctuary-100 surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500 focus:border-sanctuary-500 sm:text-sm transition-colors"
                 placeholder="Enter username"
               />
             </div>
@@ -332,7 +332,7 @@ export const Login: React.FC = () => {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="appearance-none rounded-lg block w-full pl-10 pr-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 placeholder-sanctuary-400 text-sanctuary-900 dark:text-sanctuary-100 surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500 focus:border-sanctuary-500 sm:text-sm transition-colors"
+                    className="appearance-none rounded-md block w-full pl-10 pr-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 placeholder-sanctuary-400 text-sanctuary-900 dark:text-sanctuary-100 surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500 focus:border-sanctuary-500 sm:text-sm transition-colors"
                     placeholder="your@email.com"
                     tabIndex={isRegisterMode ? 0 : -1}
                   />
@@ -355,7 +355,7 @@ export const Login: React.FC = () => {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="appearance-none rounded-lg block w-full pl-10 pr-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 placeholder-sanctuary-400 text-sanctuary-900 dark:text-sanctuary-100 surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500 focus:border-sanctuary-500 sm:text-sm transition-colors"
+                className="appearance-none rounded-md block w-full pl-10 pr-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 placeholder-sanctuary-400 text-sanctuary-900 dark:text-sanctuary-100 surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500 focus:border-sanctuary-500 sm:text-sm transition-colors"
                 placeholder="••••••••"
                 minLength={8}
               />

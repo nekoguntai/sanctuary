@@ -14,7 +14,7 @@ export const TwoFactorSection: React.FC<TwoFactorSectionProps> = ({
   onShowBackupCodesModal,
 }) => {
   return (
-    <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+    <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
       <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
         <div className="flex items-center space-x-3">
           <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
@@ -30,13 +30,13 @@ export const TwoFactorSection: React.FC<TwoFactorSectionProps> = ({
         </p>
 
         {twoFactorError && (
-          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-start animate-fade-in">
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start animate-fade-in">
             <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mr-2 flex-shrink-0 mt-0.5" />
             <span className="text-sm text-red-800 dark:text-red-300">{twoFactorError}</span>
           </div>
         )}
 
-        <div className="flex items-center justify-between p-4 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl">
+        <div className="flex items-center justify-between p-4 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg">
           <div className="flex items-center space-x-3">
             <div className={`p-2 rounded-lg ${twoFactorEnabled ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-500'}`}>
               <Shield className="w-5 h-5" />
@@ -60,7 +60,7 @@ export const TwoFactorSection: React.FC<TwoFactorSectionProps> = ({
         </div>
 
         {twoFactorEnabled && (
-          <div className="flex items-center justify-between p-4 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl">
+          <div className="flex items-center justify-between p-4 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg">
             <div className="flex items-center space-x-3">
               <div className="p-2 rounded-lg bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-500">
                 <Key className="w-5 h-5" />

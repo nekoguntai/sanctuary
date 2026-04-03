@@ -119,7 +119,7 @@ export const AIQueryInput: React.FC<AIQueryInputProps> = ({
             onFocus={() => setShowExamples(true)}
             onBlur={() => setTimeout(() => setShowExamples(false), 200)}
             placeholder="Ask about your transactions..."
-            className="w-full pl-10 pr-24 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 placeholder:text-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="w-full pl-10 pr-24 py-3 rounded-md border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 placeholder:text-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             disabled={loading}
           />
           <div className="absolute right-2 flex items-center space-x-1">
@@ -148,7 +148,7 @@ export const AIQueryInput: React.FC<AIQueryInputProps> = ({
 
         {/* Example Queries Dropdown */}
         {showExamples && !query && (
-          <div className="absolute z-10 w-full mt-1 surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 shadow-lg overflow-hidden">
+          <div className="absolute z-10 w-full mt-1 surface-elevated rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 shadow-lg overflow-hidden">
             <div className="px-3 py-2 border-b border-sanctuary-100 dark:border-sanctuary-800">
               <div className="flex items-center space-x-2 text-xs text-sanctuary-500">
                 <Sparkles className="w-3 h-3" />

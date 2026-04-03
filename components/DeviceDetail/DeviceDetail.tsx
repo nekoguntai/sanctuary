@@ -66,9 +66,9 @@ export const DeviceDetail: React.FC = () => {
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to Devices
         </button>
 
-        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="surface-elevated rounded-xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
             <div className="flex items-start space-x-6">
-                <div className="p-4 rounded-2xl surface-secondary text-sanctuary-600 dark:text-sanctuary-300">
+                <div className="p-4 rounded-lg surface-secondary text-sanctuary-600 dark:text-sanctuary-300">
                     {getDeviceIcon(device.type as HardwareDevice, "w-12 h-12")}
                 </div>
                 <div className="flex-1">
@@ -114,7 +114,7 @@ export const DeviceDetail: React.FC = () => {
                                         <select
                                             value={editModelSlug}
                                             onChange={e => setEditModelSlug(e.target.value)}
-                                            className="w-full px-3 py-2 pr-8 border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg surface-muted text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                                            className="w-full px-3 py-2 pr-8 border border-sanctuary-300 dark:border-sanctuary-700 rounded-md surface-muted text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
                                         >
                                             <option value="">Unknown Device</option>
                                             {deviceModels.map(model => (
@@ -222,7 +222,7 @@ export const DeviceDetail: React.FC = () => {
                       {isOwner && (
                         <button
                           onClick={() => setShowAddAccount(true)}
-                          className="mt-4 flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg border-2 border-dashed border-sanctuary-300 dark:border-sanctuary-700 text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 hover:border-sanctuary-400 dark:hover:border-sanctuary-600 transition-colors"
+                          className="mt-4 flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg border border-dashed border-sanctuary-300 dark:border-sanctuary-700 text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 hover:border-sanctuary-400 dark:hover:border-sanctuary-600 transition-colors"
                         >
                           <Plus className="w-4 h-4" />
                           <span className="text-sm font-medium">Add Derivation Path</span>

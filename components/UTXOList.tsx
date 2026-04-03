@@ -167,7 +167,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
       </div>
 
       {/* Visualization Section - Always Visible */}
-      <div className="surface-elevated rounded-xl p-3 border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated rounded-lg p-3 border border-sanctuary-200 dark:border-sanctuary-800">
         <div className="flex flex-wrap gap-1.5 items-center justify-start">
             {utxos.map((utxo) => {
                 const id = `${utxo.txid}:${utxo.vout}`;
@@ -314,7 +314,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
         return (
             <div
             key={id}
-            className={`group relative p-4 rounded-xl border transition-all duration-200
+            className={`group relative p-4 rounded-lg border transition-all duration-200
                 ${isFrozen
                 ? 'bg-zen-vermilion/5 border-zen-vermilion/20 dark:bg-zen-vermilion/10'
                 : isLocked

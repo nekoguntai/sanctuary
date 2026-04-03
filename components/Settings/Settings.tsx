@@ -27,7 +27,7 @@ export const Settings: React.FC = () => {
 
       {/* Tabs */}
       <div className="mb-6">
-        <div className="flex space-x-1 surface-secondary rounded-xl p-1">
+        <div className="flex space-x-1 surface-secondary rounded-lg p-1">
           {SETTINGS_TABS.map(tab => (
             <button
               key={tab.id}

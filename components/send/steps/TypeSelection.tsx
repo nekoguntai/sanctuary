@@ -65,7 +65,7 @@ export function TypeSelection() {
             type="button"
             onClick={() => handleSelect(option.type)}
             className={`
-              w-full p-5 rounded-xl border-2 text-left transition-all
+              w-full p-5 rounded-lg border-2 text-left transition-all
               hover:scale-[1.01] hover:shadow-md
               ${state.transactionType === option.type
                 ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'

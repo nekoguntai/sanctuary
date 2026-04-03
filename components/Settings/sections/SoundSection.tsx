@@ -70,7 +70,7 @@ const NotificationSoundSettings: React.FC = () => {
   };
 
   return (
-    <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+    <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
       <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
         <div className="flex items-center space-x-3">
           <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
@@ -101,7 +101,7 @@ const NotificationSoundSettings: React.FC = () => {
           {soundEvents.map((event) => {
             const config = getEventConfig(event.id);
             return (
-              <div key={event.id} className="flex items-center gap-3 p-3 surface-muted rounded-xl">
+              <div key={event.id} className="flex items-center gap-3 p-3 surface-muted rounded-lg">
                 {/* Event toggle */}
                 <button
                   onClick={() => handleEventToggle(event.id)}
@@ -126,7 +126,7 @@ const NotificationSoundSettings: React.FC = () => {
                   value={config.sound}
                   onChange={(e) => handleEventSoundChange(event.id, e.target.value)}
                   disabled={!soundPrefs.enabled || !config.enabled}
-                  className="px-2 py-1 text-xs surface-secondary border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-2 py-1 text-xs surface-secondary border border-sanctuary-200 dark:border-sanctuary-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {soundPresets.map((preset) => (
                     <option key={preset.id} value={preset.id}>

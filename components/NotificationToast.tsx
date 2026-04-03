@@ -112,7 +112,7 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
   return (
     <div
       className={`
-        flex items-start space-x-3 p-4 rounded-xl border shadow-xl backdrop-blur-xl
+        flex items-start space-x-3 p-4 rounded-lg border shadow-xl backdrop-blur-xl
         ${getColors()}
         ${isExiting ? 'animate-slide-out-right' : 'animate-slide-in-right'}
         transition-all duration-300

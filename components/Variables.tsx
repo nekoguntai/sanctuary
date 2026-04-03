@@ -74,7 +74,7 @@ export const Variables: React.FC = () => {
       </div>
 
       {/* Warning Banner */}
-      <div className="flex items-start space-x-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+      <div className="flex items-start space-x-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
         <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
         <div>
           <h4 className="text-sm font-medium text-amber-800 dark:text-amber-200">
@@ -87,7 +87,7 @@ export const Variables: React.FC = () => {
       </div>
 
       {/* Confirmation Thresholds */}
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
             <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
@@ -192,7 +192,7 @@ export const Variables: React.FC = () => {
       </div>
 
       {/* Info Box */}
-      <div className="surface-secondary rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700">
+      <div className="surface-secondary rounded-lg p-4 border border-sanctuary-200 dark:border-sanctuary-700">
         <div className="flex items-start space-x-3">
           <Info className="w-5 h-5 text-primary-500 flex-shrink-0 mt-0.5" />
           <div>

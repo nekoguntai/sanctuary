@@ -35,7 +35,7 @@ export const EditUrlModal: React.FC<EditUrlModalProps> = ({
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative surface-elevated rounded-2xl shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 max-w-md w-full animate-fade-in">
+      <div className="relative surface-elevated rounded-xl shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 max-w-md w-full animate-fade-in">
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">
@@ -70,7 +70,7 @@ export const EditUrlModal: React.FC<EditUrlModalProps> = ({
                 value={editUrl}
                 onChange={(e) => onUrlChange(e.target.value)}
                 placeholder={`https://${service.id}.yourdomain.com`}
-                className="w-full px-3 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 rounded-md border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <p className="text-xs text-sanctuary-400 mt-1">
                 Default: http://{hostname}:{service.defaultPort}

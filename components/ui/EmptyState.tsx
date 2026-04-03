@@ -87,7 +87,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           <div className="absolute inset-0 bg-primary-100/30 dark:bg-primary-900/10 rounded-full blur-xl -z-10" />
         </div>
       ) : icon ? (
-        <div className="mb-5 p-5 rounded-2xl border-2 border-dashed border-primary-200 dark:border-primary-800/50 bg-primary-50/30 dark:bg-primary-900/10">
+        <div className="mb-5 p-5 rounded-xl border border-dashed border-primary-200 dark:border-primary-800/50 bg-primary-50/30 dark:bg-primary-900/10">
           {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<{ className?: string }>, {
             className: ((icon as React.ReactElement<{ className?: string }>).props.className || '').replace(/text-sanctuary-\d+/g, '') + ' text-primary-400 dark:text-primary-500',
           }) : icon}

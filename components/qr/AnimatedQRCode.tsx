@@ -75,7 +75,7 @@ export const AnimatedQRCode: React.FC<AnimatedQRCodeProps> = ({
 
   return (
     <div className="flex flex-col items-center">
-      <div className="bg-white p-3 rounded-xl shadow-inner">
+      <div className="bg-white p-3 rounded-lg shadow-inner">
         <QRCodeSVG
           value={currentData}
           size={size}

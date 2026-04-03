@@ -31,7 +31,6 @@ describe('NetworkTabs', () => {
     it('should display wallet counts for each network', () => {
       render(<NetworkTabs {...defaultProps} />);
 
-      // Each count appears next to its network label
       expect(screen.getByText('3')).toBeInTheDocument();
       expect(screen.getByText('2')).toBeInTheDocument();
       expect(screen.getByText('0')).toBeInTheDocument();
@@ -44,15 +43,52 @@ describe('NetworkTabs', () => {
 
       expect(container.firstChild).toHaveClass('custom-class');
     });
+
+    it('should render network color dots for each tab', () => {
+      const { container } = render(<NetworkTabs {...defaultProps} />);
+
+      const dots = container.querySelectorAll('[aria-hidden="true"]');
+      expect(dots).toHaveLength(3);
+      expect(dots[0]).toHaveClass('bg-mainnet-500');
+      expect(dots[1]).toHaveClass('bg-testnet-500');
+      expect(dots[2]).toHaveClass('bg-signet-500');
+    });
+
+    it('should render a sliding indicator element', () => {
+      const { container } = render(<NetworkTabs {...defaultProps} />);
+
+      const indicator = container.querySelector('.shadow-sm');
+      expect(indicator).toBeInTheDocument();
+    });
   });
 
   describe('Selection', () => {
-    it('should visually highlight the selected network', () => {
+    it('should mark the selected network tab as active', () => {
       render(<NetworkTabs {...defaultProps} selectedNetwork="testnet" />);
 
       const testnetButton = screen.getByText('Testnet').closest('button');
-      // The selected tab should have the active background color class
-      expect(testnetButton).toHaveClass('bg-testnet-800');
+      expect(testnetButton).toHaveAttribute('data-active', 'true');
+    });
+
+    it('should mark non-selected tabs as inactive', () => {
+      render(<NetworkTabs {...defaultProps} selectedNetwork="mainnet" />);
+
+      const testnetButton = screen.getByText('Testnet').closest('button');
+      expect(testnetButton).toHaveAttribute('data-active', 'false');
+    });
+
+    it('should visually highlight the selected network with active text color', () => {
+      render(<NetworkTabs {...defaultProps} selectedNetwork="testnet" />);
+
+      const testnetButton = screen.getByText('Testnet').closest('button');
+      expect(testnetButton).toHaveClass('text-sanctuary-900');
+    });
+
+    it('should apply muted text to non-selected tabs', () => {
+      render(<NetworkTabs {...defaultProps} selectedNetwork="mainnet" />);
+
+      const testnetButton = screen.getByText('Testnet').closest('button');
+      expect(testnetButton).toHaveClass('text-sanctuary-500');
     });
 
     it('should call onNetworkChange when a different network is clicked', () => {
@@ -98,7 +134,7 @@ describe('NetworkTabs', () => {
       expect(screen.getByText('Signet')).toBeInTheDocument();
     });
 
-    it('should apply muted styling to empty networks', () => {
+    it('should apply muted styling to non-selected networks regardless of count', () => {
       render(
         <NetworkTabs
           {...defaultProps}
@@ -108,37 +144,7 @@ describe('NetworkTabs', () => {
       );
 
       const testnetButton = screen.getByText('Testnet').closest('button');
-      // Empty, non-selected networks should have muted text color
-      expect(testnetButton).toHaveClass('text-sanctuary-400');
-    });
-  });
-
-  describe('Color coding', () => {
-    it('should use mainnet colors for mainnet when selected', () => {
-      render(<NetworkTabs {...defaultProps} selectedNetwork="mainnet" />);
-
-      const mainnetButton = screen.getByText('Mainnet').closest('button');
-      expect(mainnetButton).toHaveClass('border-mainnet-600');
-    });
-
-    it('should use testnet colors for testnet when selected', () => {
-      render(<NetworkTabs {...defaultProps} selectedNetwork="testnet" />);
-
-      const testnetButton = screen.getByText('Testnet').closest('button');
-      expect(testnetButton).toHaveClass('border-testnet-600');
-    });
-
-    it('should use signet colors for signet when selected', () => {
-      render(
-        <NetworkTabs
-          {...defaultProps}
-          walletCounts={{ mainnet: 1, testnet: 1, signet: 1 }}
-          selectedNetwork="signet"
-        />
-      );
-
-      const signetButton = screen.getByText('Signet').closest('button');
-      expect(signetButton).toHaveClass('border-signet-600');
+      expect(testnetButton).toHaveClass('text-sanctuary-500');
     });
   });
 });

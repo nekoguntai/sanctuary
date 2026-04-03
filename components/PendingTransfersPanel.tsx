@@ -155,7 +155,7 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
   if (loading) {
     return (
       <div className="animate-pulse space-y-4">
-        <div className="h-24 surface-secondary rounded-xl" />
+        <div className="h-24 surface-secondary rounded-lg" />
       </div>
     );
   }
@@ -175,7 +175,7 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
     <div className="space-y-4">
       {/* Error Display */}
       {error && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-700 dark:text-rose-300 text-sm flex items-start">
+        <div className="p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-lg text-rose-700 dark:text-rose-300 text-sm flex items-start">
           <AlertTriangle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />
           {error}
         </div>
@@ -185,7 +185,7 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
       {incomingPending.map(transfer => (
         <div
           key={transfer.id}
-          className="surface-elevated rounded-xl p-4 border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10"
+          className="surface-elevated rounded-lg p-4 border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10"
         >
           <div className="flex items-start justify-between">
             <div className="flex items-start">
@@ -241,7 +241,7 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
       {awaitingConfirmation.map(transfer => (
         <div
           key={transfer.id}
-          className="surface-elevated rounded-xl p-4 border border-primary-200 dark:border-primary-800 bg-primary-50/50 dark:bg-primary-900/10"
+          className="surface-elevated rounded-lg p-4 border border-primary-200 dark:border-primary-800 bg-primary-50/50 dark:bg-primary-900/10"
         >
           <div className="flex items-start justify-between">
             <div className="flex items-start">
@@ -296,7 +296,7 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
       {outgoingPending.map(transfer => (
         <div
           key={transfer.id}
-          className="surface-elevated rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700"
+          className="surface-elevated rounded-lg p-4 border border-sanctuary-200 dark:border-sanctuary-700"
         >
           <div className="flex items-start justify-between">
             <div className="flex items-start">
@@ -339,7 +339,7 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
       {/* Confirmation Modal */}
       {confirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-md w-full shadow-2xl animate-fade-in-up p-6">
+          <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-md w-full shadow-2xl animate-fade-in-up p-6">
             {confirmModal.action === 'accept' && (
               <>
                 <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
@@ -425,7 +425,7 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
                 <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
                   Confirm Transfer?
                 </h3>
-                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl mb-6">
+                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg mb-6">
                   <div className="flex items-start">
                     <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 mr-2 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-amber-800 dark:text-amber-300">

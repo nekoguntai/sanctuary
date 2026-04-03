@@ -15,7 +15,7 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
   onFileUpload,
 }) => {
   return (
-    <div className="text-center py-6 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+    <div className="text-center py-6 surface-muted rounded-lg border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
       {/* Initial State */}
       {!scanning && !scanned && (
         <>

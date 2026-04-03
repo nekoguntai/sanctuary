@@ -21,7 +21,7 @@ export function EnableModal({
       />
 
       {/* Modal */}
-      <div className="relative bg-white dark:bg-sanctuary-900 rounded-2xl shadow-xl max-w-lg w-full mx-4 overflow-hidden">
+      <div className="relative bg-white dark:bg-sanctuary-900 rounded-xl shadow-xl max-w-lg w-full mx-4 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-sanctuary-200 dark:border-sanctuary-700">
           <div className="flex items-center space-x-3">

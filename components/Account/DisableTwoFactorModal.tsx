@@ -15,7 +15,7 @@ export const DisableTwoFactorModal: React.FC<DisableTwoFactorModalProps> = ({
 }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-md w-full">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-md w-full">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800 flex items-center justify-between">
           <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Disable Two-Factor Authentication</h3>
           <button
@@ -27,7 +27,7 @@ export const DisableTwoFactorModal: React.FC<DisableTwoFactorModalProps> = ({
         </div>
 
         <div className="p-6 space-y-4">
-          <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+          <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
             <p className="text-sm text-amber-800 dark:text-amber-300">
               Disabling 2FA will make your account less secure. You'll only need your password to log in.
             </p>
@@ -39,7 +39,7 @@ export const DisableTwoFactorModal: React.FC<DisableTwoFactorModalProps> = ({
               type="password"
               value={disablePassword}
               onChange={(e) => onDisablePasswordChange(e.target.value)}
-              className="w-full px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
+              className="w-full px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
               placeholder="Enter your password"
             />
           </div>
@@ -50,7 +50,7 @@ export const DisableTwoFactorModal: React.FC<DisableTwoFactorModalProps> = ({
               type="text"
               value={disableToken}
               onChange={(e) => onDisableTokenChange(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
-              className="w-full px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-center tracking-widest font-mono text-sanctuary-900 dark:text-sanctuary-100"
+              className="w-full px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-center tracking-widest font-mono text-sanctuary-900 dark:text-sanctuary-100"
               placeholder="000000"
               maxLength={8}
             />

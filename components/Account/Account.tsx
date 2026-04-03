@@ -204,7 +204,7 @@ export const Account: React.FC = () => {
       </div>
 
       {/* Account Information */}
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
             <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
@@ -217,7 +217,7 @@ export const Account: React.FC = () => {
         <div className="p-6 space-y-6">
           <div>
             <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Username</label>
-            <div className="px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 font-mono">
+            <div className="px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sanctuary-900 dark:text-sanctuary-100 font-mono">
               {user?.username}
             </div>
           </div>
@@ -225,7 +225,7 @@ export const Account: React.FC = () => {
           {user?.email && (
             <div>
               <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Email</label>
-              <div className="px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 font-mono flex items-center">
+              <div className="px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sanctuary-900 dark:text-sanctuary-100 font-mono flex items-center">
                 <Mail className="w-4 h-4 mr-2 text-sanctuary-400" />
                 {user.email}
               </div>
@@ -234,7 +234,7 @@ export const Account: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Account Type</label>
-            <div className="px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 flex items-center">
+            <div className="px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sanctuary-900 dark:text-sanctuary-100 flex items-center">
               <Shield className={`w-4 h-4 mr-2 ${user?.isAdmin ? 'text-primary-600' : 'text-sanctuary-400'}`} />
               {user?.isAdmin ? 'Administrator' : 'Standard User'}
             </div>

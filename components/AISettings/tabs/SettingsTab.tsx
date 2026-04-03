@@ -37,7 +37,7 @@ export function SettingsTab({
             value={aiEndpoint}
             onChange={(e) => onEndpointChange(e.target.value)}
             placeholder="http://host.docker.internal:11434"
-            className="flex-1 px-4 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="flex-1 px-4 py-2 rounded-md border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
           <button
             onClick={onDetectOllama}
@@ -155,7 +155,7 @@ export function SettingsTab({
 
       {/* Next Step Hint */}
       {aiEndpoint && !aiModel && (
-        <div className="p-4 rounded-xl bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700">
+        <div className="p-4 rounded-lg bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700">
           <p className="text-sm text-primary-700 dark:text-primary-700">
             <span className="font-medium">Next:</span> Go to the <button onClick={onNavigateToModels} className="underline font-medium">Models</button> tab to download a model.
           </p>

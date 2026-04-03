@@ -42,7 +42,7 @@ export const ServerRow: React.FC<ServerRowProps> = ({
   onDeleteServer,
 }) => (
   <div
-    className={`p-3 rounded-xl border ${
+    className={`p-3 rounded-lg border ${
       server.enabled
         ? 'surface-muted border-sanctuary-200 dark:border-sanctuary-700'
         : 'surface-secondary border-sanctuary-100 dark:border-sanctuary-800 opacity-60'

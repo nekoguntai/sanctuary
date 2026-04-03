@@ -51,7 +51,7 @@ export const EncryptionKeyDisplay: React.FC<EncryptionKeyDisplayProps> = ({
   };
 
   return (
-    <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+    <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
       <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800 bg-warning-50 dark:bg-warning-900/20">
         <div className="flex items-center space-x-3">
           <div className="p-2 surface-secondary rounded-lg text-warning-600 dark:text-warning-400">
@@ -171,7 +171,7 @@ export const EncryptionKeyDisplay: React.FC<EncryptionKeyDisplayProps> = ({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"
-                className="flex-1 px-3 py-2 rounded-lg surface-muted border border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="flex-1 px-3 py-2 rounded-md surface-muted border border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 disabled={isLoadingKeys}
               />
               <Button type="submit" disabled={isLoadingKeys || !password.trim()}>

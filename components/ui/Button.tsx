@@ -15,15 +15,15 @@ export const Button: React.FC<ButtonProps> = ({
   isLoading = false,
   ...props 
 }) => {
-  const baseStyles = "inline-flex items-center justify-center rounded-lg transition-all duration-200 font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
+  const baseStyles = "inline-flex items-center justify-center rounded-md transition-all duration-200 font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
   
   const variants = {
     // Primary uses the 'primary' palette (variable driven) in both modes.
     // In Dark Mode (inverted scale), primary-200 is a warm dark tone and primary-900 is near-white.
-    primary: "bg-primary-800 text-white hover:bg-primary-700 dark:bg-primary-200 dark:text-primary-900 dark:hover:bg-primary-300 dark:border dark:border-primary-300/30 focus:ring-primary-500",
-    
-    // Secondary uses neutral Sanctuary palette but with Primary border/text on hover
-    secondary: "bg-white text-sanctuary-700 border border-sanctuary-200 hover:border-primary-300 hover:text-primary-700 dark:bg-sanctuary-900 dark:text-sanctuary-200 dark:border-sanctuary-700 dark:hover:border-primary-500 dark:hover:text-primary-300",
+    primary: "bg-primary-800 text-white hover:bg-primary-700 dark:bg-primary-200 dark:text-primary-900 dark:hover:bg-primary-300 focus:ring-primary-500",
+
+    // Secondary uses neutral Sanctuary palette — subtle border that stays neutral on hover
+    secondary: "bg-white text-sanctuary-700 border border-sanctuary-200 hover:border-sanctuary-300 hover:text-sanctuary-900 dark:bg-sanctuary-800 dark:text-sanctuary-300 dark:border-sanctuary-700/50 dark:hover:border-sanctuary-500 dark:hover:text-sanctuary-100",
     
     danger: "bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-900/30",
     

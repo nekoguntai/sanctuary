@@ -7,7 +7,7 @@ import { Timeframe } from './hooks/useDashboardData';
 const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="surface-elevated font-sans rounded-xl px-3 py-2 shadow-lg border border-sanctuary-200 dark:border-sanctuary-700">
+    <div className="surface-elevated font-sans rounded-lg px-3 py-2 shadow-lg border border-sanctuary-200 dark:border-sanctuary-700">
       <p className="text-[10px] uppercase tracking-wider text-sanctuary-400 mb-0.5">{label}</p>
       <p className="text-sm font-semibold font-mono tabular-nums text-primary-600">
         {Number(payload[0].value).toLocaleString()} sats
@@ -123,10 +123,10 @@ export const PriceChart: React.FC<PriceChartProps> = ({
   chartData,
 }) => {
   return (
-    <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+    <div className="surface-elevated rounded-xl p-5 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
         <div className="flex-shrink-0">
-          <p className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-wide">Total Balance</p>
+          <p className="text-[11px] font-semibold text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-[0.08em]">Total Balance</p>
           <Amount
             sats={totalBalance}
             size="xl"

@@ -67,7 +67,7 @@ export const UTXOTab: React.FC<UTXOTabProps> = ({
           >
             {loadingMoreUtxos ? (
               <span className="flex items-center justify-center">
-                <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent mr-2" />
+                <span className="animate-spin rounded-full h-4 w-4 border border-primary-500 border-t-transparent mr-2" />
                 Loading...
               </span>
             ) : (

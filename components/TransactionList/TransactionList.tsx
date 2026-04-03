@@ -217,7 +217,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       {/* Transaction Details Modal */}
       {selectedTx && (
          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedTx(null)}>
-            <div className="surface-elevated rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-sanctuary-200 dark:border-sanctuary-800 animate-modal-enter" onClick={e => e.stopPropagation()}>
+            <div className="surface-elevated rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-sanctuary-200 dark:border-sanctuary-800 animate-modal-enter" onClick={e => e.stopPropagation()}>
                {/* Modal Header */}
                <div className="sticky top-0 surface-elevated p-6 border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-start z-10">
                   <div>
@@ -363,7 +363,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                           (selectedTx.amount > 0 && selectedTx.counterpartyAddress && walletAddresses.includes(selectedTx.counterpartyAddress))
                         );
                         return (
-                        <div className="surface-muted p-4 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800">
+                        <div className="surface-muted p-4 rounded-lg border border-sanctuary-100 dark:border-sanctuary-800">
                            <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">
                               {isSelectedConsolidation
                                 ? 'Consolidation Address (Your Wallet)'
@@ -380,7 +380,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
                       {/* Your Address - which of your addresses was involved */}
                       {selectedTx.address && (
-                        <div className="surface-muted p-4 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800">
+                        <div className="surface-muted p-4 rounded-lg border border-sanctuary-100 dark:border-sanctuary-800">
                            <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">
                               {selectedTx.amount > 0 ? 'Your Receiving Address' : 'Your Sending Address'}
                            </p>

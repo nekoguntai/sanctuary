@@ -24,7 +24,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl">
         <div className="p-6">
           {/* Header */}
           <div className="flex items-start gap-3 mb-4">
@@ -42,7 +42,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({
           </div>
 
           {/* Existing Device Info */}
-          <div className="p-3 rounded-xl bg-sanctuary-100 dark:bg-sanctuary-800 border border-sanctuary-200 dark:border-sanctuary-700 mb-4">
+          <div className="p-3 rounded-lg bg-sanctuary-100 dark:bg-sanctuary-800 border border-sanctuary-200 dark:border-sanctuary-700 mb-4">
             <div className="flex items-center gap-2 mb-2">
               {getDeviceIcon(conflictData.existingDevice.type, "w-5 h-5")}
               <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
@@ -58,7 +58,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({
           <div className="space-y-3 mb-6">
             {/* New Accounts */}
             {hasNewAccounts && (
-              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700">
+              <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700">
                 <div className="flex items-center gap-2 mb-2">
                   <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
@@ -77,7 +77,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({
 
             {/* Matching Accounts */}
             {conflictData.comparison.matchingAccounts.length > 0 && (
-              <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700">
+              <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700">
                 <div className="flex items-center gap-2 mb-2">
                   <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
@@ -96,7 +96,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({
 
             {/* Conflicting Accounts (security warning) */}
             {hasConflictingAccounts && (
-              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-700">
+              <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-700">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                   <span className="text-sm font-medium text-rose-700 dark:text-rose-300">

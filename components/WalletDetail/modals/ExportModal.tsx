@@ -176,7 +176,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="surface-elevated rounded-2xl max-w-lg w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-modal-enter">
+      <div className="surface-elevated rounded-xl max-w-lg w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-modal-enter">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-light">Export Wallet</h3>
           <button
@@ -293,7 +293,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 />
               </div>
 
-              <div className="p-4 bg-white rounded-xl shadow-inner border border-sanctuary-100 flex flex-col items-center overflow-auto max-h-[500px]">
+              <div className="p-4 bg-white rounded-lg shadow-inner border border-sanctuary-100 flex flex-col items-center overflow-auto max-h-[500px]">
                 <QRCodeSVG value={getQrValue()} size={qrSize} level="M" />
                 <p className="text-center text-xs text-sanctuary-400 mt-2">
                   {isMultisig && qrFormat === 'passport'
@@ -332,7 +332,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </label>
               <textarea
                 readOnly
-                className="w-full h-32 p-3 text-xs font-mono surface-muted border border-sanctuary-200 dark:border-sanctuary-800 rounded-lg resize-none focus:outline-none"
+                className="w-full h-32 p-3 text-xs font-mono surface-muted border border-sanctuary-200 dark:border-sanctuary-800 rounded-md resize-none focus:outline-none"
                 value={descriptor || ''}
               />
               <Button

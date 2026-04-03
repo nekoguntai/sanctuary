@@ -15,7 +15,7 @@ export const DetailsTab: React.FC<DetailsTabProps> = ({ wallets }) => {
     <div className="space-y-4">
          <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Associated Wallets</h3>
          {wallets.length === 0 ? (
-             <div className="surface-elevated rounded-xl p-8 text-center text-sanctuary-400 border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+             <div className="surface-elevated rounded-lg p-8 text-center text-sanctuary-400 border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
                  No wallets are currently using this device.
              </div>
          ) : (
@@ -30,7 +30,7 @@ export const DetailsTab: React.FC<DetailsTabProps> = ({ wallets }) => {
                         <div
                             key={w.id}
                             onClick={() => navigate(`/wallets/${w.id}`)}
-                            className="group cursor-pointer surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400 dark:hover:border-sanctuary-600 transition-all"
+                            className="group cursor-pointer surface-elevated p-4 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400 dark:hover:border-sanctuary-600 transition-all"
                         >
                             <div className="flex items-center justify-between mb-2">
                                  <div className="flex items-center space-x-3">

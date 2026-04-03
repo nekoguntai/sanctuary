@@ -30,7 +30,7 @@ export const BackupPanel: React.FC<BackupPanelProps> = ({
   backupError,
 }) => {
   return (
-    <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+    <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
       <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
         <div className="flex items-center space-x-3">
           <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
@@ -71,7 +71,7 @@ export const BackupPanel: React.FC<BackupPanelProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="e.g., Before migration, Weekly backup"
-              className="w-full px-3 py-2 rounded-lg surface-muted border border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 rounded-md surface-muted border border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
         </div>

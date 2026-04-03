@@ -139,7 +139,7 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className={`flex items-center justify-between w-full px-3 py-2 surface-elevated border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg text-sm transition-colors ${
+        className={`flex items-center justify-between w-full px-3 py-2 surface-elevated border border-sanctuary-300 dark:border-sanctuary-700 rounded-md text-sm transition-colors ${
           disabled
             ? 'opacity-50 cursor-not-allowed'
             : 'hover:border-sanctuary-400 dark:hover:border-sanctuary-600'
@@ -194,7 +194,7 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
           <div className="max-h-48 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-4">
-                <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary-500 border-t-transparent" />
+                <div className="animate-spin rounded-full h-5 w-5 border border-primary-500 border-t-transparent" />
               </div>
             ) : filteredLabels.length === 0 ? (
               <div className="py-4 text-center text-sm text-sanctuary-500">
@@ -252,7 +252,7 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
                     className="p-1.5 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 dark:bg-sanctuary-700 dark:hover:bg-sanctuary-600 dark:disabled:bg-sanctuary-800 dark:border dark:border-sanctuary-600 text-white dark:text-sanctuary-100 rounded transition-colors"
                   >
                     {creating ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                      <div className="animate-spin rounded-full h-4 w-4 border border-white border-t-transparent" />
                     ) : (
                       <Check className="w-4 h-4" />
                     )}

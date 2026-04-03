@@ -92,7 +92,7 @@ export const ManualAccountForm: React.FC<ManualAccountFormProps> = ({
           onChange={(e) =>
             handlePurposeChange(e.target.value as 'single_sig' | 'multisig')
           }
-          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
         >
           <option value="multisig">Multisig (BIP-48)</option>
           <option value="single_sig">Single Signature</option>
@@ -111,7 +111,7 @@ export const ManualAccountForm: React.FC<ManualAccountFormProps> = ({
               e.target.value as 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy'
             )
           }
-          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
         >
           <option value="native_segwit">Native SegWit (bc1q...)</option>
           <option value="taproot">Taproot (bc1p...)</option>
@@ -130,7 +130,7 @@ export const ManualAccountForm: React.FC<ManualAccountFormProps> = ({
           value={account.derivationPath}
           onChange={(e) => onChange({ ...account, derivationPath: e.target.value })}
           placeholder="m/48'/0'/0'/2'"
-          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
         />
       </div>
 
@@ -144,7 +144,7 @@ export const ManualAccountForm: React.FC<ManualAccountFormProps> = ({
           onChange={(e) => onChange({ ...account, xpub: e.target.value })}
           placeholder="xpub..."
           rows={3}
-          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
         />
       </div>
 

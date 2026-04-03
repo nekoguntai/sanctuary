@@ -7,7 +7,7 @@ const ServicesTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Price Provider</h3>
           <p className="text-sm text-sanctuary-500 mt-1">Configure Bitcoin price data source</p>
@@ -18,7 +18,7 @@ const ServicesTab: React.FC = () => {
             <select
               value={priceProvider}
               onChange={(e) => setPriceProvider(e.target.value)}
-              className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+              className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
             >
               {availableProviders.map(provider => (
                 <option key={provider} value={provider}>
@@ -45,7 +45,7 @@ const ServicesTab: React.FC = () => {
                 Refresh Price
               </Button>
             </div>
-            <div className="surface-muted rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700">
+            <div className="surface-muted rounded-lg p-4 border border-sanctuary-200 dark:border-sanctuary-700">
               <div className="text-2xl font-bold text-sanctuary-900 dark:text-sanctuary-100">
                 {btcPrice !== null
                   ? `${currencySymbol}${btcPrice.toLocaleString(undefined, {maximumFractionDigits: 0})}`

@@ -163,7 +163,7 @@ export const Monitoring: React.FC = () => {
 
       {/* Info banner when monitoring is not enabled */}
       {data && !data.enabled && (
-        <div className="mb-6 p-4 rounded-xl bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800">
+        <div className="mb-6 p-4 rounded-lg bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800">
           <div className="flex items-start space-x-3">
             <Info className="w-5 h-5 text-warning-600 dark:text-warning-400 mt-0.5 flex-shrink-0" />
             <div>
@@ -182,7 +182,7 @@ export const Monitoring: React.FC = () => {
       )}
 
       {error && (
-        <div className="mb-6 p-4 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
+        <div className="mb-6 p-4 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
           <div className="flex items-center space-x-2 text-rose-700 dark:text-rose-300">
             <AlertCircle className="w-5 h-5" />
             <span>{error}</span>
@@ -209,7 +209,7 @@ export const Monitoring: React.FC = () => {
       )}
 
       {/* Info Section */}
-      <div className="mt-8 surface-secondary rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700">
+      <div className="mt-8 surface-secondary rounded-lg p-4 border border-sanctuary-200 dark:border-sanctuary-700">
         <h4 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
           About Monitoring
         </h4>

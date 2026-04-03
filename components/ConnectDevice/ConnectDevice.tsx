@@ -183,7 +183,7 @@ export const ConnectDevice: React.FC = () => {
 
           {/* Connection Action Area */}
           {selectedModel && method && (
-            <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
+            <div className="surface-elevated p-6 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
               {method === 'usb' && (
                 <UsbConnectionPanel
                   selectedModel={selectedModel}
@@ -227,7 +227,7 @@ export const ConnectDevice: React.FC = () => {
               )}
 
               {method === 'manual' && (
-                <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl flex items-start">
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg flex items-start">
                   <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mr-3 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-800 dark:text-amber-200">
                     Manually entering xpubs is for advanced users. Ensure you copy the correct Extended Public Key

@@ -22,7 +22,7 @@ export const SummaryBar: React.FC<SummaryBarProps> = ({
   format,
 }) => {
   return (
-    <div className="surface-elevated p-3 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700">
+    <div className="surface-elevated p-3 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700">
       <div className="flex items-center justify-between text-sm">
         <div className="flex items-center gap-4">
           <div>

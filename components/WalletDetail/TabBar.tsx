@@ -53,10 +53,10 @@ export const TabBar: React.FC<TabBarProps> = ({
 
   return (
     <div className="overflow-x-auto scrollbar-hide">
-      <nav ref={navRef} className="relative flex gap-1 p-1 surface-secondary rounded-xl" aria-label="Tabs">
+      <nav ref={navRef} className="relative flex gap-1 p-1 surface-secondary rounded-lg" aria-label="Tabs">
         {/* Sliding indicator */}
         <div
-          className="absolute top-1 bottom-1 rounded-lg bg-white dark:bg-sanctuary-700 shadow-sm transition-all duration-300 ease-out z-0"
+          className="absolute top-1 bottom-1 rounded-md bg-white dark:bg-sanctuary-700 shadow-sm transition-all duration-300 ease-out z-0"
           style={{ left: indicator.left, width: indicator.width }}
         />
         {tabs.map((tab) => (
@@ -68,7 +68,7 @@ export const TabBar: React.FC<TabBarProps> = ({
               activeTab === tab
                 ? 'text-primary-700 dark:text-primary-300'
                 : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'
-            } whitespace-nowrap py-2 px-3.5 rounded-lg font-medium text-sm capitalize transition-colors duration-200 relative z-10 focus-visible:ring-2 focus-visible:ring-primary-500`}
+            } whitespace-nowrap py-2 px-3.5 rounded-md font-medium text-sm capitalize transition-colors duration-200 relative z-10 focus-visible:ring-2 focus-visible:ring-primary-500`}
           >
             {tab === 'tx' ? 'Transactions' : tab === 'utxo' ? 'UTXOs' : tab}
             {tab === 'drafts' && draftsCount > 0 && (

@@ -26,7 +26,7 @@ export const VisualSettingsPanel: React.FC<VisualSettingsPanelProps> = ({
   onPatternOpacityChange,
 }) => {
   return (
-    <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+    <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
       <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
         <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Visual Settings</h3>
         <p className="text-sm text-sanctuary-500 mt-1">Adjust appearance settings</p>

@@ -212,7 +212,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="surface-elevated p-6 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
            <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-6">Accumulation History</h3>
            <div className="h-64 min-w-[200px]">
              {chartReady && (
@@ -237,7 +237,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
            </div>
         </div>
 
-        <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="surface-elevated p-6 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
            <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-6">UTXO Age Distribution</h3>
            <div className="h-64 min-w-[200px]">
              {chartReady && (

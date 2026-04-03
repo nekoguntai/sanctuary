@@ -112,7 +112,7 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
             {inputs.map((input) => (
               <div
                 key={`${input.txid}:${input.vout}`}
-                className="flex items-center rounded-xl overflow-hidden transition-all duration-200 hover:scale-[1.01]"
+                className="flex items-center rounded-lg overflow-hidden transition-all duration-200 hover:scale-[1.01]"
                 style={{ height: getBarHeight(input.amount) }}
               >
                 {/* Amount bar with gradient */}
@@ -141,7 +141,7 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
               </div>
             ))}
             {inputs.length === 0 && (
-              <div className="flex-1 flex items-center justify-center rounded-2xl bg-[#2d2f43]/50 text-white/60 text-sm font-medium">
+              <div className="flex-1 flex items-center justify-center rounded-xl bg-[#2d2f43]/50 text-white/60 text-sm font-medium">
                 No inputs
               </div>
             )}
@@ -162,7 +162,7 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
             {outputs.map((output, idx) => (
               <div
                 key={`${output.address}-${idx}`}
-                className="flex items-center rounded-xl overflow-hidden transition-all duration-200 hover:scale-[1.01]"
+                className="flex items-center rounded-lg overflow-hidden transition-all duration-200 hover:scale-[1.01]"
                 style={{ height: getBarHeight(output.amount) }}
               >
                 {/* Address */}
@@ -201,7 +201,7 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
             {/* Fee row */}
             {fee > 0 && (
               <div
-                className="flex items-center rounded-xl overflow-hidden transition-all duration-200"
+                className="flex items-center rounded-lg overflow-hidden transition-all duration-200"
                 style={{ height: Math.max(24, getBarHeight(fee) * 0.5) }}
               >
                 <div className="flex-1 px-2 py-1 bg-[#2d2f43]/80 backdrop-blur-sm flex items-center rounded-l-xl">
@@ -223,7 +223,7 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
             )}
 
             {outputs.length === 0 && fee === 0 && (
-              <div className="flex-1 flex items-center justify-center rounded-2xl bg-[#2d2f43]/50 text-white/60 text-sm font-medium">
+              <div className="flex-1 flex items-center justify-center rounded-xl bg-[#2d2f43]/50 text-white/60 text-sm font-medium">
                 No outputs
               </div>
             )}

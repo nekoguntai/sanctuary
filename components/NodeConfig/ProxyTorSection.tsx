@@ -66,7 +66,7 @@ export const ProxyTorSection: React.FC<ProxyTorSectionProps> = ({
         <div className="px-4 pb-4 space-y-4 border-t border-sanctuary-100 dark:border-sanctuary-800 pt-4">
           {/* Bundled Tor Container - Primary Option */}
           {torContainerStatus?.available && (
-            <div className={`p-3 rounded-xl border ${
+            <div className={`p-3 rounded-lg border ${
               nodeConfig.proxyHost === 'tor'
                 ? 'border-violet-300 dark:border-violet-700 bg-violet-50/50 dark:bg-violet-900/20'
                 : 'border-sanctuary-200 dark:border-sanctuary-700'
@@ -178,7 +178,7 @@ export const ProxyTorSection: React.FC<ProxyTorSectionProps> = ({
                         value={nodeConfig.proxyHost || ''}
                         onChange={(e) => onConfigChange({ ...nodeConfig, proxyHost: e.target.value })}
                         placeholder="127.0.0.1"
-                        className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                        className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                       />
                     </div>
                     <div>
@@ -188,7 +188,7 @@ export const ProxyTorSection: React.FC<ProxyTorSectionProps> = ({
                         value={nodeConfig.proxyPort || ''}
                         onChange={(e) => onConfigChange({ ...nodeConfig, proxyPort: parseInt(e.target.value, 10) || undefined })}
                         placeholder="9050"
-                        className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                        className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                       />
                     </div>
                   </div>
@@ -200,14 +200,14 @@ export const ProxyTorSection: React.FC<ProxyTorSectionProps> = ({
                       value={nodeConfig.proxyUsername || ''}
                       onChange={(e) => onConfigChange({ ...nodeConfig, proxyUsername: e.target.value || undefined })}
                       placeholder="Username (optional)"
-                      className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                      className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                     />
                     <input
                       type="password"
                       value={nodeConfig.proxyPassword || ''}
                       onChange={(e) => onConfigChange({ ...nodeConfig, proxyPassword: e.target.value || undefined })}
                       placeholder="Password (optional)"
-                      className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                      className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                     />
                   </div>
                 </div>

@@ -81,11 +81,11 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in pb-12">
+    <div className="space-y-4 animate-fade-in pb-12">
 
       {/* Update Available Banner */}
       {versionInfo?.updateAvailable && !updateDismissed && (
-        <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-success-300 dark:border-success-700 bg-success-50 dark:bg-success-900/30">
+        <div className="surface-elevated rounded-xl p-4 shadow-sm border border-success-300 dark:border-success-700 bg-success-50 dark:bg-success-900/30">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-success-100 dark:bg-success-800/50 rounded-lg">
@@ -149,13 +149,13 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Top Stats Row - 3 columns */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 stagger-enter">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger-enter">
 
         {/* BTC Price Card - Compact with animated price */}
-        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive animate-fade-in-up-1">
+        <div className="surface-elevated rounded-xl p-5 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive animate-fade-in-up-1">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-wide">Bitcoin Price</h3>
-            <div className="p-2 bg-warning-100 dark:bg-warning-900/30 rounded-xl">
+            <h3 className="text-[11px] font-semibold text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-[0.08em]">Bitcoin Price</h3>
+            <div className="p-2 bg-warning-100 dark:bg-warning-900/30 rounded-lg">
               <Bitcoin className="w-5 h-5 text-warning-600 dark:text-warning-400" />
             </div>
           </div>
@@ -202,9 +202,9 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Fee Estimation Card */}
-        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive animate-fade-in-up-2">
+        <div className="surface-elevated rounded-xl p-5 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive animate-fade-in-up-2">
           <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Fee Estimation</h4>
+            <h4 className="text-[11px] font-semibold text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-[0.08em]">Fee Estimation</h4>
             <Zap className="w-4 h-4 text-warning-500" />
           </div>
           <div className="space-y-2">
@@ -216,7 +216,7 @@ export const Dashboard: React.FC = () => {
               const typicalVb = 140;
               const estSats = tier.rate !== undefined ? Math.round(tier.rate * typicalVb) : undefined;
               return (
-                <div key={tier.label} className="relative group/fee flex justify-between items-center p-2.5 surface-secondary rounded-xl">
+                <div key={tier.label} className="relative group/fee flex justify-between items-center p-2.5 surface-secondary rounded-lg">
                   <div className="flex items-center">
                     <div className={`w-2 h-2 rounded-full ${tier.dot} mr-2`}></div>
                     <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">{tier.label}</span>
@@ -241,16 +241,16 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Node Status Card */}
-        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive animate-fade-in-up-3">
+        <div className="surface-elevated rounded-xl p-5 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 card-interactive animate-fade-in-up-3">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
-              <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Node Status</h4>
+              <h4 className="text-[11px] font-semibold text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-[0.08em]">Node Status</h4>
               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                 selectedNetwork === 'mainnet'
-                  ? 'bg-mainnet-800 dark:bg-mainnet-100 text-mainnet-200 dark:text-mainnet-800'
+                  ? 'bg-mainnet-500/8 dark:bg-mainnet-400/10 text-mainnet-600 dark:text-mainnet-400'
                   : selectedNetwork === 'testnet'
-                  ? 'bg-testnet-800 dark:bg-testnet-100 text-testnet-200 dark:text-testnet-800'
-                  : 'bg-signet-800 dark:bg-signet-100 text-signet-200 dark:text-signet-800'
+                  ? 'bg-testnet-500/8 dark:bg-testnet-400/10 text-testnet-600 dark:text-testnet-400'
+                  : 'bg-signet-500/8 dark:bg-signet-400/10 text-signet-600 dark:text-signet-400'
               }`}>
                 {selectedNetwork.toUpperCase()}
               </span>
@@ -264,7 +264,7 @@ export const Dashboard: React.FC = () => {
 
           {isMainnet ? (
             <div className="flex items-start">
-              <div className={`p-2.5 rounded-xl mr-3 transition-colors flex-shrink-0 ${
+              <div className={`p-2.5 rounded-lg mr-3 transition-colors flex-shrink-0 ${
                 nodeStatus === 'connected'
                   ? 'bg-success-100 text-success-600 dark:bg-success-900/30 dark:text-success-400'
                   : nodeStatus === 'error'
@@ -362,7 +362,7 @@ export const Dashboard: React.FC = () => {
             </div>
           ) : (
             <div className="flex items-start">
-              <div className="p-2.5 rounded-xl mr-3 bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-400 flex-shrink-0">
+              <div className="p-2.5 rounded-lg mr-3 bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-400 flex-shrink-0">
                 <Zap className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0">
@@ -383,7 +383,7 @@ export const Dashboard: React.FC = () => {
 
       {/* Welcome state or Balance/Wallets */}
       {filteredWallets.length === 0 ? (
-        <div className="animate-fade-in-up-5 surface-elevated rounded-2xl p-12 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 text-center relative overflow-hidden">
+        <div className="animate-fade-in-up-5 surface-elevated rounded-xl p-12 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 text-center relative overflow-hidden">
           {/* Ambient glow */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-primary-100/40 dark:bg-primary-900/15 blur-3xl pointer-events-none" />
           <div className="relative z-10">

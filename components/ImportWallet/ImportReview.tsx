@@ -39,7 +39,7 @@ export const ImportReview: React.FC<ImportReviewProps> = ({
         </div>
       )}
 
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden text-left">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden text-left">
         <div className="px-6 py-4 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <h3 className="text-lg font-medium">{walletName}</h3>
         </div>

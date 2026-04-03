@@ -37,7 +37,7 @@ export const BackupCompleteModal: React.FC<BackupCompleteModalProps> = ({
 }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 w-full max-w-lg mx-4 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 w-full max-w-lg mx-4 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800 bg-warning-50 dark:bg-warning-900/20">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-warning-100 dark:bg-warning-800/50 rounded-lg">

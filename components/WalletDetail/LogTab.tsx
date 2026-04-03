@@ -50,7 +50,7 @@ export const LogTab: React.FC<LogTabProps> = ({
   });
 
   return (
-    <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden animate-fade-in">
+    <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden animate-fade-in">
       {/* Log Controls */}
       <div className="px-4 py-3 surface-muted border-b border-sanctuary-200 dark:border-sanctuary-800 flex items-center justify-between">
         <div className="flex items-center space-x-2">

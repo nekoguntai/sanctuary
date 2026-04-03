@@ -261,7 +261,7 @@ function WizardContent({
       )}
 
       {/* Step Content */}
-      <div className="surface-elevated rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
         {renderStep()}
       </div>
     </div>

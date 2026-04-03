@@ -58,7 +58,7 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
 
       {/* Camera Scanner */}
       {qrMode === 'camera' && !scanned && (
-        <div className="surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700 overflow-hidden">
+        <div className="surface-muted rounded-lg border border-dashed border-sanctuary-300 dark:border-sanctuary-700 overflow-hidden">
           {/* Initial Camera State */}
           {!cameraActive && !cameraError && (
             <div className="text-center py-8">
@@ -146,7 +146,7 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
 
       {/* File Upload (alternative) */}
       {qrMode === 'file' && !scanned && (
-        <div className="text-center py-6 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+        <div className="text-center py-6 surface-muted rounded-lg border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
           {!scanning && (
             <>
               <FileJson className="w-12 h-12 mx-auto text-sanctuary-400 mb-3" />
@@ -177,7 +177,7 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
 
       {/* Success state */}
       {scanned && (
-        <div className="text-center py-6 surface-muted rounded-xl border border-sanctuary-300 dark:border-sanctuary-700">
+        <div className="text-center py-6 surface-muted rounded-lg border border-sanctuary-300 dark:border-sanctuary-700">
           <div className="flex flex-col items-center text-emerald-600 dark:text-emerald-400">
             <Check className="w-10 h-10 mb-2" />
             <p className="font-medium">QR Code Scanned Successfully</p>

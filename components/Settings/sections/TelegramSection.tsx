@@ -147,7 +147,7 @@ const TelegramSettings: React.FC = () => {
   const isConfigured = botToken && chatId;
 
   return (
-    <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+    <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
       <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
         <div className="flex items-center space-x-3">
           <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
@@ -192,7 +192,7 @@ const TelegramSettings: React.FC = () => {
               value={botToken}
               onChange={(e) => setBotToken(e.target.value)}
               placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-              className="w-full px-3 py-2 pr-12 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+              className="w-full px-3 py-2 pr-12 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
             />
             <button
               type="button"
@@ -216,7 +216,7 @@ const TelegramSettings: React.FC = () => {
               value={chatId}
               onChange={(e) => setChatId(e.target.value)}
               placeholder="123456789"
-              className="flex-1 px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+              className="flex-1 px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
             />
             <Button
               variant="secondary"

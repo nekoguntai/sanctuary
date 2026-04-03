@@ -84,7 +84,7 @@ export const DescriptorInput: React.FC<DescriptorInputProps> = ({
           />
           <label
             htmlFor="file-upload"
-            className="flex items-center justify-center gap-2 w-full px-4 py-3 border-2 border-dashed border-sanctuary-300 dark:border-sanctuary-700 rounded-xl cursor-pointer hover:border-primary-500 dark:hover:border-primary-500 bg-transparent hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors"
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 border border-dashed border-sanctuary-300 dark:border-sanctuary-700 rounded-lg cursor-pointer hover:border-primary-500 dark:hover:border-primary-500 bg-transparent hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors"
           >
             <Upload className="w-5 h-5 text-sanctuary-400" />
             <span className="text-sm text-sanctuary-500">
@@ -128,7 +128,7 @@ export const DescriptorInput: React.FC<DescriptorInputProps> = ({
             : '{\n  "type": "multi_sig",\n  "scriptType": "native_segwit",\n  "quorum": 2,\n  "devices": [...]\n}'}
           rows={10}
           maxLength={MAX_INPUT_SIZE}
-          className={`w-full px-4 py-3 rounded-xl border surface-elevated focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm ${
+          className={`w-full px-4 py-3 rounded-lg border surface-elevated focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm ${
             validationError
               ? 'border-red-500 dark:border-red-400'
               : 'border-sanctuary-300 dark:border-sanctuary-700'

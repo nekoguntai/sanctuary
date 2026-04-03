@@ -219,7 +219,7 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
         {/* Mode Selector */}
         <div>
           <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-3">Connection Mode</label>
-          <div className="flex gap-1 p-1 surface-secondary rounded-xl">
+          <div className="flex gap-1 p-1 surface-secondary rounded-lg">
             <button
               onClick={() => updateNetworkConfig('mode', 'singleton')}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${

@@ -179,7 +179,7 @@ export function OutputRow({
             value={output.address}
             onChange={(e) => onAddressChange(index, e.target.value)}
             disabled={disabled}
-            className={`block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors appearance-none pr-10 font-mono text-sm ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+            className={`block w-full px-4 py-3 rounded-md border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors appearance-none pr-10 font-mono text-sm ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
           >
             {/* Only show receive addresses (not change addresses) for consolidation */}
             {walletAddresses
@@ -205,7 +205,7 @@ export function OutputRow({
               onChange={(e) => onAddressChange(index, e.target.value)}
               disabled={disabled}
               placeholder="bc1q... or bitcoin:..."
-              className={`block w-full px-4 py-2.5 rounded-xl border ${getAddressBorderClass()} surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors text-sm ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+              className={`block w-full px-4 py-2.5 rounded-md border ${getAddressBorderClass()} surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors text-sm ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
             />
             {hasPayjoin ? (
               <Shield className="absolute right-4 top-3 w-4 h-4 text-zen-indigo" />
@@ -247,7 +247,7 @@ export function OutputRow({
 
       {/* QR Scanner */}
       {isScanningThis && (
-        <div className="surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700 overflow-hidden">
+        <div className="surface-muted rounded-lg border border-dashed border-sanctuary-300 dark:border-sanctuary-700 overflow-hidden">
           {/* Initial Camera State */}
           {!cameraActive && !cameraError && (
             <div className="text-center py-6">
@@ -340,7 +340,7 @@ export function OutputRow({
               placeholder="0"
               readOnly={output.sendMax || disabled}
               disabled={disabled}
-              className={`block w-full px-4 py-2.5 pr-20 rounded-xl border text-sm ${
+              className={`block w-full px-4 py-2.5 pr-20 rounded-md border text-sm ${
                 output.sendMax
                   ? 'border-primary-400 dark:border-primary-500 bg-primary-50/50 dark:bg-primary-900/10'
                   : 'border-sanctuary-300 dark:border-sanctuary-700'
@@ -364,7 +364,7 @@ export function OutputRow({
             <button
               type="button"
               onClick={() => onToggleSendMax(index)}
-              className={`px-3 py-2.5 text-xs font-medium rounded-xl border transition-colors ${
+              className={`px-3 py-2.5 text-xs font-medium rounded-lg border transition-colors ${
                 output.sendMax
                   ? 'bg-primary-500 dark:bg-sanctuary-600 text-white dark:text-sanctuary-100 border-primary-500 dark:border-sanctuary-500 hover:bg-primary-600 dark:hover:bg-sanctuary-500'
                   : 'border-sanctuary-300 dark:border-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800'

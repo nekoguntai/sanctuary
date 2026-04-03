@@ -42,7 +42,7 @@ export function UsbSigning({
   const hasQrDevice = devices.some(d => getDeviceCapabilities(d.type).methods.includes('qr'));
 
   return (
-    <div className="surface-secondary rounded-xl p-4 space-y-3">
+    <div className="surface-secondary rounded-lg p-4 space-y-3">
       <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
         Sign Transaction
       </h3>

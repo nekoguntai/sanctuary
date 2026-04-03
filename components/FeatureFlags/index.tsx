@@ -158,7 +158,7 @@ export function FeatureFlags() {
 
       {/* Flag Groups */}
       {Object.entries(grouped).map(([category, categoryFlags]) => (
-        <div key={category} className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+        <div key={category} className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
           <div className="p-4 border-b border-sanctuary-100 dark:border-sanctuary-800">
             <h3 className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">
               {CATEGORY_LABELS[category] || category}
@@ -228,7 +228,7 @@ export function FeatureFlags() {
       ))}
 
       {/* Audit Log Section */}
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <button
           onClick={handleToggleAuditLog}
           className="w-full p-4 flex items-center justify-between hover:bg-black/5 dark:hover:bg-white/5 transition-colors"

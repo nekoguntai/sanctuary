@@ -74,14 +74,14 @@ export const WalletGridView: React.FC<WalletGridViewProps> = ({
           <div
             key={wallet.id}
             onClick={() => navigate(`/wallets/${wallet.id}`)}
-            className={`group surface-elevated card-interactive rounded-2xl p-6 border cursor-pointer relative overflow-hidden ${
+            className={`group surface-elevated card-interactive rounded-xl p-6 border cursor-pointer relative overflow-hidden ${
               isMultisig
                 ? 'card-accent-warning border-sanctuary-200 dark:border-sanctuary-800 hover:border-warning-300 dark:hover:border-warning-600'
                 : 'card-accent-success border-sanctuary-200 dark:border-sanctuary-800 hover:border-success-300 dark:hover:border-success-600'
             }`}
           >
             <div className="flex justify-between items-start mb-6">
-              <div className={`p-3 rounded-xl ${iconColorClass}`}>
+              <div className={`p-3 rounded-lg ${iconColorClass}`}>
                 {getWalletIcon(walletTypeForIcon, "w-6 h-6")}
               </div>
               <div className="flex flex-col items-end space-y-1">

@@ -237,7 +237,7 @@ export const QRSigningModal: React.FC<QRSigningModalProps> = ({
       />
 
       {/* Modal */}
-      <div className="relative bg-white dark:bg-sanctuary-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+      <div className="relative bg-white dark:bg-sanctuary-800 rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-sanctuary-200 dark:border-sanctuary-700">
           <div className="flex items-center">
@@ -289,7 +289,7 @@ export const QRSigningModal: React.FC<QRSigningModalProps> = ({
                   resetScanner();
                   setStep('scan');
                 }}
-                className="mt-6 w-full flex items-center justify-center px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-xl font-medium transition-colors"
+                className="mt-6 w-full flex items-center justify-center px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
               >
                 <Check className="w-4 h-4 mr-2" />
                 I've Signed It
@@ -320,7 +320,7 @@ export const QRSigningModal: React.FC<QRSigningModalProps> = ({
 
               {/* Camera scanner */}
               {!cameraError ? (
-                <div className="relative w-full aspect-square max-w-[300px] rounded-xl overflow-hidden bg-black">
+                <div className="relative w-full aspect-square max-w-[300px] rounded-lg overflow-hidden bg-black">
                   <Scanner
                     onScan={handleQrScan}
                     onError={handleCameraError}

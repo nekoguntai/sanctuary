@@ -54,7 +54,7 @@ export const RestorePanel: React.FC<RestorePanelProps> = ({
 }) => {
   return (
     <>
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
             <div className="p-2 surface-secondary rounded-lg text-warning-600 dark:text-warning-500">
@@ -78,7 +78,7 @@ export const RestorePanel: React.FC<RestorePanelProps> = ({
           {!uploadedBackup ? (
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-sanctuary-300 dark:border-sanctuary-700 rounded-xl p-8 text-center cursor-pointer hover:border-primary-500 dark:hover:border-primary-500 transition-colors"
+              className="border border-dashed border-sanctuary-300 dark:border-sanctuary-700 rounded-lg p-8 text-center cursor-pointer hover:border-primary-500 dark:hover:border-primary-500 transition-colors"
             >
               <FileJson className="w-12 h-12 mx-auto text-sanctuary-400 mb-4" />
               <p className="text-sanctuary-600 dark:text-sanctuary-400 mb-2">
@@ -237,7 +237,7 @@ export const RestorePanel: React.FC<RestorePanelProps> = ({
       {/* Confirmation Modal */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 w-full max-w-md mx-4 overflow-hidden">
+          <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 w-full max-w-md mx-4 overflow-hidden">
             <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-rose-100 dark:bg-rose-900/30 rounded-lg">
@@ -267,7 +267,7 @@ export const RestorePanel: React.FC<RestorePanelProps> = ({
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
                 placeholder="Type RESTORE"
-                className="w-full px-3 py-2 rounded-lg surface-muted border border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                className="w-full px-3 py-2 rounded-md surface-muted border border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-rose-500"
                 autoFocus
               />
 

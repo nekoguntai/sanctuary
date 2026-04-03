@@ -35,7 +35,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="surface-elevated rounded-xl p-4 space-y-4">
+    <div className="surface-elevated rounded-lg p-4 space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <div>
           <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">
@@ -48,7 +48,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
               value={filterUsername}
               onChange={(e) => onUsernameChange(e.target.value)}
               placeholder="Filter by username..."
-              className="w-full pl-10 pr-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900 text-sanctuary-900 dark:text-sanctuary-100"
+              className="w-full pl-10 pr-3 py-2 rounded-md border border-sanctuary-200 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900 text-sanctuary-900 dark:text-sanctuary-100"
             />
           </div>
         </div>
@@ -59,7 +59,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           <select
             value={filterCategory}
             onChange={(e) => onCategoryChange(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900 text-sanctuary-900 dark:text-sanctuary-100"
+            className="w-full px-3 py-2 rounded-md border border-sanctuary-200 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900 text-sanctuary-900 dark:text-sanctuary-100"
           >
             <option value="">All categories</option>
             <option value="auth">Authentication</option>
@@ -81,7 +81,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
             value={filterAction}
             onChange={(e) => onActionChange(e.target.value)}
             placeholder="Filter by action..."
-            className="w-full px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900 text-sanctuary-900 dark:text-sanctuary-100"
+            className="w-full px-3 py-2 rounded-md border border-sanctuary-200 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900 text-sanctuary-900 dark:text-sanctuary-100"
           />
         </div>
         <div>
@@ -91,7 +91,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           <select
             value={filterSuccess}
             onChange={(e) => onSuccessChange(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900 text-sanctuary-900 dark:text-sanctuary-100"
+            className="w-full px-3 py-2 rounded-md border border-sanctuary-200 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900 text-sanctuary-900 dark:text-sanctuary-100"
           >
             <option value="">All</option>
             <option value="true">Success</option>

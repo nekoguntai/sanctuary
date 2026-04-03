@@ -123,7 +123,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary-500 border-t-transparent"></div>
+        <div className="animate-spin rounded-full h-6 w-6 border border-primary-500 border-t-transparent"></div>
       </div>
     );
   }
@@ -155,7 +155,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
 
       {/* Create/Edit Form */}
       {(isCreating || editingLabel) && (
-        <div className="p-4 surface-muted border border-sanctuary-200 dark:border-sanctuary-800 rounded-xl space-y-4">
+        <div className="p-4 surface-muted border border-sanctuary-200 dark:border-sanctuary-800 rounded-lg space-y-4">
           <h4 className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
             {editingLabel ? 'Edit Label' : 'Create New Label'}
           </h4>
@@ -170,7 +170,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
               placeholder="e.g., Exchange, Donation, Business"
-              className="w-full px-3 py-2 surface-elevated border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 surface-elevated border border-sanctuary-300 dark:border-sanctuary-700 rounded-md text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
               autoFocus
             />
           </div>
@@ -206,7 +206,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
               value={formDescription}
               onChange={(e) => setFormDescription(e.target.value)}
               placeholder="Optional description for this label"
-              className="w-full px-3 py-2 surface-elevated border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 surface-elevated border border-sanctuary-300 dark:border-sanctuary-700 rounded-md text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
 
@@ -232,7 +232,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
               className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 dark:bg-sanctuary-700 dark:hover:bg-sanctuary-600 dark:disabled:bg-sanctuary-800 dark:border dark:border-sanctuary-600 disabled:cursor-not-allowed text-white dark:text-sanctuary-100 rounded-lg text-sm font-medium transition-colors"
             >
               {saving ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                <div className="animate-spin rounded-full h-4 w-4 border border-white border-t-transparent" />
               ) : (
                 <Check className="w-4 h-4" />
               )}

@@ -60,7 +60,7 @@ export const DeviceModelSelector: React.FC<DeviceModelSelectorProps> = ({
   onClearFilters,
 }) => {
   return (
-    <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
+    <div className="surface-elevated p-6 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-medium text-sanctuary-500 uppercase">1. Select Your Device</h3>
         <span className="text-xs text-sanctuary-400">{models.length} devices</span>
@@ -74,7 +74,7 @@ export const DeviceModelSelector: React.FC<DeviceModelSelectorProps> = ({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search devices..."
-          className="w-full pl-10 pr-10 py-2.5 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500 placeholder-sanctuary-400"
+          className="w-full pl-10 pr-10 py-2.5 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500 placeholder-sanctuary-400"
         />
         {searchQuery && (
           <button
@@ -131,7 +131,7 @@ export const DeviceModelSelector: React.FC<DeviceModelSelectorProps> = ({
             <button
               key={model.id}
               onClick={() => onSelectModel(model)}
-              className={`p-3 rounded-xl border text-left text-sm transition-all flex flex-col items-center justify-center space-y-2 py-4 relative ${
+              className={`p-3 rounded-lg border text-left text-sm transition-all flex flex-col items-center justify-center space-y-2 py-4 relative ${
                 selectedModel?.id === model.id
                   ? 'border-sanctuary-800 bg-sanctuary-50 dark:border-sanctuary-200 dark:bg-sanctuary-800 ring-1 ring-sanctuary-500'
                   : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-400 dark:hover:border-sanctuary-500'

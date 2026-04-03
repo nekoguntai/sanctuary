@@ -53,7 +53,7 @@ export const AccessControlTab: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Registration Settings */}
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
             <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
@@ -131,7 +131,7 @@ export const AccessControlTab: React.FC = () => {
       </div>
 
       {/* Info Box */}
-      <div className="surface-secondary rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700">
+      <div className="surface-secondary rounded-lg p-4 border border-sanctuary-200 dark:border-sanctuary-700">
         <h4 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
           About User Management
         </h4>

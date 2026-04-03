@@ -25,11 +25,11 @@ export const DashboardSkeleton: React.FC = () => (
     </div>
 
     {/* Block visualizer */}
-    <div className="surface-elevated rounded-2xl p-4 border border-sanctuary-200 dark:border-sanctuary-800">
+    <div className="surface-elevated rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-800">
       <Skeleton className="h-4 w-48 mb-3" />
       <div className="flex gap-3 overflow-hidden">
         {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="w-28 h-32 flex-shrink-0 rounded-xl" />
+          <Skeleton key={i} className="w-28 h-32 flex-shrink-0 rounded-lg" />
         ))}
       </div>
     </div>
@@ -37,10 +37,10 @@ export const DashboardSkeleton: React.FC = () => (
     {/* Top Stats Row - 3 cards matching BTC Price / Fee / Node layout */}
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="surface-elevated rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+        <div key={i} className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
           <div className="flex justify-between mb-4">
             <Skeleton className="h-3 w-24" />
-            <Skeleton className="w-9 h-9 rounded-xl" />
+            <Skeleton className="w-9 h-9 rounded-lg" />
           </div>
           <Skeleton className="h-8 w-32 mb-3" />
           <div className="flex justify-between">
@@ -52,7 +52,7 @@ export const DashboardSkeleton: React.FC = () => (
     </div>
 
     {/* Balance chart card */}
-    <div className="surface-elevated rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+    <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
         <div>
           <Skeleton className="h-3 w-20 mb-2" />
@@ -68,7 +68,7 @@ export const DashboardSkeleton: React.FC = () => (
     </div>
 
     {/* Wallet summary */}
-    <div className="surface-elevated rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+    <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
       <Skeleton className="h-5 w-36 mb-6" />
       <Skeleton className="h-4 w-full rounded-full mb-8" />
       <div className="space-y-4">
@@ -88,7 +88,7 @@ export const DashboardSkeleton: React.FC = () => (
     </div>
 
     {/* Recent activity */}
-    <div className="surface-elevated rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+    <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
       <Skeleton className="h-5 w-32 mb-6" />
       <div className="space-y-3">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -112,7 +112,7 @@ export const DashboardSkeleton: React.FC = () => (
 export const WalletDetailSkeleton: React.FC = () => (
   <div className="space-y-6 animate-fade-in">
     {/* Header card */}
-    <div className="surface-elevated rounded-2xl p-4 border border-sanctuary-200 dark:border-sanctuary-800">
+    <div className="surface-elevated rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-800">
       <div className="flex flex-wrap gap-1.5 mb-3">
         <Skeleton className="h-5 w-20 rounded-full" />
         <Skeleton className="h-5 w-16 rounded-full" />
@@ -166,11 +166,11 @@ export const ListSkeleton: React.FC = () => (
       <Skeleton className="h-7 w-32" />
       <Skeleton className="h-9 w-28 rounded-lg" />
     </div>
-    <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+    <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
       {Array.from({ length: 5 }).map((_, i) => (
         <div key={i} className="flex items-center justify-between px-6 py-4 border-b border-sanctuary-100 dark:border-sanctuary-800 last:border-0">
           <div className="flex items-center gap-4">
-            <Skeleton className="w-10 h-10 rounded-xl" />
+            <Skeleton className="w-10 h-10 rounded-lg" />
             <div>
               <Skeleton className="h-4 w-36 mb-1.5" />
               <Skeleton className="h-3 w-52" />
@@ -187,7 +187,7 @@ export const ListSkeleton: React.FC = () => (
 export const SettingsSkeleton: React.FC = () => (
   <div className="space-y-6 animate-fade-in">
     <Skeleton className="h-7 w-24" />
-    <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+    <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
       <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
         <Skeleton className="h-5 w-40 mb-2" />
         <Skeleton className="h-3 w-64" />

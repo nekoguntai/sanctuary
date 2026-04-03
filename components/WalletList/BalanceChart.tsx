@@ -32,7 +32,7 @@ export const BalanceChart: React.FC<BalanceChartProps> = ({
   const { data: chartData } = useBalanceHistory(walletIds, totalBalance, timeframe);
 
   return (
-    <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+    <div className="surface-elevated rounded-xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
       <div className="flex flex-col md:flex-row gap-6">
         <div className="md:w-1/3 flex flex-col justify-between">
           <div>

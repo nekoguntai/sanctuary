@@ -112,7 +112,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   return (
     <div
       className={`
-        p-3 rounded-xl border transition-colors
+        p-3 rounded-lg border transition-colors
         ${colors.bg} ${colors.border}
         ${notification.actionUrl ? 'cursor-pointer hover:opacity-80' : ''}
       `}

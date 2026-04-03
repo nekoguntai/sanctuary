@@ -39,7 +39,7 @@ export const WalletHeader: React.FC<WalletHeaderProps> = ({
 }) => (
   <>
     {/* Header Card - Compact */}
-    <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 relative overflow-hidden">
+    <div className="surface-elevated rounded-xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 relative overflow-hidden">
       <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10 pointer-events-none">
         {getWalletIcon(wallet.type, "w-32 h-32 text-primary-500")}
       </div>
@@ -147,7 +147,7 @@ export const WalletHeader: React.FC<WalletHeaderProps> = ({
 
     {/* Initial Sync Banner - shown for newly imported wallets */}
     {!wallet.lastSyncedAt && (syncing || wallet.syncInProgress) && (
-      <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-primary-200 dark:border-primary-700 bg-primary-50 dark:bg-primary-950/30 animate-fade-in">
+      <div className="surface-elevated rounded-xl p-4 shadow-sm border border-primary-200 dark:border-primary-700 bg-primary-50 dark:bg-primary-950/30 animate-fade-in">
         <div className="flex items-center gap-3">
           <div className="flex-shrink-0">
             <RefreshCw className="w-6 h-6 text-primary-600 dark:text-primary-300 animate-spin" />
@@ -166,7 +166,7 @@ export const WalletHeader: React.FC<WalletHeaderProps> = ({
 
     {/* Never Synced Banner - shown when sync hasn't started */}
     {!wallet.lastSyncedAt && !syncing && !wallet.syncInProgress && wallet.lastSyncStatus !== 'retrying' && (
-      <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-warning-200 dark:border-warning-800 bg-warning-50 dark:bg-warning-950/30 animate-fade-in">
+      <div className="surface-elevated rounded-xl p-4 shadow-sm border border-warning-200 dark:border-warning-800 bg-warning-50 dark:bg-warning-950/30 animate-fade-in">
         <div className="flex items-center gap-3">
           <div className="flex-shrink-0">
             <AlertCircle className="w-6 h-6 text-warning-600 dark:text-warning-400" />

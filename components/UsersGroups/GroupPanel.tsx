@@ -33,7 +33,7 @@ export const GroupPanel: React.FC<GroupPanelProps> = ({
         <h3 className="text-lg font-medium">Groups</h3>
       </div>
 
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-4 surface-secondary border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex space-x-2">
             <input
@@ -41,7 +41,7 @@ export const GroupPanel: React.FC<GroupPanelProps> = ({
               value={newGroup}
               onChange={(e) => onNewGroupChange(e.target.value)}
               placeholder="New group name"
-              className="flex-1 px-3 py-2 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 surface-elevated focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+              className="flex-1 px-3 py-2 text-sm rounded-md border border-sanctuary-300 dark:border-sanctuary-700 surface-elevated focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
               onKeyDown={(e) => e.key === 'Enter' && onCreateGroup()}
             />
             <Button size="sm" onClick={onCreateGroup} disabled={!newGroup || isCreatingGroup} isLoading={isCreatingGroup}>

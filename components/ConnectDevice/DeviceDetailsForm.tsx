@@ -32,7 +32,7 @@ export const DeviceDetailsForm: React.FC<DeviceDetailsFormProps> = ({
 
   if (!selectedModel) {
     return (
-      <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 sticky top-4">
+      <div className="surface-elevated p-6 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 sticky top-4">
         <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-4">3. Device Details</h3>
         <div className="text-center py-8 text-sanctuary-400">
           <Lock className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -43,7 +43,7 @@ export const DeviceDetailsForm: React.FC<DeviceDetailsFormProps> = ({
   }
 
   return (
-    <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 sticky top-4">
+    <div className="surface-elevated p-6 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 sticky top-4">
       <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-4">3. Device Details</h3>
 
       <div className="space-y-4">
@@ -55,7 +55,7 @@ export const DeviceDetailsForm: React.FC<DeviceDetailsFormProps> = ({
             value={label}
             onChange={(e) => onFormDataChange({ label: e.target.value })}
             placeholder={`My ${selectedModel.name}`}
-            className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+            className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
           />
         </div>
 
@@ -68,7 +68,7 @@ export const DeviceDetailsForm: React.FC<DeviceDetailsFormProps> = ({
             onChange={(e) => onFormDataChange({ fingerprint: e.target.value })}
             placeholder="00000000"
             readOnly={method !== 'manual' && scanned}
-            className={`w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500 ${method !== 'manual' && scanned ? 'opacity-70' : ''}`}
+            className={`w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500 ${method !== 'manual' && scanned ? 'opacity-70' : ''}`}
           />
         </div>
 
@@ -141,7 +141,7 @@ export const DeviceDetailsForm: React.FC<DeviceDetailsFormProps> = ({
                 type="text"
                 value={derivationPath}
                 onChange={(e) => onFormDataChange({ derivationPath: e.target.value })}
-                className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
               />
               <p className="text-[10px] text-sanctuary-400 mt-1">BIP84 Native SegWit default</p>
             </div>
@@ -154,7 +154,7 @@ export const DeviceDetailsForm: React.FC<DeviceDetailsFormProps> = ({
                 placeholder="xpub... / ypub... / zpub..."
                 readOnly={method !== 'manual' && scanned}
                 rows={3}
-                className={`w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500 resize-none ${method !== 'manual' && scanned ? 'opacity-70' : ''}`}
+                className={`w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500 resize-none ${method !== 'manual' && scanned ? 'opacity-70' : ''}`}
               />
             </div>
           </>

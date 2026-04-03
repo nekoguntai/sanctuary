@@ -29,7 +29,7 @@ export const ServerForm: React.FC<ServerFormProps> = ({
   const isSubmitting = serverActionLoading === 'add' || (!!editingServerId && serverActionLoading === editingServerId);
 
   return (
-    <div className="mt-3 p-4 surface-muted rounded-xl space-y-3">
+    <div className="mt-3 p-4 surface-muted rounded-lg space-y-3">
     <div className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
       {editingServerId ? 'Edit Server' : 'Add New Server'}
     </div>
@@ -40,7 +40,7 @@ export const ServerForm: React.FC<ServerFormProps> = ({
           type="text"
           value={newServer.label}
           onChange={(e) => onSetNewServer({ ...newServer, label: e.target.value })}
-          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm"
+          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm"
           placeholder="My Server"
         />
       </div>
@@ -50,7 +50,7 @@ export const ServerForm: React.FC<ServerFormProps> = ({
           type="text"
           value={newServer.host}
           onChange={(e) => onSetNewServer({ ...newServer, host: e.target.value })}
-          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm"
+          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm"
           placeholder="electrum.example.com"
         />
       </div>
@@ -61,7 +61,7 @@ export const ServerForm: React.FC<ServerFormProps> = ({
             type="number"
             value={newServer.port}
             onChange={(e) => onSetNewServer({ ...newServer, port: parseInt(e.target.value, 10) || 50002 })}
-            className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm"
+            className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm"
           />
         </div>
         <div>

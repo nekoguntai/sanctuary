@@ -21,7 +21,7 @@ export const BackupCodesModal: React.FC<BackupCodesModalProps> = ({
 }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-md w-full max-h-[90vh] overflow-y-auto">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800 flex items-center justify-between">
           <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">
             {backupCodes.length > 0 ? 'New Backup Codes' : 'Regenerate Backup Codes'}
@@ -37,7 +37,7 @@ export const BackupCodesModal: React.FC<BackupCodesModalProps> = ({
         <div className="p-6 space-y-4">
           {backupCodes.length > 0 ? (
             <>
-              <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+              <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
                 <p className="text-sm text-amber-800 dark:text-amber-300">
                   <strong>Important:</strong> Save these new backup codes. Your old codes are now invalid!
                 </p>
@@ -65,7 +65,7 @@ export const BackupCodesModal: React.FC<BackupCodesModalProps> = ({
                   type="password"
                   value={disablePassword}
                   onChange={(e) => onDisablePasswordChange(e.target.value)}
-                  className="w-full px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
+                  className="w-full px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
                   placeholder="Enter your password"
                 />
               </div>
@@ -76,7 +76,7 @@ export const BackupCodesModal: React.FC<BackupCodesModalProps> = ({
                   type="text"
                   value={regenerateToken}
                   onChange={(e) => onRegenerateTokenChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="w-full px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-center tracking-widest font-mono text-sanctuary-900 dark:text-sanctuary-100"
+                  className="w-full px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-center tracking-widest font-mono text-sanctuary-900 dark:text-sanctuary-100"
                   placeholder="000000"
                   maxLength={6}
                 />

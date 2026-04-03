@@ -26,7 +26,7 @@ export const SingletonConfig: React.FC<SingletonConfigProps> = ({
   onUpdateConfig,
   onTestSingleton,
 }) => (
-  <div className="space-y-4 p-4 surface-muted rounded-xl">
+  <div className="space-y-4 p-4 surface-muted rounded-lg">
     <div className="grid grid-cols-2 gap-4">
       <div className="col-span-2 sm:col-span-1">
         <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Host</label>
@@ -34,7 +34,7 @@ export const SingletonConfig: React.FC<SingletonConfigProps> = ({
           type="text"
           value={singletonHost}
           onChange={(e) => onUpdateConfig('singletonHost', e.target.value)}
-          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm"
+          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm"
           placeholder="electrum.example.com"
         />
       </div>
@@ -44,7 +44,7 @@ export const SingletonConfig: React.FC<SingletonConfigProps> = ({
           type="number"
           value={singletonPort}
           onChange={(e) => onUpdateConfig('singletonPort', parseInt(e.target.value, 10) || 50002)}
-          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm"
+          className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sm"
         />
       </div>
     </div>

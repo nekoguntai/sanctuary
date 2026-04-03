@@ -32,7 +32,7 @@ export const DraftsTab: React.FC<DraftsTabProps> = ({
   onDraftsChange,
 }) => {
   return (
-    <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
+    <div className="surface-elevated rounded-xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
       <DraftList
         walletId={walletId}
         walletType={walletType}

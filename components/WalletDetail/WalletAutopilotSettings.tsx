@@ -120,7 +120,7 @@ export const WalletAutopilotSettings: React.FC<Props> = ({ walletId }) => {
 
   if (loading) {
     return (
-      <div className="surface-elevated rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
         <div className="animate-pulse flex space-x-4">
           <div className="h-5 w-5 bg-sanctuary-200 dark:bg-sanctuary-700 rounded"></div>
           <div className="flex-1 space-y-4 py-1">
@@ -134,7 +134,7 @@ export const WalletAutopilotSettings: React.FC<Props> = ({ walletId }) => {
 
   if (featureUnavailable) {
     return (
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
             <div className="p-2 surface-secondary rounded-lg text-sanctuary-400">
@@ -144,7 +144,7 @@ export const WalletAutopilotSettings: React.FC<Props> = ({ walletId }) => {
           </div>
         </div>
         <div className="p-6">
-          <div className="p-4 surface-secondary border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl">
+          <div className="p-4 surface-secondary border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg">
             <div className="flex items-start space-x-3">
               <AlertCircle className="w-5 h-5 text-sanctuary-400 mt-0.5 flex-shrink-0" />
               <div>
@@ -162,7 +162,7 @@ export const WalletAutopilotSettings: React.FC<Props> = ({ walletId }) => {
 
   return (
     <div className="space-y-4">
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
             <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
@@ -177,7 +177,7 @@ export const WalletAutopilotSettings: React.FC<Props> = ({ walletId }) => {
 
         <div className="p-6">
         {!notificationsAvailable ? (
-          <div className="p-4 bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800 rounded-xl">
+          <div className="p-4 bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800 rounded-lg">
             <div className="flex items-start space-x-3">
               <AlertCircle className="w-5 h-5 text-warning-600 dark:text-warning-400 mt-0.5 flex-shrink-0" />
               <div>
@@ -323,7 +323,7 @@ export const WalletAutopilotSettings: React.FC<Props> = ({ walletId }) => {
 
       {/* UTXO Health Status Card */}
       {notificationsAvailable && settings.enabled && status && (
-        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+        <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
           <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
             <div className="flex items-center space-x-3">
               <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
@@ -402,7 +402,7 @@ function NumberField({
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         disabled={disabled}
-        className="w-24 px-3 py-2 text-sm surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+        className="w-24 px-3 py-2 text-sm surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
       />
     </div>
   );

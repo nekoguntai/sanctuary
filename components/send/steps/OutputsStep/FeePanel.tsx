@@ -31,7 +31,7 @@ export const FeePanel: React.FC<FeePanelProps> = ({
   onSetFeeRate,
   format,
 }) => (
-  <div className="surface-secondary rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 overflow-hidden">
+  <div className="surface-secondary rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 overflow-hidden">
     <button
       onClick={onToggle}
       className="w-full px-4 py-3 flex items-center justify-between hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors"

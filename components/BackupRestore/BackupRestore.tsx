@@ -73,7 +73,7 @@ export const BackupRestore: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex space-x-1 surface-secondary rounded-xl p-1">
+      <div className="flex space-x-1 surface-secondary rounded-lg p-1">
         {BACKUP_TABS.map(tab => (
           <button
             key={tab.id}
@@ -142,7 +142,7 @@ export const BackupRestore: React.FC = () => {
       />
 
       {/* Info Box */}
-      <div className="surface-secondary rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700">
+      <div className="surface-secondary rounded-lg p-4 border border-sanctuary-200 dark:border-sanctuary-700">
         <h4 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
           {activeTab === 'backup' ? 'About Backups' : 'About Restore'}
         </h4>

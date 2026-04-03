@@ -20,7 +20,7 @@ export const FormatSelection: React.FC<FormatSelectionProps> = ({ format, setFor
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       <button
         onClick={() => setFormat('descriptor')}
-        className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center text-center space-y-4 ${
+        className={`p-6 rounded-xl border-2 transition-all flex flex-col items-center text-center space-y-4 ${
           format === 'descriptor'
             ? 'border-primary-600 bg-primary-50 dark:border-primary-400 dark:bg-primary-900/20'
             : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400'
@@ -43,7 +43,7 @@ export const FormatSelection: React.FC<FormatSelectionProps> = ({ format, setFor
 
       <button
         onClick={() => setFormat('json')}
-        className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center text-center space-y-4 ${
+        className={`p-6 rounded-xl border-2 transition-all flex flex-col items-center text-center space-y-4 ${
           format === 'json'
             ? 'border-primary-600 bg-primary-50 dark:border-primary-400 dark:bg-primary-900/20'
             : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400'
@@ -66,7 +66,7 @@ export const FormatSelection: React.FC<FormatSelectionProps> = ({ format, setFor
 
       <button
         onClick={() => setFormat('hardware')}
-        className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center text-center space-y-4 ${
+        className={`p-6 rounded-xl border-2 transition-all flex flex-col items-center text-center space-y-4 ${
           format === 'hardware'
             ? 'border-primary-600 bg-primary-50 dark:border-primary-400 dark:bg-primary-900/20'
             : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400'
@@ -89,7 +89,7 @@ export const FormatSelection: React.FC<FormatSelectionProps> = ({ format, setFor
 
       <button
         onClick={() => setFormat('qr_code')}
-        className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center text-center space-y-4 ${
+        className={`p-6 rounded-xl border-2 transition-all flex flex-col items-center text-center space-y-4 ${
           format === 'qr_code'
             ? 'border-primary-600 bg-primary-50 dark:border-primary-400 dark:bg-primary-900/20'
             : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400'

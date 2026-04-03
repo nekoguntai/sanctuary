@@ -303,7 +303,7 @@ export function PrivacyDetailPanel({ utxo, privacyInfo, onClose }: PrivacyDetail
       {/* Panel - bottom sheet on mobile, centered modal on desktop */}
       <div
         className={`w-full max-w-lg surface-elevated shadow-2xl border-sanctuary-200 dark:border-sanctuary-700 transform transition-all duration-200 ease-out
-          rounded-t-2xl border-t border-x md:rounded-2xl md:border md:mx-4
+          rounded-t-2xl border-t border-x md:rounded-xl md:border md:mx-4
           ${isVisible
             ? 'translate-y-0 md:translate-y-0 md:scale-100 md:opacity-100'
             : 'translate-y-full md:translate-y-0 md:scale-95 md:opacity-0'
@@ -342,7 +342,7 @@ export function PrivacyDetailPanel({ utxo, privacyInfo, onClose }: PrivacyDetail
         {/* Content */}
         <div className="px-6 py-4 overflow-y-auto" style={{ maxHeight: 'calc(85vh - 120px)' }}>
           {/* Score Display */}
-          <div className={`p-4 rounded-xl ${config.bg} ${config.border} border mb-6`}>
+          <div className={`p-4 rounded-lg ${config.bg} ${config.border} border mb-6`}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <span className={`text-4xl font-bold ${config.color}`}>
@@ -366,7 +366,7 @@ export function PrivacyDetailPanel({ utxo, privacyInfo, onClose }: PrivacyDetail
               <h4 className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-2">
                 Factors Affecting Score
               </h4>
-              <div className="surface-secondary rounded-xl p-4">
+              <div className="surface-secondary rounded-lg p-4">
                 {factors.map((factor, index) => (
                   <PrivacyFactorRow key={index} factor={factor} />
                 ))}
@@ -376,7 +376,7 @@ export function PrivacyDetailPanel({ utxo, privacyInfo, onClose }: PrivacyDetail
 
           {/* No factors - perfect score */}
           {factors.length === 0 && (
-            <div className="mb-4 p-4 rounded-xl bg-zen-matcha/10 border border-zen-matcha/20">
+            <div className="mb-4 p-4 rounded-lg bg-zen-matcha/10 border border-zen-matcha/20">
               <p className="text-sm text-zen-matcha">
                 No privacy concerns detected for this UTXO. It has no known linkages or patterns
                 that could reduce your privacy.

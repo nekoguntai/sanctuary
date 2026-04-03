@@ -30,7 +30,7 @@ export const WebSocketStatsCard: React.FC = () => {
 
   if (loading && !stats) {
     return (
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-6">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 p-6">
         <div className="animate-pulse space-y-4">
           <div className="h-6 bg-sanctuary-200 dark:bg-sanctuary-700 rounded w-1/3"></div>
           <div className="h-20 bg-sanctuary-200 dark:bg-sanctuary-700 rounded"></div>
@@ -41,7 +41,7 @@ export const WebSocketStatsCard: React.FC = () => {
 
   if (error) {
     return (
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-6">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 p-6">
         <div className="flex items-center space-x-2 text-rose-600 dark:text-rose-400">
           <AlertCircle className="w-5 h-5" />
           <span>{error}</span>
@@ -56,7 +56,7 @@ export const WebSocketStatsCard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
@@ -82,7 +82,7 @@ export const WebSocketStatsCard: React.FC = () => {
         <div className="p-6 space-y-6">
           {/* Connection Stats */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="surface-secondary rounded-xl p-4">
+            <div className="surface-secondary rounded-lg p-4">
               <div className="flex items-center space-x-2 mb-2">
                 <Users className="w-4 h-4 text-primary-500" />
                 <span className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">Connections</span>
@@ -101,7 +101,7 @@ export const WebSocketStatsCard: React.FC = () => {
               </div>
             </div>
 
-            <div className="surface-secondary rounded-xl p-4">
+            <div className="surface-secondary rounded-lg p-4">
               <div className="flex items-center space-x-2 mb-2">
                 <Layers className="w-4 h-4 text-primary-500" />
                 <span className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">Subscriptions</span>
@@ -116,7 +116,7 @@ export const WebSocketStatsCard: React.FC = () => {
           </div>
 
           {/* User Stats */}
-          <div className="flex items-center justify-between p-3 surface-secondary rounded-xl">
+          <div className="flex items-center justify-between p-3 surface-secondary rounded-lg">
             <span className="text-sm text-sanctuary-600 dark:text-sanctuary-400">Unique Users Connected</span>
             <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
               {stats.connections.uniqueUsers}

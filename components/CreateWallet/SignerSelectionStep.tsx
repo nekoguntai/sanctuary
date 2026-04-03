@@ -40,7 +40,7 @@ export const SignerSelectionStep: React.FC<SignerSelectionStepProps> = ({
 
         {/* Warning about incompatible devices */}
         {incompatibleDevices.length > 0 && (
-          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 flex items-start gap-3">
+          <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">
@@ -67,7 +67,7 @@ export const SignerSelectionStep: React.FC<SignerSelectionStepProps> = ({
                     <div
                         key={device.id}
                         onClick={() => toggleDevice(device.id)}
-                        className={`cursor-pointer p-4 rounded-xl border flex items-center justify-between transition-all ${isSelected ? 'border-sanctuary-800 bg-sanctuary-50 dark:border-sanctuary-200 dark:bg-sanctuary-800 ring-1 ring-sanctuary-500' : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400'}`}
+                        className={`cursor-pointer p-4 rounded-lg border flex items-center justify-between transition-all ${isSelected ? 'border-sanctuary-800 bg-sanctuary-50 dark:border-sanctuary-200 dark:bg-sanctuary-800 ring-1 ring-sanctuary-500' : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400'}`}
                     >
                         <div className="flex items-center space-x-3">
                             <div className="text-sanctuary-500">{getDeviceIcon(device.type, "w-6 h-6")}</div>
@@ -88,7 +88,7 @@ export const SignerSelectionStep: React.FC<SignerSelectionStepProps> = ({
              {/* Add New Device Option */}
              <button
                 onClick={() => navigate('/devices/connect')}
-                className="p-4 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700 flex items-center justify-center text-sanctuary-500 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors"
+                className="p-4 rounded-lg border border-dashed border-sanctuary-300 dark:border-sanctuary-700 flex items-center justify-center text-sanctuary-500 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors"
              >
                 <Plus className="w-5 h-5 mr-2" />
                 <span className="text-sm font-medium">Connect New Device</span>

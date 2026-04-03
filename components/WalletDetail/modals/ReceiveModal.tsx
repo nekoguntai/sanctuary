@@ -150,7 +150,7 @@ export const ReceiveModal: React.FC<ReceiveModalProps> = ({
       onClick={handleClose}
     >
       <div
-        className="surface-elevated rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-modal-enter"
+        className="surface-elevated rounded-xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-modal-enter"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-4">
@@ -167,7 +167,7 @@ export const ReceiveModal: React.FC<ReceiveModalProps> = ({
 
         {receiveAddress ? (
           <div className="flex flex-col items-center">
-            <div className="bg-white p-4 rounded-xl mb-4 shadow-sm">
+            <div className="bg-white p-4 rounded-lg mb-4 shadow-sm">
               {payjoinLoading ? (
                 <div className="w-[200px] h-[200px] flex items-center justify-center">
                   <RefreshCw className="w-8 h-8 animate-spin text-sanctuary-400" />
@@ -186,7 +186,7 @@ export const ReceiveModal: React.FC<ReceiveModalProps> = ({
                 <select
                   value={selectedReceiveAddress.id}
                   onChange={(e) => setSelectedReceiveAddressId(e.target.value || null)}
-                  className="w-full px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 surface-muted text-sm font-mono focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-3 py-2 rounded-md border border-sanctuary-200 dark:border-sanctuary-700 surface-muted text-sm font-mono focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
                   {unusedReceiveAddresses.map((addr) => (
                     <option key={addr.id} value={addr.id}>

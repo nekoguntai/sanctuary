@@ -18,7 +18,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, className = 
   if (accounts.length === 0) {
     return (
       <div
-        className={`surface-elevated rounded-xl p-8 text-center text-sanctuary-400 border border-dashed border-sanctuary-300 dark:border-sanctuary-700 ${className}`}
+        className={`surface-elevated rounded-lg p-8 text-center text-sanctuary-400 border border-dashed border-sanctuary-300 dark:border-sanctuary-700 ${className}`}
       >
         No accounts have been added to this device yet.
       </div>
@@ -32,7 +32,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, className = 
         return (
           <div
             key={account.id || idx}
-            className="surface-elevated rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-800"
+            className="surface-elevated rounded-lg p-4 border border-sanctuary-200 dark:border-sanctuary-800"
           >
             <div className="flex items-start justify-between mb-2">
               <div>

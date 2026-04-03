@@ -34,7 +34,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
       </div>
       <h2 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50">Review Wallet Details</h2>
 
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden text-left">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden text-left">
           <div className="px-6 py-4 border-b border-sanctuary-100 dark:border-sanctuary-800">
               <h3 className="text-lg font-medium">{walletName}</h3>
           </div>
@@ -48,10 +48,10 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                   <dd className="text-sm font-medium">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                           network === 'mainnet'
-                              ? 'bg-mainnet-800 text-mainnet-200 dark:bg-mainnet-100 dark:text-mainnet-800'
+                              ? 'bg-mainnet-100/50 dark:bg-mainnet-900/20 text-mainnet-700 dark:text-mainnet-300 border border-mainnet-200 dark:border-mainnet-700'
                               : network === 'testnet'
-                              ? 'bg-testnet-800 text-testnet-200 dark:bg-testnet-100 dark:text-testnet-800'
-                              : 'bg-signet-800 text-signet-200 dark:bg-signet-100 dark:text-signet-800'
+                              ? 'bg-testnet-100/50 dark:bg-testnet-900/20 text-testnet-700 dark:text-testnet-300 border border-testnet-200 dark:border-testnet-700'
+                              : 'bg-signet-100/50 dark:bg-signet-900/20 text-signet-700 dark:text-signet-300 border border-signet-200 dark:border-signet-700'
                       }`}>
                           {network.charAt(0).toUpperCase() + network.slice(1)}
                       </span>

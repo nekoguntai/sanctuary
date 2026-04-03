@@ -115,7 +115,7 @@ function OptionsContent({
               value={decoyCount}
               onChange={(e) => setDecoyCount(Number(e.target.value))}
               disabled={disabled}
-              className="text-sm px-2 py-1 rounded-lg border border-sanctuary-300 dark:border-sanctuary-600 surface-secondary text-sanctuary-900 dark:text-sanctuary-100"
+              className="text-sm px-2 py-1 rounded-md border border-sanctuary-300 dark:border-sanctuary-600 surface-secondary text-sanctuary-900 dark:text-sanctuary-100"
             >
               <option value={2}>2 outputs</option>
               <option value={3}>3 outputs</option>

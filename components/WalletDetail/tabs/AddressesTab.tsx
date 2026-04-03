@@ -246,7 +246,7 @@ export const AddressesTab: React.FC<AddressesTabProps> = ({
     <div className="space-y-4 animate-fade-in">
       {addressSummary && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-4">
+          <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 p-4">
             <p className="text-xs uppercase tracking-wide text-sanctuary-500">Total Addresses</p>
             <p className="text-2xl font-semibold text-sanctuary-900 dark:text-sanctuary-100 mt-1">
               {addressSummary.totalAddresses}
@@ -255,19 +255,19 @@ export const AddressesTab: React.FC<AddressesTabProps> = ({
               {addressSummary.usedCount} used · {addressSummary.unusedCount} unused
             </p>
           </div>
-          <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-4">
+          <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 p-4">
             <p className="text-xs uppercase tracking-wide text-sanctuary-500">Total Balance</p>
             <p className="text-2xl font-semibold text-sanctuary-900 dark:text-sanctuary-100 mt-1">
               {format(addressSummary.totalBalance)}
             </p>
           </div>
-          <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-4">
+          <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 p-4">
             <p className="text-xs uppercase tracking-wide text-sanctuary-500">Used Balance</p>
             <p className="text-2xl font-semibold text-sanctuary-900 dark:text-sanctuary-100 mt-1">
               {format(addressSummary.usedBalance)}
             </p>
           </div>
-          <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-4">
+          <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 p-4">
             <p className="text-xs uppercase tracking-wide text-sanctuary-500">Unused Balance</p>
             <p className="text-2xl font-semibold text-sanctuary-900 dark:text-sanctuary-100 mt-1">
               {format(addressSummary.unusedBalance)}
@@ -276,7 +276,7 @@ export const AddressesTab: React.FC<AddressesTabProps> = ({
         </div>
       )}
       {addresses.length === 0 ? (
-        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-12 text-center">
+        <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 p-12 text-center">
           <MapPin className="w-12 h-12 mx-auto text-sanctuary-300 dark:text-sanctuary-600 mb-4" />
           <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">No Addresses Available</h3>
           <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400 mb-4 max-w-md mx-auto">
@@ -291,7 +291,7 @@ export const AddressesTab: React.FC<AddressesTabProps> = ({
           )}
         </div>
       ) : (
-        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+        <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
           {/* Sub-tabs Header */}
           <div className="px-6 py-3 surface-muted border-b border-sanctuary-100 dark:border-sanctuary-800">
             <div className="flex items-center justify-between">

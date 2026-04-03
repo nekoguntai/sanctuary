@@ -145,9 +145,9 @@ describe('DeviceResolutionStep', () => {
   });
 
   it.each([
-    ['mainnet', 'Mainnet', 'border-mainnet-500'],
-    ['testnet', 'Testnet', 'border-testnet-500'],
-    ['regtest', 'Regtest', 'border-signet-500'],
+    ['mainnet', 'Mainnet', 'text-mainnet-700'],
+    ['testnet', 'Testnet', 'text-testnet-700'],
+    ['regtest', 'Regtest', 'text-signet-700'],
   ] as const)(
     'applies active network styling for %s',
     (network, buttonName, activeClass) => {

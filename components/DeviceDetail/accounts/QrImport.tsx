@@ -66,7 +66,7 @@ export const QrImport: React.FC<QrImportProps> = ({
 
       {/* Camera Scanner */}
       {qrMode === 'camera' && (
-        <div className="surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700 overflow-hidden">
+        <div className="surface-muted rounded-lg border border-dashed border-sanctuary-300 dark:border-sanctuary-700 overflow-hidden">
           {!cameraActive && !cameraError && (
             <div className="text-center py-6">
               <Camera className="w-10 h-10 mx-auto text-sanctuary-400 mb-3" />
@@ -145,7 +145,7 @@ export const QrImport: React.FC<QrImportProps> = ({
 
       {/* File upload alternative */}
       {qrMode === 'file' && (
-        <div className="text-center py-6 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+        <div className="text-center py-6 surface-muted rounded-lg border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
           {addAccountLoading ? (
             <div className="flex flex-col items-center">
               <Loader2 className="w-10 h-10 animate-spin text-sanctuary-500 mb-4" />

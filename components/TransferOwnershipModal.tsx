@@ -119,7 +119,7 @@ export const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-lg w-full shadow-2xl animate-modal-enter">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-lg w-full shadow-2xl animate-modal-enter">
         {/* Header */}
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center justify-between">
@@ -148,7 +148,7 @@ export const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
         {/* Content */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {/* Warning */}
-          <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl flex items-start">
+          <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start">
             <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 mr-3 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-amber-800 dark:text-amber-300">
               <p className="font-medium mb-1">3-Step Transfer Process</p>
@@ -163,7 +163,7 @@ export const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
 
           {/* Error Display */}
           {error && (
-            <div className="p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-700 dark:text-rose-300 text-sm animate-fade-in">
+            <div className="p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-lg text-rose-700 dark:text-rose-300 text-sm animate-fade-in">
               {error}
             </div>
           )}
@@ -175,7 +175,7 @@ export const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
             </label>
 
             {selectedUser ? (
-              <div className="flex items-center justify-between p-3 surface-secondary rounded-xl border border-sanctuary-200 dark:border-sanctuary-700">
+              <div className="flex items-center justify-between p-3 surface-secondary rounded-lg border border-sanctuary-200 dark:border-sanctuary-700">
                 <div className="flex items-center">
                   <div className="h-10 w-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-lg font-bold text-primary-600 dark:text-primary-400 mr-3">
                     {selectedUser.username.charAt(0).toUpperCase()}
@@ -203,17 +203,17 @@ export const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
                   placeholder="Search users by username..."
-                  className="w-full pl-10 pr-10 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
+                  className="w-full pl-10 pr-10 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
                 />
                 {searching && (
                   <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent" />
+                    <div className="animate-spin rounded-full h-4 w-4 border border-primary-500 border-t-transparent" />
                   </div>
                 )}
 
                 {/* Search Results */}
                 {searchResults.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                  <div className="absolute z-10 w-full mt-1 surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                     {searchResults.map((user) => (
                       <button
                         key={user.id}
@@ -231,7 +231,7 @@ export const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
                 )}
 
                 {searchQuery.length >= 2 && searchResults.length === 0 && !searching && (
-                  <div className="absolute z-10 w-full mt-1 surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl shadow-lg p-4 text-center text-sm text-sanctuary-500">
+                  <div className="absolute z-10 w-full mt-1 surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg shadow-lg p-4 text-center text-sm text-sanctuary-500">
                     No users found
                   </div>
                 )}
@@ -250,7 +250,7 @@ export const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
               placeholder="Add a note for the recipient..."
               rows={3}
               maxLength={500}
-              className="w-full px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100 resize-none"
+              className="w-full px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100 resize-none"
             />
             <p className="text-xs text-sanctuary-400 mt-1">{message.length}/500 characters</p>
           </div>

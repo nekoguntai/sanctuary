@@ -46,7 +46,7 @@ export const AddAccountFlow: React.FC<AddAccountFlowProps> = (props) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-md w-full shadow-xl">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-md w-full shadow-xl">
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-sanctuary-900 dark:text-sanctuary-50">
@@ -73,7 +73,7 @@ export const AddAccountFlow: React.FC<AddAccountFlowProps> = (props) => {
               {isSecureContext() && getDeviceTypeFromDeviceModel(device) && (
                 <button
                   onClick={() => setAddAccountMethod('usb')}
-                  className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors text-left"
+                  className="w-full flex items-center gap-3 p-4 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors text-left"
                 >
                   <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
                     <Usb className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -92,7 +92,7 @@ export const AddAccountFlow: React.FC<AddAccountFlowProps> = (props) => {
               {/* SD Card Option */}
               <button
                 onClick={() => { setAddAccountMethod('sdcard'); resetImportState(); }}
-                className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors text-left"
+                className="w-full flex items-center gap-3 p-4 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors text-left"
               >
                 <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
                   <HardDrive className="w-5 h-5 text-amber-600 dark:text-amber-400" />
@@ -110,7 +110,7 @@ export const AddAccountFlow: React.FC<AddAccountFlowProps> = (props) => {
               {/* QR Code Option */}
               <button
                 onClick={() => { setAddAccountMethod('qr'); resetImportState(); }}
-                className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors text-left"
+                className="w-full flex items-center gap-3 p-4 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors text-left"
               >
                 <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
                   <QrCode className="w-5 h-5 text-purple-600 dark:text-purple-400" />
@@ -128,7 +128,7 @@ export const AddAccountFlow: React.FC<AddAccountFlowProps> = (props) => {
               {/* Manual Option */}
               <button
                 onClick={() => setAddAccountMethod('manual')}
-                className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors text-left"
+                className="w-full flex items-center gap-3 p-4 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors text-left"
               >
                 <div className="p-2 rounded-lg bg-sanctuary-100 dark:bg-sanctuary-800">
                   <Edit2 className="w-5 h-5 text-sanctuary-600 dark:text-sanctuary-400" />

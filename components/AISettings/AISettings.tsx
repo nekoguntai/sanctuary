@@ -70,11 +70,11 @@ export default function AISettings() {
             <h2 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50">AI Assistant</h2>
             <p className="text-sanctuary-500">Configure AI-powered transaction labeling and natural language queries</p>
           </div>
-          <div className="p-3 surface-secondary rounded-xl">
+          <div className="p-3 surface-secondary rounded-lg">
             <Brain className="w-8 h-8 text-sanctuary-400" />
           </div>
         </div>
-        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-6">
+        <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 p-6">
           <div className="flex items-start space-x-3">
             <AlertCircle className="w-5 h-5 text-sanctuary-400 mt-0.5 flex-shrink-0" />
             <div>
@@ -108,13 +108,13 @@ export default function AISettings() {
             Configure AI-powered transaction labeling and natural language queries
           </p>
         </div>
-        <div className="p-3 surface-secondary rounded-xl">
+        <div className="p-3 surface-secondary rounded-lg">
           <Brain className="w-8 h-8 text-primary-600 dark:text-primary-400" />
         </div>
       </div>
 
       {/* Tab Navigation */}
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="flex border-b border-sanctuary-200 dark:border-sanctuary-700">
           {tabs.map((tab, index) => (
             <button
@@ -215,7 +215,7 @@ export default function AISettings() {
       </div>
 
       {/* AI Features Info - Always visible at bottom */}
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-4 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <h2 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">What AI Can Do</h2>
         </div>

@@ -11,7 +11,7 @@ const NotificationsTab: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Sub-tabs */}
-      <div className="flex space-x-1 surface-secondary rounded-xl p-1">
+      <div className="flex space-x-1 surface-secondary rounded-lg p-1">
         <button
           onClick={() => setActiveSubTab('sound')}
           className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${

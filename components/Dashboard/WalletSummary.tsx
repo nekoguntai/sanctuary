@@ -102,7 +102,7 @@ export const WalletSummary: React.FC<WalletSummaryProps> = ({
                       } ${isFirst ? 'rounded-l-full' : ''} ${isLast ? 'rounded-r-full' : ''}`}
                    />
                    {isHovered && (
-                      <div className={`tooltip-popup !opacity-100 !translate-y-0 bottom-full mb-2 ${positionClasses}`}>
+                      <div className={`tooltip-popup tooltip-visible bottom-full mb-2 ${positionClasses}`}>
                          {/* Arrow */}
                          <div className={`tooltip-arrow -bottom-1 border-b border-r ${arrowPositionClasses}`} />
                          {/* Content */}

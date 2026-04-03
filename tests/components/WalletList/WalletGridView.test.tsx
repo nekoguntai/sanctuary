@@ -178,6 +178,64 @@ describe('WalletGridView', () => {
     expect(screen.getByText('0 devices')).toBeInTheDocument();
   });
 
+  it('renders real sparkline when sparklineData is provided', () => {
+    const { container } = render(
+      <WalletGridView
+        wallets={[
+          {
+            id: 'w-spark',
+            name: 'Spark Wallet',
+            type: 'single_sig',
+            balance: 1000,
+            scriptType: 'native_segwit',
+            deviceCount: 1,
+            isShared: false,
+            lastSyncStatus: 'success',
+            syncInProgress: false,
+          } as any,
+        ]}
+        pendingByWallet={{}}
+        sparklineData={{ 'w-spark': [100, 200, 150, 300] }}
+      />
+    );
+
+    // Real sparkline renders two paths (area fill + stroke line)
+    const svg = container.querySelector('svg');
+    const paths = svg?.querySelectorAll('path');
+    expect(paths?.length).toBe(2);
+    // Area path should close with Z
+    expect(paths?.[0].getAttribute('d')).toContain('Z');
+    // Line path should have stroke but no fill
+    expect(paths?.[1].getAttribute('fill')).toBe('none');
+  });
+
+  it('falls back to decorative sparkline without sparklineData', () => {
+    const { container } = render(
+      <WalletGridView
+        wallets={[
+          {
+            id: 'w-deco',
+            name: 'Deco Wallet',
+            type: 'single_sig',
+            balance: 1000,
+            scriptType: 'native_segwit',
+            deviceCount: 1,
+            isShared: false,
+            lastSyncStatus: 'success',
+            syncInProgress: false,
+          } as any,
+        ]}
+        pendingByWallet={{}}
+      />
+    );
+
+    // Decorative sparkline renders a single path with Q/T curves
+    const svg = container.querySelector('svg');
+    const paths = svg?.querySelectorAll('path');
+    expect(paths?.length).toBe(1);
+    expect(paths?.[0].getAttribute('d')).toContain('Q');
+  });
+
   it('hides fiat values when disabled and when formatter returns empty output', () => {
     mockShowFiat = false;
     const { rerender } = render(

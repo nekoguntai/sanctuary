@@ -204,6 +204,13 @@ describe('ThemeRegistry', () => {
     expect(document.documentElement.style.getPropertyValue('--pattern-opacity')).toBe('1');
     registry.applyPatternOpacity(120);
     expect(document.documentElement.style.getPropertyValue('--pattern-opacity')).toBe('2');
+
+    registry.applyNoiseOpacity(-10);
+    expect(document.documentElement.style.getPropertyValue('--noise-opacity')).toBe('0');
+    registry.applyNoiseOpacity(50);
+    expect(document.documentElement.style.getPropertyValue('--noise-opacity')).toBe('1');
+    registry.applyNoiseOpacity(120);
+    expect(document.documentElement.style.getPropertyValue('--noise-opacity')).toBe('2');
   });
 
   it('exposes seasonal helper methods and clear()', () => {

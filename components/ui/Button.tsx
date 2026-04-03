@@ -18,8 +18,8 @@ export const Button: React.FC<ButtonProps> = ({
   const baseStyles = "inline-flex items-center justify-center rounded-lg transition-all duration-200 font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
   
   const variants = {
-    // Primary uses the 'primary' palette (variable driven) in Light Mode.
-    // In Dark Mode, we use a muted Sanctuary (Zinc) palette to match the Zen/Sanctuary aesthetic.
+    // Primary uses the 'primary' palette (variable driven) in both modes.
+    // In Dark Mode (inverted scale), primary-200 is a warm dark tone and primary-900 is near-white.
     primary: "bg-primary-800 text-white hover:bg-primary-700 dark:bg-primary-200 dark:text-primary-900 dark:hover:bg-primary-300 dark:border dark:border-primary-300/30 focus:ring-primary-500",
     
     // Secondary uses neutral Sanctuary palette but with Primary border/text on hover

@@ -45,12 +45,14 @@ export const NetworkTabs = ({
     if (!navRef.current) return;
     /* v8 ignore stop */
     const activeEl = navRef.current.querySelector('[data-active="true"]') as HTMLElement | null;
+    /* v8 ignore start -- offsetLeft/offsetWidth require layout engine; jsdom always returns null */
     if (activeEl) {
       setIndicator({
         left: activeEl.offsetLeft,
         width: activeEl.offsetWidth,
       });
     }
+    /* v8 ignore stop */
   }, []);
 
   useEffect(() => {

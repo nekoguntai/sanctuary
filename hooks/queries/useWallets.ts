@@ -194,6 +194,42 @@ export function useBalanceHistory(
 }
 
 /**
+ * Hook to fetch per-wallet balance sparkline data for grid cards
+ * Uses a single useQuery with Promise.all to batch all per-wallet requests
+ */
+export function useWalletSparklines(
+  wallets: Array<{ id: string; balance: number }>
+) {
+  const walletIdsKey = wallets.map(w => w.id).join(',');
+
+  const query = useQuery({
+    queryKey: ['walletSparklines', walletIdsKey],
+    queryFn: async () => {
+      if (wallets.length === 0) return {};
+      const results = await Promise.all(
+        wallets.map(w =>
+          transactionsApi.getBalanceHistory('1W', w.balance, [w.id])
+            .then(data => ({ id: w.id, data }))
+            .catch(() => ({ id: w.id, data: [] }))
+        )
+      );
+      const map: Record<string, number[]> = {};
+      for (const { id, data } of results) {
+        if (data.length >= 2) {
+          map[id] = data.map(d => d.value);
+        }
+      }
+      return map;
+    },
+    enabled: wallets.length > 0,
+    staleTime: 120000,
+    placeholderData: keepPreviousData,
+  });
+
+  return query.data ?? {};
+}
+
+/**
  * Hook to update a wallet
  * Uses manual mutation because it needs dynamic detail key invalidation based on walletId
  */

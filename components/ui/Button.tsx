@@ -20,7 +20,7 @@ export const Button: React.FC<ButtonProps> = ({
   const variants = {
     // Primary uses the 'primary' palette (variable driven) in Light Mode.
     // In Dark Mode, we use a muted Sanctuary (Zinc) palette to match the Zen/Sanctuary aesthetic.
-    primary: "bg-primary-800 text-white hover:bg-primary-700 dark:bg-sanctuary-800 dark:text-sanctuary-100 dark:hover:bg-sanctuary-700 dark:border dark:border-sanctuary-700 focus:ring-primary-500",
+    primary: "bg-primary-800 text-white hover:bg-primary-700 dark:bg-primary-200 dark:text-primary-900 dark:hover:bg-primary-300 dark:border dark:border-primary-300/30 focus:ring-primary-500",
     
     // Secondary uses neutral Sanctuary palette but with Primary border/text on hover
     secondary: "bg-white text-sanctuary-700 border border-sanctuary-200 hover:border-primary-300 hover:text-primary-700 dark:bg-sanctuary-900 dark:text-sanctuary-200 dark:border-sanctuary-700 dark:hover:border-primary-500 dark:hover:text-primary-300",

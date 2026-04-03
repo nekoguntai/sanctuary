@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { NetworkTabs } from '../NetworkTabs';
 import { TrendingUp, TrendingDown, Zap, CheckCircle2, XCircle, Bitcoin, Download, X } from 'lucide-react';
@@ -9,6 +9,31 @@ import { AnimatedPrice, PriceChart } from './PriceChart';
 import { WalletSummary } from './WalletSummary';
 import { RecentTransactions } from './RecentTransactions';
 import { SanctuarySpinner, SanctuaryLogo } from '../ui/CustomIcons';
+
+/** Flashes green/red when a fee rate value changes */
+const AnimatedFeeRate: React.FC<{ value: string }> = ({ value }) => {
+  const prevRef = useRef(value);
+  const [flash, setFlash] = useState<'up' | 'down' | null>(null);
+
+  useEffect(() => {
+    if (prevRef.current !== value && prevRef.current !== '---' && value !== '---') {
+      const prev = parseFloat(prevRef.current);
+      const curr = parseFloat(value);
+      if (!isNaN(prev) && !isNaN(curr) && prev !== curr) {
+        setFlash(curr > prev ? 'up' : 'down');
+        const timer = setTimeout(() => setFlash(null), 600);
+        return () => clearTimeout(timer);
+      }
+    }
+    prevRef.current = value;
+  }, [value]);
+
+  return (
+    <span className={`number-transition ${flash === 'up' ? 'number-transition-up' : flash === 'down' ? 'number-transition-down' : ''}`}>
+      {value} sat/vB
+    </span>
+  );
+};
 
 export const Dashboard: React.FC = () => {
   const {
@@ -229,20 +254,12 @@ export const Dashboard: React.FC = () => {
                     <div className={`w-2 h-2 rounded-full ${tier.dot} mr-2`}></div>
                     <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">{tier.label}</span>
                   </div>
-                  <span className="font-bold text-sm font-mono tabular-nums text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(tier.rate)} sat/vB</span>
+                  <span className="font-bold text-sm font-mono tabular-nums text-sanctuary-900 dark:text-sanctuary-100">
+                    <AnimatedFeeRate value={formatFeeRate(tier.rate)} />
+                  </span>
                   {/* Fee tooltip */}
-                  <div className={`
-                    absolute z-50 pointer-events-none
-                    text-[11px] font-medium px-3 py-2.5 rounded-lg
-                    bg-sanctuary-800 text-sanctuary-100 dark:bg-sanctuary-100 dark:text-sanctuary-900
-                    shadow-xl border border-sanctuary-700 dark:border-sanctuary-200
-                    whitespace-nowrap
-                    bottom-full left-1/2 -translate-x-1/2 mb-2
-                    opacity-0 group-hover/fee:opacity-100
-                    transition-all duration-200 delay-150
-                    group-hover/fee:translate-y-0 translate-y-1
-                  `}>
-                    <div className="absolute w-2 h-2 rotate-45 bg-sanctuary-800 dark:bg-sanctuary-100 border-sanctuary-700 dark:border-sanctuary-200 -bottom-1 left-1/2 -translate-x-1/2 border-b border-r" />
+                  <div className="tooltip-popup bottom-full left-1/2 -translate-x-1/2 mb-2">
+                    <div className="tooltip-arrow -bottom-1 left-1/2 -translate-x-1/2 border-b border-r" />
                     <div>{tier.time}</div>
                     {estSats !== undefined && (
                       <div className="text-sanctuary-400 dark:text-sanctuary-500 tabular-nums">
@@ -271,11 +288,11 @@ export const Dashboard: React.FC = () => {
                 {selectedNetwork.toUpperCase()}
               </span>
             </div>
-            {isMainnet && nodeStatus === 'connected' && <div className="h-2.5 w-2.5 rounded-full bg-success-500 animate-pulse"></div>}
-            {isMainnet && nodeStatus === 'error' && <div className="h-2.5 w-2.5 rounded-full bg-rose-500"></div>}
-            {isMainnet && nodeStatus === 'checking' && <div className="h-2.5 w-2.5 rounded-full bg-warning-500 animate-pulse"></div>}
-            {isMainnet && nodeStatus === 'unknown' && <div className="h-2.5 w-2.5 rounded-full bg-sanctuary-400"></div>}
-            {!isMainnet && <div className="h-2.5 w-2.5 rounded-full bg-sanctuary-400"></div>}
+            {isMainnet && nodeStatus === 'connected' && <div className="h-3 w-3 rounded-full bg-success-500 animate-connected-glow"></div>}
+            {isMainnet && nodeStatus === 'error' && <div className="h-3 w-3 rounded-full bg-rose-500"></div>}
+            {isMainnet && nodeStatus === 'checking' && <div className="h-3 w-3 rounded-full bg-warning-500 animate-checking-glow"></div>}
+            {isMainnet && nodeStatus === 'unknown' && <div className="h-3 w-3 rounded-full bg-sanctuary-400"></div>}
+            {!isMainnet && <div className="h-3 w-3 rounded-full bg-sanctuary-400"></div>}
           </div>
 
           {isMainnet ? (

@@ -21,19 +21,7 @@ interface WalletSummaryProps {
   totalBalance: number;
 }
 
-const tooltipBase = `
-  absolute z-50 pointer-events-none
-  text-[11px] font-medium px-3 py-2.5 rounded-lg
-  bg-sanctuary-800 text-sanctuary-100 dark:bg-sanctuary-100 dark:text-sanctuary-900
-  shadow-xl border border-sanctuary-700 dark:border-sanctuary-200
-  whitespace-nowrap
-`;
-
-const tooltipArrowBase = `
-  absolute w-2 h-2 rotate-45
-  bg-sanctuary-800 dark:bg-sanctuary-100
-  border-sanctuary-700 dark:border-sanctuary-200
-`;
+// Tooltip styles are now in index.html as .tooltip-popup and .tooltip-arrow
 
 function getSyncTooltipText(w: Wallet): string {
   if (w.syncInProgress) return 'Syncing in progress\u2026';
@@ -114,9 +102,9 @@ export const WalletSummary: React.FC<WalletSummaryProps> = ({
                       } ${isFirst ? 'rounded-l-full' : ''} ${isLast ? 'rounded-r-full' : ''}`}
                    />
                    {isHovered && (
-                      <div className={`${tooltipBase} bottom-full mb-2 ${positionClasses}`}>
+                      <div className={`tooltip-popup !opacity-100 !translate-y-0 bottom-full mb-2 ${positionClasses}`}>
                          {/* Arrow */}
-                         <div className={`${tooltipArrowBase} -bottom-1 border-b border-r ${arrowPositionClasses}`} />
+                         <div className={`tooltip-arrow -bottom-1 border-b border-r ${arrowPositionClasses}`} />
                          {/* Content */}
                          <div className="flex items-center gap-1.5 mb-1">
                             <div className={`w-2 h-2 rounded-full ${dotColor} shrink-0`} />
@@ -215,14 +203,8 @@ export const WalletSummary: React.FC<WalletSummaryProps> = ({
                                   </span>
                                )}
                                {/* Sync status tooltip */}
-                               <div className={`
-                                  ${tooltipBase}
-                                  bottom-full left-1/2 -translate-x-1/2 mb-2
-                                  opacity-0 group-hover/sync:opacity-100
-                                  transition-all duration-200 delay-150
-                                  group-hover/sync:translate-y-0 translate-y-1
-                               `}>
-                                  <div className={`${tooltipArrowBase} -bottom-1 left-1/2 -translate-x-1/2 border-b border-r`} />
+                               <div className="tooltip-popup bottom-full left-1/2 -translate-x-1/2 mb-2">
+                                  <div className="tooltip-arrow -bottom-1 left-1/2 -translate-x-1/2 border-b border-r" />
                                   {getSyncTooltipText(w)}
                                </div>
                             </div>

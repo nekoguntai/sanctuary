@@ -4,7 +4,7 @@ import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, Arrow
 import { Button } from '../ui/Button';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useUser } from '../../contexts/UserContext';
-import { useWallets, useInvalidateAllWallets, usePendingTransactions } from '../../hooks/queries/useWallets';
+import { useWallets, useInvalidateAllWallets, usePendingTransactions, useWalletSparklines } from '../../hooks/queries/useWallets';
 import { NetworkTabs, TabNetwork } from '../NetworkTabs';
 import { NetworkSyncActions } from '../NetworkSyncActions';
 import { ConfigurableTable } from '../ui/ConfigurableTable';
@@ -167,6 +167,9 @@ export const WalletList: React.FC = () => {
 
   // Fetch pending transactions for all filtered wallets
   const { data: pendingTransactions } = usePendingTransactions(walletIds);
+
+  // Fetch per-wallet sparkline data (real 1W balance history)
+  const sparklineData = useWalletSparklines(filteredWallets);
 
   // Calculate net pending balance per wallet (incoming - outgoing)
   const pendingByWallet = useMemo(() => {
@@ -352,6 +355,7 @@ export const WalletList: React.FC = () => {
         <WalletGridView
           wallets={sortedWallets}
           pendingByWallet={pendingByWallet}
+          sparklineData={sparklineData}
         />
       )}
 

@@ -312,6 +312,17 @@ class ThemeRegistry {
   }
 
   /**
+   * Apply noise overlay opacity to the document
+   * @param opacity - Noise opacity value (0 to 100, default 50)
+   */
+  applyNoiseOpacity(opacity: number): void {
+    const root = document.documentElement;
+    const clampedOpacity = Math.max(0, Math.min(100, opacity));
+    const multiplier = clampedOpacity / 50;
+    root.style.setProperty('--noise-opacity', String(multiplier));
+  }
+
+  /**
    * Inject pattern SVG styles into the document
    */
   private injectPatternStyles(patternId: string, pattern: BackgroundPattern): void {

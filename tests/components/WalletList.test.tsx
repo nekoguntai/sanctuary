@@ -36,6 +36,7 @@ vi.mock('../../hooks/queries/useWallets', () => ({
   useBalanceHistory: vi.fn(),
   useInvalidateAllWallets: vi.fn(),
   usePendingTransactions: vi.fn(),
+  useWalletSparklines: vi.fn().mockReturnValue({}),
 }));
 
 vi.mock('../../hooks/useDelayedRender', () => ({

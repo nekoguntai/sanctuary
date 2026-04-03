@@ -76,9 +76,9 @@ export const NetworkTabs = ({
                 {count}
               </span>
             </span>
-            {isSelected && (
-              <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 rounded-full ${config.activeBg} border-2 ${config.borderColor}`} />
-            )}
+            <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 rounded-full ${config.activeBg} border-2 ${config.borderColor} transition-all duration-200 ${
+              isSelected ? 'opacity-100 scale-100' : 'opacity-0 scale-0'
+            }`} />
           </button>
         );
       })}

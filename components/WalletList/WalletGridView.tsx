@@ -16,6 +16,29 @@ interface PendingData {
 interface WalletGridViewProps {
   wallets: Wallet[];
   pendingByWallet: Record<string, PendingData>;
+  sparklineData?: Record<string, number[]>;
+}
+
+/** Convert an array of balance values to an SVG path for a mini sparkline */
+function sparklinePath(values: number[]): string {
+  if (values.length < 2) return '';
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const stepX = 100 / (values.length - 1);
+  return values
+    .map((v, i) => {
+      const x = i * stepX;
+      const y = 28 - ((v - min) / range) * 24; // 2px top/bottom padding in 30h viewBox
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+}
+
+function sparklineAreaPath(values: number[]): string {
+  const line = sparklinePath(values);
+  if (!line) return '';
+  return `${line} L100,30 L0,30 Z`;
 }
 
 /**
@@ -25,6 +48,7 @@ interface WalletGridViewProps {
 export const WalletGridView: React.FC<WalletGridViewProps> = ({
   wallets,
   pendingByWallet,
+  sparklineData = {},
 }) => {
   const navigate = useNavigate();
   const { format, formatFiat, showFiat } = useCurrency();
@@ -122,7 +146,7 @@ export const WalletGridView: React.FC<WalletGridViewProps> = ({
               )}
             </div>
 
-            {/* Mini sparkline decoration — visual rhythm element */}
+            {/* Mini sparkline — real 1W balance history when available, decorative fallback */}
             <div className="h-8 w-full mt-2 opacity-30 overflow-hidden">
               <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="w-full h-full">
                 <defs>
@@ -131,13 +155,30 @@ export const WalletGridView: React.FC<WalletGridViewProps> = ({
                     <stop offset="100%" stopColor={isMultisig ? 'var(--color-warning-500)' : 'var(--color-success-500)'} stopOpacity="0" />
                   </linearGradient>
                 </defs>
-                <path
-                  d={`M0,20 Q10,${15 + (wallet.balance % 7)} 20,${18 - (wallet.balance % 5)} T40,${14 + (wallet.balance % 8)} T60,${10 + (wallet.balance % 6)} T80,${16 - (wallet.balance % 4)} T100,${12 + (wallet.balance % 5)}`}
-                  fill={`url(#spark-${wallet.id})`}
-                  stroke={isMultisig ? 'var(--color-warning-500)' : 'var(--color-success-500)'}
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
+                {sparklineData[wallet.id] ? (
+                  <>
+                    <path
+                      d={sparklineAreaPath(sparklineData[wallet.id])}
+                      fill={`url(#spark-${wallet.id})`}
+                    />
+                    <path
+                      d={sparklinePath(sparklineData[wallet.id])}
+                      fill="none"
+                      stroke={isMultisig ? 'var(--color-warning-500)' : 'var(--color-success-500)'}
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </>
+                ) : (
+                  <path
+                    d={`M0,20 Q10,${15 + (wallet.balance % 7)} 20,${18 - (wallet.balance % 5)} T40,${14 + (wallet.balance % 8)} T60,${10 + (wallet.balance % 6)} T80,${16 - (wallet.balance % 4)} T100,${12 + (wallet.balance % 5)}`}
+                    fill={`url(#spark-${wallet.id})`}
+                    stroke={isMultisig ? 'var(--color-warning-500)' : 'var(--color-success-500)'}
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                )}
               </svg>
             </div>
 

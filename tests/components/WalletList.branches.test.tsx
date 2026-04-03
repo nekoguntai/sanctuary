@@ -33,6 +33,7 @@ vi.mock('../../hooks/queries/useWallets', () => ({
   useWallets: vi.fn(),
   useInvalidateAllWallets: vi.fn(),
   usePendingTransactions: vi.fn(),
+  useWalletSparklines: vi.fn().mockReturnValue({}),
 }));
 
 vi.mock('../../components/NetworkTabs', () => ({

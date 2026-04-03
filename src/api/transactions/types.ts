@@ -21,6 +21,8 @@ export interface GetTransactionsParams {
 
 export interface GetAddressesParams {
   used?: boolean;
+  /** Filter by address type: false = receive only, true = change only, omit = all */
+  change?: boolean;
   limit?: number;
   offset?: number;
 }

@@ -339,22 +339,6 @@ describe('Dashboard render branches', () => {
     expect(feeLabels).toHaveLength(3);
   });
 
-  it('renders high mempool pressure when fees are high', () => {
-    mocks.dashboardData = makeDashboardState({
-      fees: { fast: 150, medium: 80, slow: 30 },
-    });
-    render(<Dashboard />);
-    expect(screen.getByText('High fees')).toBeInTheDocument();
-  });
-
-  it('renders moderate mempool pressure when fees are moderate', () => {
-    mocks.dashboardData = makeDashboardState({
-      fees: { fast: 50, medium: 25, slow: 10 },
-    });
-    render(<Dashboard />);
-    expect(screen.getByText('Moderate fees')).toBeInTheDocument();
-  });
-
   it('renders welcome state when no wallets exist', () => {
     mocks.dashboardData = makeDashboardState({
       filteredWallets: [],

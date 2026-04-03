@@ -529,19 +529,20 @@ describe('WalletDetail wrapper behaviors', () => {
     await user.click(screen.getByRole('button', { name: 'header-receive' }));
     expect(screen.getByTestId('receive-modal')).toBeInTheDocument();
 
-    // Exercise onFetchUnusedAddresses early-return branch (unused addresses found)
+    // Exercise onFetchUnusedAddresses early-return branch (unused receive addresses found)
     vi.mocked(transactionsApi.getAddresses).mockResolvedValueOnce([
       { id: 'a1', address: 'bc1qtest', isChange: false, used: false, index: 0, derivationPath: "m/84'/0'/0'/0/0", balance: 0 },
     ] as any);
     await user.click(screen.getByRole('button', { name: 'receive-fetch-unused' }));
     await waitFor(() => {
-      expect(transactionsApi.getAddresses).toHaveBeenCalledWith('wallet-1', { used: false, limit: 10 });
+      // Must filter server-side by change=false to avoid change addresses filling the limit
+      expect(transactionsApi.getAddresses).toHaveBeenCalledWith('wallet-1', { used: false, change: false, limit: 10 });
     });
     // Exercise fallthrough branch (no unused found → generate → re-fetch with results)
     vi.mocked(transactionsApi.getAddresses)
       .mockResolvedValueOnce([]) // first fetch: nothing unused
-      .mockResolvedValueOnce([   // re-fetch after generate: fresh address
-        { id: 'a2', address: 'bc1qfresh', isChange: false, used: false, index: 20, derivationPath: "m/84'/0'/0'/0/20", balance: 0 },
+      .mockResolvedValueOnce([   // re-fetch after generate: fresh receive address
+        { id: 'a2', address: 'bc1qfresh', isChange: false, used: false, index: 54, derivationPath: "m/84'/0'/0'/0/54", balance: 0 },
       ] as any);
     await user.click(screen.getByRole('button', { name: 'receive-fetch-unused' }));
     await waitFor(() => {

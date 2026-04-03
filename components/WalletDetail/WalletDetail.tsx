@@ -258,12 +258,12 @@ export const WalletDetail: React.FC = () => {
 
   // Fetch unused receive addresses for ReceiveModal (handles address exhaustion at any index)
   const handleFetchUnusedAddresses = useCallback(async (wId: string) => {
-    const unused = await transactionsApi.getAddresses(wId, { used: false, limit: 10 });
-    const unusedReceive = unused.filter((a) => !a.isChange);
+    // Filter server-side by change=false to avoid unused change addresses filling the limit
+    const unusedReceive = await transactionsApi.getAddresses(wId, { used: false, change: false, limit: 10 });
     if (unusedReceive.length > 0) return unusedReceive;
     await transactionsApi.generateAddresses(wId, 10);
-    const fresh = await transactionsApi.getAddresses(wId, { used: false, limit: 10 });
-    return fresh.filter((a) => !a.isChange);
+    const fresh = await transactionsApi.getAddresses(wId, { used: false, change: false, limit: 10 });
+    return fresh;
   }, []);
 
   // Drafts change handler with app notifications

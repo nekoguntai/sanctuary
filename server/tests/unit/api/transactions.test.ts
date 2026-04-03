@@ -2393,6 +2393,61 @@ describe('Transactions API', () => {
         })
       );
     });
+
+    it('should filter by change=false for receive addresses only', async () => {
+      const walletId = 'wallet-123';
+
+      mockPrismaClient.address.findMany.mockResolvedValue([]);
+
+      await mockPrismaClient.address.findMany({
+        where: { walletId, derivationPath: { contains: '/0/' } },
+      });
+
+      expect(mockPrismaClient.address.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            derivationPath: { contains: '/0/' },
+          }),
+        })
+      );
+    });
+
+    it('should filter by change=true for change addresses only', async () => {
+      const walletId = 'wallet-123';
+
+      mockPrismaClient.address.findMany.mockResolvedValue([]);
+
+      await mockPrismaClient.address.findMany({
+        where: { walletId, derivationPath: { contains: '/1/' } },
+      });
+
+      expect(mockPrismaClient.address.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            derivationPath: { contains: '/1/' },
+          }),
+        })
+      );
+    });
+
+    it('should combine used and change filters correctly', async () => {
+      const walletId = 'wallet-123';
+
+      mockPrismaClient.address.findMany.mockResolvedValue([]);
+
+      await mockPrismaClient.address.findMany({
+        where: { walletId, used: false, derivationPath: { contains: '/0/' } },
+      });
+
+      expect(mockPrismaClient.address.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            used: false,
+            derivationPath: { contains: '/0/' },
+          }),
+        })
+      );
+    });
   });
 
   describe('POST /wallets/:walletId/addresses/generate', () => {

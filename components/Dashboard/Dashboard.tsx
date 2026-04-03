@@ -80,41 +80,8 @@ export const Dashboard: React.FC = () => {
     );
   }
 
-  // Mempool pressure: derive from fee rates
-  const mempoolPressure = (() => {
-    if (!fees?.fast) return 'low';
-    if (fees.fast > 100) return 'high';
-    if (fees.fast > 30) return 'moderate';
-    return 'low';
-  })();
-  const pressureColors = {
-    low: 'bg-success-500',
-    moderate: 'bg-warning-500',
-    high: 'bg-rose-500',
-  };
-  const pressureWidths = {
-    low: 'w-1/4',
-    moderate: 'w-1/2',
-    high: 'w-3/4',
-  };
-  const pressureLabels = {
-    low: 'Low fees',
-    moderate: 'Moderate fees',
-    high: 'High fees',
-  };
-
   return (
     <div className="space-y-6 animate-fade-in pb-12">
-
-      {/* Mempool Pressure Indicator */}
-      {isMainnet && fees && (
-        <div className="flex items-center gap-3 px-1 animate-fade-in-up-1">
-          <span className="text-[10px] uppercase tracking-wider font-medium text-sanctuary-400">{pressureLabels[mempoolPressure]}</span>
-          <div className="flex-1 h-1 rounded-full bg-sanctuary-100 dark:bg-sanctuary-800 overflow-hidden">
-            <div className={`h-full rounded-full ${pressureColors[mempoolPressure]} ${pressureWidths[mempoolPressure]} transition-all duration-1000 ease-out`} />
-          </div>
-        </div>
-      )}
 
       {/* Update Available Banner */}
       {versionInfo?.updateAvailable && !updateDismissed && (

@@ -24,7 +24,7 @@ const log = createLogger('ADDRESS:ROUTE');
  */
 router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.walletId!;
-  const { used } = req.query;
+  const { used, change } = req.query;
   const hasPagination = req.query.limit !== undefined || req.query.offset !== undefined;
   const DEFAULT_UNPAGED_LIMIT = 1000;
   const { limit, offset } = validatePagination(
@@ -45,11 +45,20 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), asyncHan
     throw new NotFoundError('Wallet not found');
   }
 
+  // Build derivation path filter for change/receive filtering.
+  // BIP-44/48/84 paths end with /<change>/<index> where change is 0 (receive) or 1 (change).
+  // The `contains` match is safe because coin-type segments use apostrophes (/1'/) which
+  // don't match the bare /1/ pattern.
+  const changeFilter = change !== undefined
+    ? { derivationPath: { contains: change === 'true' ? '/1/' : '/0/' } }
+    : {};
+
   // Check if addresses exist
   let addresses = await prisma.address.findMany({
     where: {
       walletId,
       ...(used !== undefined && { used: used === 'true' }),
+      ...changeFilter,
     },
     include: {
       addressLabels: {

@@ -393,10 +393,10 @@ describe('AI Internal Intelligence Endpoints', () => {
 
       // Mock the 4 transaction.aggregate calls (24h, 7d, 30d, 90d)
       mockTxAggregate
-        .mockResolvedValueOnce({ _count: { id: 2 }, _sum: { amount: -50000 } } as any) // 24h
-        .mockResolvedValueOnce({ _count: { id: 10 }, _sum: { amount: -300000 } } as any) // 7d
-        .mockResolvedValueOnce({ _count: { id: 30 }, _sum: { amount: -1000000 } } as any) // 30d
-        .mockResolvedValueOnce({ _count: { id: 90 }, _sum: { amount: -9000000 } } as any); // 90d
+        .mockResolvedValueOnce({ _count: { _all: 2 }, _sum: { amount: -50000 } } as any) // 24h
+        .mockResolvedValueOnce({ _count: { _all: 10 }, _sum: { amount: -300000 } } as any) // 7d
+        .mockResolvedValueOnce({ _count: { _all: 30 }, _sum: { amount: -1000000 } } as any) // 30d
+        .mockResolvedValueOnce({ _count: { _all: 90 }, _sum: { amount: -9000000 } } as any); // 90d
 
       const req = createMockRequest({
         user: { userId: 'test-user-123', username: 'testuser', isAdmin: false },
@@ -435,10 +435,10 @@ describe('AI Internal Intelligence Endpoints', () => {
       mockWalletFindFirst.mockResolvedValueOnce({ id: 'wallet-1' } as any);
 
       mockTxAggregate
-        .mockResolvedValueOnce({ _count: { id: 0 }, _sum: { amount: null } } as any)
-        .mockResolvedValueOnce({ _count: { id: 0 }, _sum: { amount: null } } as any)
-        .mockResolvedValueOnce({ _count: { id: 0 }, _sum: { amount: null } } as any)
-        .mockResolvedValueOnce({ _count: { id: 0 }, _sum: { amount: null } } as any);
+        .mockResolvedValueOnce({ _count: { _all: 0 }, _sum: { amount: null } } as any)
+        .mockResolvedValueOnce({ _count: { _all: 0 }, _sum: { amount: null } } as any)
+        .mockResolvedValueOnce({ _count: { _all: 0 }, _sum: { amount: null } } as any)
+        .mockResolvedValueOnce({ _count: { _all: 0 }, _sum: { amount: null } } as any);
 
       const req = createMockRequest({
         user: { userId: 'test-user-123', username: 'testuser', isAdmin: false },

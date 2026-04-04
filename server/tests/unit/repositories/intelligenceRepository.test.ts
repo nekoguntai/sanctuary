@@ -555,7 +555,7 @@ describe('Intelligence Repository', () => {
   describe('getTransactionVelocity', () => {
     it('should return transaction velocity grouped by type', async () => {
       (prisma.transaction.groupBy as Mock).mockResolvedValue([
-        { type: 'sent', _count: { id: 15 }, _sum: { amount: BigInt(500000) } },
+        { type: 'sent', _count: { _all: 15 }, _sum: { amount: BigInt(500000) } },
       ]);
 
       const result = await intelligenceRepository.getTransactionVelocity('wallet-1', 30);
@@ -567,17 +567,17 @@ describe('Intelligence Repository', () => {
         by: ['type'],
         where: {
           walletId: 'wallet-1',
-          date: { gte: expect.any(Date) },
+          blockTime: { gte: expect.any(Date) },
           type: 'sent',
         },
-        _count: { id: true },
+        _count: { _all: true },
         _sum: { amount: true },
       });
     });
 
     it('should return zero totalSats when _sum.amount is null', async () => {
       (prisma.transaction.groupBy as Mock).mockResolvedValue([
-        { type: 'sent', _count: { id: 0 }, _sum: { amount: null } },
+        { type: 'sent', _count: { _all: 0 }, _sum: { amount: null } },
       ]);
 
       const result = await intelligenceRepository.getTransactionVelocity('wallet-1', 7);
@@ -626,8 +626,8 @@ describe('Intelligence Repository', () => {
 
     it('should return zero totalSats when _sum.amount is null', async () => {
       (prisma.uTXO.aggregate as Mock)
-        .mockResolvedValueOnce({ _count: { id: 0 }, _sum: { amount: null } })
-        .mockResolvedValueOnce({ _count: { id: 0 }, _sum: { amount: null } });
+        .mockResolvedValueOnce({ _count: { _all: 0 }, _sum: { amount: null } })
+        .mockResolvedValueOnce({ _count: { _all: 0 }, _sum: { amount: null } });
 
       const result = await intelligenceRepository.getUtxoAgeDistribution('wallet-1');
 

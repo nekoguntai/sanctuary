@@ -97,4 +97,48 @@ describe('deadLetterQueue collector', () => {
     await getCollector()(makeContext());
     expect(mockGetAll).toHaveBeenCalledWith(50);
   });
+
+  it('skips anonymization when walletId/userId are not strings', async () => {
+    mockGetAll.mockReturnValue([{
+      id: 'dlq-3',
+      category: 'sync',
+      operation: 'wallet_sync',
+      payload: { walletId: 12345, userId: null, extra: 'data' },
+      error: 'Timeout',
+      attempts: 1,
+      firstFailedAt: new Date('2026-04-01'),
+      lastFailedAt: new Date('2026-04-02'),
+    }]);
+
+    const result = await getCollector()(makeContext());
+    const entries = result.recentEntries as any[];
+    expect(entries).toHaveLength(1);
+
+    // Non-string walletId/userId should pass through without anonymization
+    expect(entries[0].payload.walletId).toBe(12345);
+    expect(entries[0].payload.userId).toBeNull();
+    expect(entries[0].payload.extra).toBe('data');
+  });
+
+  it('skips anonymization when walletId/userId are missing from payload', async () => {
+    mockGetAll.mockReturnValue([{
+      id: 'dlq-4',
+      category: 'push',
+      operation: 'send_push',
+      payload: { message: 'hello' },
+      error: 'Failed',
+      attempts: 2,
+      firstFailedAt: new Date('2026-04-01'),
+      lastFailedAt: new Date('2026-04-02'),
+    }]);
+
+    const result = await getCollector()(makeContext());
+    const entries = result.recentEntries as any[];
+    expect(entries).toHaveLength(1);
+
+    // Missing walletId/userId should not appear in output
+    expect(entries[0].payload.walletId).toBeUndefined();
+    expect(entries[0].payload.userId).toBeUndefined();
+    expect(entries[0].payload.message).toBe('hello');
+  });
 });

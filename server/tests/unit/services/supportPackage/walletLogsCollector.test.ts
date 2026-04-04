@@ -83,4 +83,43 @@ describe('walletLogs collector', () => {
     expect(logEntry.message).not.toContain(realWalletId);
     expect(logEntry.message).toContain(keys[0]);
   });
+
+  it('handles entries with non-string message field', async () => {
+    const realWalletId = 'wallet-uuid-no-msg';
+    const entries = [
+      {
+        id: 'log-2',
+        timestamp: '2026-04-04T11:00:00Z',
+        level: 'warn',
+        module: 'SYNC',
+        details: { code: 'ERR_TIMEOUT' },
+        // no message field at all
+      },
+      {
+        id: 'log-3',
+        timestamp: '2026-04-04T11:01:00Z',
+        level: 'error',
+        module: 'SYNC',
+        message: 42, // non-string message
+        details: {},
+      },
+    ];
+
+    mockGetStats.mockReturnValue({ walletCount: 1, totalEntries: 2 });
+    mockGetAll.mockReturnValue(new Map([[realWalletId, entries]]));
+
+    const ctx = makeContext();
+    const result = await getCollector()(ctx);
+    const wallets = result.wallets as Record<string, any[]>;
+
+    const keys = Object.keys(wallets);
+    expect(keys).toHaveLength(1);
+    expect(keys[0]).toMatch(/^wallet-[a-f0-9]{8}$/);
+
+    // Entry without message field should still be present
+    expect(wallets[keys[0]]).toHaveLength(2);
+    expect(wallets[keys[0]][0].message).toBeUndefined();
+    // Entry with non-string message should preserve the value as-is
+    expect(wallets[keys[0]][1].message).toBe(42);
+  });
 });

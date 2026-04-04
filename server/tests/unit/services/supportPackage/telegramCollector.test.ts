@@ -253,10 +253,46 @@ describe('telegram collector', () => {
     const w1 = assocs.find((a: any) => a.userCount === 2);
     expect(w1).toBeDefined();
     expect(w1.hasDirectAccess).toBe(true);
+    // w1 has no group access — covers the counts.group.size > 0 === false branch
+    expect(w1.hasGroupAccess).toBe(false);
 
     // w2 should have 1 user with group access only
     const w2 = assocs.find((a: any) => a.userCount === 1);
     expect(w2).toBeDefined();
     expect(w2.hasGroupAccess).toBe(true);
+    // w2 has no direct access — covers the counts.direct.size > 0 === false branch
+    expect(w2.hasDirectAccess).toBe(false);
+  });
+
+  it('returns "unknown" walletType when wallet is not in the database', async () => {
+    mockFindManyUsers.mockResolvedValue([{
+      id: 'user-1',
+      preferences: {
+        telegram: {
+          enabled: true,
+          botToken: 'bot:abc',
+          chatId: '123',
+          wallets: {
+            'missing-wallet': {
+              enabled: true,
+              notifyReceived: true,
+              notifySent: false,
+              notifyConsolidation: false,
+              notifyDraft: false,
+            },
+          },
+        },
+      },
+      wallets: [{ walletId: 'missing-wallet' }],
+      groupMemberships: [],
+    }]);
+    // Return empty wallet list — missing-wallet is not found
+    mockFindManyWallets.mockResolvedValue([]);
+
+    const result = await getTelegramCollector()(makeContext());
+    const users = result.users as any[];
+    expect(users).toHaveLength(1);
+    // walletTypeMap.get('missing-wallet') is undefined, so ?? 'unknown' should kick in
+    expect(users[0].walletSettings[0].walletType).toBe('unknown');
   });
 });

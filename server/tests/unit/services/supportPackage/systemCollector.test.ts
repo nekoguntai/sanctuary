@@ -72,4 +72,26 @@ describe('system collector', () => {
     expect(env).toHaveProperty('LOG_LEVEL');
     expect(env).toHaveProperty('NODE_ENV');
   });
+
+  it('uses fallback values when env vars are unset', async () => {
+    const origLogLevel = process.env.LOG_LEVEL;
+    const origNodeEnv = process.env.NODE_ENV;
+
+    // Remove env vars to trigger the || fallback branches
+    delete process.env.LOG_LEVEL;
+    delete process.env.NODE_ENV;
+
+    try {
+      const result = await getCollector()(makeContext());
+      const env = result.env as Record<string, unknown>;
+      expect(env.LOG_LEVEL).toBe('info');
+      expect(env.NODE_ENV).toBe('production');
+    } finally {
+      // Restore env vars
+      if (origLogLevel !== undefined) process.env.LOG_LEVEL = origLogLevel;
+      else delete process.env.LOG_LEVEL;
+      if (origNodeEnv !== undefined) process.env.NODE_ENV = origNodeEnv;
+      else delete process.env.NODE_ENV;
+    }
+  });
 });

@@ -7,6 +7,18 @@
 import apiClient from './client';
 
 // ========================================
+// CONSTANTS
+// ========================================
+
+export const INSIGHT_TYPE_LABELS: Record<string, string> = {
+  utxo_health: 'UTXO Health',
+  fee_timing: 'Fee Timing',
+  anomaly: 'Anomaly Detection',
+  tax: 'Tax Implications',
+  consolidation: 'Consolidation',
+};
+
+// ========================================
 // TYPE DEFINITIONS
 // ========================================
 

@@ -26,6 +26,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../middleware/auth';
 import { db as prisma } from '../repositories/db';
+import { buildWalletAccessWhere } from '../repositories/accessControl';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 import { notificationService } from '../websocket/notifications';
@@ -189,13 +190,7 @@ router.get('/wallet/:id/labels', asyncHandler(async (req, res) => {
 
   // Verify wallet access
   const wallet = await prisma.wallet.findFirst({
-    where: {
-      id,
-      OR: [
-        { users: { some: { userId } } },
-        { group: { members: { some: { userId } } } },
-      ],
-    },
+    where: { id, ...buildWalletAccessWhere(userId) },
   });
 
   if (!wallet) {
@@ -227,13 +222,7 @@ router.get('/wallet/:id/context', asyncHandler(async (req, res) => {
 
   // Verify wallet access
   const wallet = await prisma.wallet.findFirst({
-    where: {
-      id,
-      OR: [
-        { users: { some: { userId } } },
-        { group: { members: { some: { userId } } } },
-      ],
-    },
+    where: { id, ...buildWalletAccessWhere(userId) },
   });
 
   if (!wallet) {
@@ -279,13 +268,7 @@ router.get('/wallet/:id/utxo-health', asyncHandler(async (req, res) => {
   const userId = req.user?.userId;
 
   const wallet = await prisma.wallet.findFirst({
-    where: {
-      id,
-      OR: [
-        { users: { some: { userId } } },
-        { group: { members: { some: { userId } } } },
-      ],
-    },
+    where: { id, ...buildWalletAccessWhere(userId) },
   });
 
   if (!wallet) {
@@ -330,13 +313,7 @@ router.get('/wallet/:id/fee-history', asyncHandler(async (req, res) => {
   const userId = req.user?.userId;
 
   const wallet = await prisma.wallet.findFirst({
-    where: {
-      id,
-      OR: [
-        { users: { some: { userId } } },
-        { group: { members: { some: { userId } } } },
-      ],
-    },
+    where: { id, ...buildWalletAccessWhere(userId) },
   });
 
   if (!wallet) {
@@ -387,13 +364,7 @@ router.get('/wallet/:id/spending-velocity', asyncHandler(async (req, res) => {
   const userId = req.user?.userId;
 
   const wallet = await prisma.wallet.findFirst({
-    where: {
-      id,
-      OR: [
-        { users: { some: { userId } } },
-        { group: { members: { some: { userId } } } },
-      ],
-    },
+    where: { id, ...buildWalletAccessWhere(userId) },
   });
 
   if (!wallet) {
@@ -408,25 +379,22 @@ router.get('/wallet/:id/spending-velocity', asyncHandler(async (req, res) => {
     { label: '90d', days: 90 },
   ];
 
-  const velocity: Record<string, { count: number; totalSats: number }> = {};
-
-  for (const period of periods) {
+  const results = await Promise.all(periods.map(period => {
     const cutoff = new Date(now.getTime() - period.days * 86400000);
-    const result = await prisma.transaction.aggregate({
-      where: {
-        walletId: id,
-        type: 'sent',
-        blockTime: { gte: cutoff },
-      },
+    return prisma.transaction.aggregate({
+      where: { walletId: id, type: 'sent', blockTime: { gte: cutoff } },
       _count: { _all: true },
       _sum: { amount: true },
     });
+  }));
 
+  const velocity: Record<string, { count: number; totalSats: number }> = {};
+  periods.forEach((period, i) => {
     velocity[period.label] = {
-      count: result._count?._all ?? 0,
-      totalSats: Math.abs(Number(result._sum?.amount ?? 0)),
+      count: results[i]._count?._all ?? 0,
+      totalSats: Math.abs(Number(results[i]._sum?.amount ?? 0)),
     };
-  }
+  });
 
   const avgDaily90d = velocity['90d'].count > 0
     ? velocity['90d'].totalSats / 90
@@ -452,13 +420,7 @@ router.get('/wallet/:id/utxo-age-profile', asyncHandler(async (req, res) => {
   const userId = req.user?.userId;
 
   const wallet = await prisma.wallet.findFirst({
-    where: {
-      id,
-      OR: [
-        { users: { some: { userId } } },
-        { group: { members: { some: { userId } } } },
-      ],
-    },
+    where: { id, ...buildWalletAccessWhere(userId) },
   });
 
   if (!wallet) {
@@ -470,36 +432,18 @@ router.get('/wallet/:id/utxo-age-profile', asyncHandler(async (req, res) => {
 
   // Find UTXOs approaching long-term threshold
   const now = new Date();
-  const upcomingMilestones = [];
-  for (const daysAhead of [15, 30, 60]) {
+  const milestoneResults = await Promise.all([15, 30, 60].map(async (daysAhead) => {
     const windowStart = new Date(now.getTime() - (365 - daysAhead) * 86400000);
     const windowEnd = new Date(now.getTime() - (365 - daysAhead - 1) * 86400000);
-
-    const count = await prisma.uTXO.count({
-      where: {
-        walletId: id,
-        spent: false,
-        createdAt: { gte: windowStart, lt: windowEnd },
-      },
+    const agg = await prisma.uTXO.aggregate({
+      where: { walletId: id, spent: false, createdAt: { gte: windowStart, lt: windowEnd } },
+      _count: { _all: true },
+      _sum: { amount: true },
     });
-
-    if (count > 0) {
-      const agg = await prisma.uTXO.aggregate({
-        where: {
-          walletId: id,
-          spent: false,
-          createdAt: { gte: windowStart, lt: windowEnd },
-        },
-        _sum: { amount: true },
-      });
-
-      upcomingMilestones.push({
-        daysUntilLongTerm: daysAhead,
-        count,
-        totalSats: Number(agg._sum.amount ?? 0),
-      });
-    }
-  }
+    const count = agg._count?._all ?? 0;
+    return count > 0 ? { daysUntilLongTerm: daysAhead, count, totalSats: Number(agg._sum?.amount ?? 0) } : null;
+  }));
+  const upcomingMilestones = milestoneResults.filter((m): m is NonNullable<typeof m> => m !== null);
 
   res.json({
     shortTerm: {

@@ -1,13 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Brain, MessageSquare, Settings, ChevronDown } from 'lucide-react';
-import { getWallets } from '../../src/api/wallets';
-import type { Wallet } from '../../src/api/wallets';
+import { useWallets } from '../../hooks/queries/useWallets';
+import { SanctuarySpinner } from '../ui/CustomIcons';
 import { InsightsTab } from './tabs/InsightsTab';
 import { ChatTab } from './tabs/ChatTab';
 import { SettingsTab } from './tabs/SettingsTab';
-import { createLogger } from '../../utils/logger';
-
-const log = createLogger('Intelligence');
 
 type TabId = 'insights' | 'chat' | 'settings';
 
@@ -19,30 +16,17 @@ const tabs: { id: TabId; label: string; icon: React.ElementType }[] = [
 
 export const Intelligence: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('insights');
-  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const { data: wallets = [], isLoading: loading } = useWallets();
   const [selectedWalletId, setSelectedWalletId] = useState<string>('');
   const [walletDropdownOpen, setWalletDropdownOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  const loadWallets = useCallback(async () => {
-    try {
-      const result = await getWallets();
-      setWallets(result);
-      if (result.length > 0 && !selectedWalletId) {
-        setSelectedWalletId(result[0].id);
-      }
-    } catch (error) {
-      log.error('Failed to load wallets', { error });
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedWalletId]);
-
+  // Auto-select first wallet when wallets load
   useEffect(() => {
-    loadWallets();
-  }, [loadWallets]);
+    if (wallets.length > 0 && !selectedWalletId) {
+      setSelectedWalletId(wallets[0].id);
+    }
+  }, [wallets, selectedWalletId]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     if (!walletDropdownOpen) return;
     const handleClick = () => setWalletDropdownOpen(false);
@@ -55,7 +39,7 @@ export const Intelligence: React.FC = () => {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary-600 border-t-transparent dark:border-primary-200 dark:border-t-transparent" />
+        <SanctuarySpinner size="lg" />
       </div>
     );
   }
@@ -71,7 +55,6 @@ export const Intelligence: React.FC = () => {
 
   return (
     <div className="flex h-full flex-col gap-4 p-4">
-      {/* Header: title + wallet selector */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Brain className="h-5 w-5 text-primary-600 dark:text-primary-300" />
@@ -80,7 +63,6 @@ export const Intelligence: React.FC = () => {
           </h1>
         </div>
 
-        {/* Wallet selector */}
         <div className="relative">
           <button
             onClick={(e) => {
@@ -118,7 +100,6 @@ export const Intelligence: React.FC = () => {
         </div>
       </div>
 
-      {/* Tab navigation */}
       <div className="flex gap-1 rounded-lg border border-sanctuary-200 bg-sanctuary-50 p-0.5 dark:border-sanctuary-800 dark:bg-sanctuary-950">
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -140,7 +121,6 @@ export const Intelligence: React.FC = () => {
         })}
       </div>
 
-      {/* Tab content */}
       <div className="min-h-0 flex-1">
         {activeTab === 'insights' && <InsightsTab walletId={selectedWalletId} />}
         {activeTab === 'chat' && <ChatTab walletId={selectedWalletId} />}

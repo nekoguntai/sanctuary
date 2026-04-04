@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Brain, AlertTriangle, Info, Shield } from 'lucide-react';
+import { SanctuarySpinner } from '../../ui/CustomIcons';
 import * as intelligenceApi from '../../../src/api/intelligence';
+import { INSIGHT_TYPE_LABELS } from '../../../src/api/intelligence';
 import type { AIInsight } from '../../../src/api/intelligence';
 import { InsightCard } from './InsightCard';
 import { createLogger } from '../../../utils/logger';
@@ -15,11 +17,7 @@ const SEVERITY_ORDER: AIInsight['severity'][] = ['critical', 'warning', 'info'];
 
 const TYPE_OPTIONS = [
   { value: '', label: 'All types' },
-  { value: 'utxo_health', label: 'UTXO Health' },
-  { value: 'fee_timing', label: 'Fee Timing' },
-  { value: 'anomaly', label: 'Anomaly' },
-  { value: 'tax', label: 'Tax' },
-  { value: 'consolidation', label: 'Consolidation' },
+  ...Object.entries(INSIGHT_TYPE_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 const SEVERITY_OPTIONS = [
@@ -124,7 +122,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ walletId }) => {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary-600 border-t-transparent dark:border-primary-200 dark:border-t-transparent" />
+            <SanctuarySpinner />
           </div>
         ) : insights.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-16 text-sanctuary-500 dark:text-sanctuary-400">

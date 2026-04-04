@@ -7,14 +7,10 @@
 
 import prisma from '../models/prisma';
 import type { AIInsight, AIConversation, AIMessage, Prisma } from '@prisma/client';
+import type { InsightType, InsightSeverity, InsightStatus } from '../services/intelligence/types';
 
-// ========================================
-// Types
-// ========================================
-
-export type InsightType = 'utxo_health' | 'fee_timing' | 'anomaly' | 'tax' | 'consolidation';
-export type InsightSeverity = 'info' | 'warning' | 'critical';
-export type InsightStatus = 'active' | 'dismissed' | 'acted_on' | 'expired';
+// Re-export for consumers that import from this module
+export type { InsightType, InsightSeverity, InsightStatus };
 
 export interface CreateInsightInput {
   walletId: string;
@@ -135,6 +131,14 @@ async function findExpiredInsights(): Promise<AIInsight[]> {
       expiresAt: { lte: new Date() },
     },
   });
+}
+
+async function expireActiveInsights(): Promise<number> {
+  const result = await prisma.aIInsight.updateMany({
+    where: { status: 'active', expiresAt: { lte: new Date() } },
+    data: { status: 'expired' },
+  });
+  return result.count;
 }
 
 async function deleteExpiredInsights(cutoffDate: Date): Promise<number> {
@@ -319,6 +323,7 @@ export const intelligenceRepository = {
   updateInsightStatus,
   markInsightNotified,
   findExpiredInsights,
+  expireActiveInsights,
   deleteExpiredInsights,
   deleteInsightsByWallet,
 

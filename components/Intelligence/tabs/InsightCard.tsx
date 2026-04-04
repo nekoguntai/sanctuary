@@ -1,35 +1,13 @@
 import React, { useState } from 'react';
 import { AlertTriangle, Info, Shield, ChevronRight, ChevronDown, XCircle, Check } from 'lucide-react';
 import type { AIInsight } from '../../../src/api/intelligence';
+import { INSIGHT_TYPE_LABELS } from '../../../src/api/intelligence';
+import { formatRelativeTime } from '../../AuditLogs/constants';
 
 interface InsightCardProps {
   insight: AIInsight;
   onDismiss: () => void;
   onActedOn: () => void;
-}
-
-const TYPE_LABELS: Record<AIInsight['type'], string> = {
-  utxo_health: 'UTXO Health',
-  fee_timing: 'Fee Timing',
-  anomaly: 'Anomaly',
-  tax: 'Tax',
-  consolidation: 'Consolidation',
-};
-
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
-
-  if (diffSec < 60) return 'just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHour < 24) return `${diffHour}h ago`;
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return date.toLocaleDateString();
 }
 
 const severityStyles: Record<
@@ -85,7 +63,7 @@ export const InsightCard: React.FC<InsightCardProps> = ({ insight, onDismiss, on
             <span
               className={`inline-flex rounded px-1.5 py-0.5 text-[9px] font-medium ${style.badgeBg} ${style.badgeText}`}
             >
-              {TYPE_LABELS[insight.type]}
+              {INSIGHT_TYPE_LABELS[insight.type]}
             </span>
           </div>
           <p className="mt-0.5 text-[10px] leading-relaxed text-sanctuary-600 dark:text-sanctuary-400">

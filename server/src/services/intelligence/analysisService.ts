@@ -204,13 +204,14 @@ async function gatherContext(
       }
 
       case 'consolidation': {
-        // Combines UTXO health + fee data
         const { getUtxoHealthProfile } = await import('../autopilot/utxoHealth');
         const { getLatestFeeSnapshot, getRecentFees } = await import('../autopilot/feeMonitor');
 
-        const health = await getUtxoHealthProfile(walletId, 10_000);
-        const latest = await getLatestFeeSnapshot();
-        const snapshots = await getRecentFees(1440);
+        const [health, latest, snapshots] = await Promise.all([
+          getUtxoHealthProfile(walletId, 10_000),
+          getLatestFeeSnapshot(),
+          getRecentFees(1440),
+        ]);
 
         if (health.totalUtxos < 5) return null;
 
@@ -274,6 +275,14 @@ async function callAnalysis(
  * Check if the configured endpoint is Ollama-compatible.
  */
 async function checkOllamaCompatible(): Promise<boolean> {
+  const status = await fetchOllamaCheck();
+  return status?.compatible ?? false;
+}
+
+/**
+ * Shared helper: call the AI container's /check-ollama endpoint.
+ */
+async function fetchOllamaCheck(): Promise<{ compatible: boolean; endpointType?: string; reason?: string } | null> {
   try {
     const response = await fetch(`${AI_CONTAINER_URL}/check-ollama`, {
       method: 'POST',
@@ -281,12 +290,10 @@ async function checkOllamaCompatible(): Promise<boolean> {
       signal: AbortSignal.timeout(10000),
     });
 
-    if (!response.ok) return false;
-
-    const result = await response.json() as { compatible: boolean };
-    return result.compatible;
+    if (!response.ok) return null;
+    return await response.json() as { compatible: boolean; endpointType?: string; reason?: string };
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -323,32 +330,20 @@ export async function getIntelligenceStatus() {
     return { available: false, ollamaConfigured: false, reason: 'ai_not_configured' };
   }
 
-  // Sync config to container
   await syncConfigToContainer(config);
 
-  try {
-    const response = await fetch(`${AI_CONTAINER_URL}/check-ollama`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!response.ok) {
-      return { available: false, ollamaConfigured: false, reason: 'ai_container_unreachable' };
-    }
-
-    const result = await response.json() as { compatible: boolean; endpointType?: string; reason?: string };
-
-    if (!result.compatible) {
-      return { available: false, ollamaConfigured: false, reason: result.reason || 'ollama_required' };
-    }
-
-    return {
-      available: true,
-      ollamaConfigured: true,
-      endpointType: result.endpointType,
-    };
-  } catch {
+  const result = await fetchOllamaCheck();
+  if (!result) {
     return { available: false, ollamaConfigured: false, reason: 'ai_container_unreachable' };
   }
+
+  if (!result.compatible) {
+    return { available: false, ollamaConfigured: false, reason: result.reason || 'ollama_required' };
+  }
+
+  return {
+    available: true,
+    ollamaConfigured: true,
+    endpointType: result.endpointType,
+  };
 }

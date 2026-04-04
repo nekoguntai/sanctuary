@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Settings, Shield } from 'lucide-react';
+import { SanctuarySpinner } from '../../ui/CustomIcons';
+import { Toggle } from '../../ui/Toggle';
 import * as intelligenceApi from '../../../src/api/intelligence';
+import { INSIGHT_TYPE_LABELS } from '../../../src/api/intelligence';
 import type { WalletIntelligenceSettings } from '../../../src/api/intelligence';
 import { createLogger } from '../../../utils/logger';
 
@@ -16,13 +19,7 @@ const SEVERITY_OPTIONS: { value: WalletIntelligenceSettings['severityFilter']; l
   { value: 'critical', label: 'Critical only' },
 ];
 
-const TYPE_FILTER_OPTIONS: { value: string; label: string }[] = [
-  { value: 'utxo_health', label: 'UTXO Health' },
-  { value: 'fee_timing', label: 'Fee Timing' },
-  { value: 'anomaly', label: 'Anomaly Detection' },
-  { value: 'tax', label: 'Tax Implications' },
-  { value: 'consolidation', label: 'Consolidation' },
-];
+const TYPE_FILTER_OPTIONS = Object.entries(INSIGHT_TYPE_LABELS).map(([value, label]) => ({ value, label }));
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ walletId }) => {
   const [settings, setSettings] = useState<WalletIntelligenceSettings | null>(null);
@@ -82,7 +79,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ walletId }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary-600 border-t-transparent dark:border-primary-200 dark:border-t-transparent" />
+        <SanctuarySpinner />
       </div>
     );
   }
@@ -200,7 +197,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ walletId }) => {
   );
 };
 
-/** Reusable toggle row */
 const ToggleRow: React.FC<{
   label: string;
   description: string;
@@ -217,22 +213,6 @@ const ToggleRow: React.FC<{
       <p className="text-[11px] font-medium text-sanctuary-800 dark:text-sanctuary-200">{label}</p>
       <p className="text-[10px] text-sanctuary-500 dark:text-sanctuary-400">{description}</p>
     </div>
-    <button
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      disabled={disabled}
-      className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${
-        checked
-          ? 'bg-primary-600 dark:bg-primary-200'
-          : 'bg-sanctuary-200 dark:bg-sanctuary-700'
-      } ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-    >
-      <span
-        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform dark:bg-sanctuary-900 ${
-          checked ? 'translate-x-4' : 'translate-x-0.5'
-        }`}
-      />
-    </button>
+    <Toggle checked={checked} onChange={onChange} disabled={disabled} />
   </div>
 );

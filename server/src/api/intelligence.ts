@@ -62,14 +62,14 @@ router.get('/insights', asyncHandler(async (req, res) => {
     throw new NotFoundError('Wallet not found');
   }
 
-  const filters: Record<string, string> = {};
+  const filters: { status?: string; type?: string; severity?: string } = {};
   if (typeof status === 'string') filters.status = status;
   if (typeof type === 'string') filters.type = type;
   if (typeof severity === 'string') filters.severity = severity;
 
   const insights = await insightService.getInsightsByWallet(
     walletId,
-    filters as any,
+    filters,
     typeof limit === 'string' ? parseInt(limit, 10) : 50,
     typeof offset === 'string' ? parseInt(offset, 10) : 0
   );
@@ -105,6 +105,7 @@ router.get('/insights/count', asyncHandler(async (req, res) => {
  * Update insight status (dismiss, mark acted_on)
  */
 router.patch('/insights/:id', asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
   const { id } = req.params;
   const { status } = req.body;
 
@@ -114,6 +115,14 @@ router.patch('/insights/:id', asyncHandler(async (req, res) => {
 
   const existing = await insightService.getInsightById(id);
   if (!existing) {
+    throw new NotFoundError('Insight not found');
+  }
+
+  // Verify user has access to the wallet this insight belongs to
+  const wallet = await prisma.wallet.findFirst({
+    where: { id: existing.walletId, ...buildWalletAccessWhere(userId) },
+  });
+  if (!wallet) {
     throw new NotFoundError('Insight not found');
   }
 

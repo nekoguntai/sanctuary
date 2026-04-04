@@ -62,10 +62,10 @@ router.get('/insights', asyncHandler(async (req, res) => {
     throw new NotFoundError('Wallet not found');
   }
 
-  const filters: { status?: string; type?: string; severity?: string } = {};
-  if (typeof status === 'string') filters.status = status;
-  if (typeof type === 'string') filters.type = type;
-  if (typeof severity === 'string') filters.severity = severity;
+  const filters: Omit<import('../repositories/intelligenceRepository').InsightFilter, 'walletId'> = {};
+  if (typeof status === 'string') filters.status = status as import('../services/intelligence/types').InsightStatus;
+  if (typeof type === 'string') filters.type = type as import('../services/intelligence/types').InsightType;
+  if (typeof severity === 'string') filters.severity = severity as import('../services/intelligence/types').InsightSeverity;
 
   const insights = await insightService.getInsightsByWallet(
     walletId,

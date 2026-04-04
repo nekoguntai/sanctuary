@@ -137,7 +137,7 @@ router.use(authenticate);
  */
 router.get('/tx/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const userId = req.user?.userId;
+  const userId = req.user!.userId;
 
   // Fetch transaction with wallet access check
   const transaction = await prisma.transaction.findFirst({
@@ -186,7 +186,7 @@ router.get('/tx/:id', asyncHandler(async (req, res) => {
  */
 router.get('/wallet/:id/labels', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const userId = req.user?.userId;
+  const userId = req.user!.userId;
 
   // Verify wallet access
   const wallet = await prisma.wallet.findFirst({
@@ -218,7 +218,7 @@ router.get('/wallet/:id/labels', asyncHandler(async (req, res) => {
  */
 router.get('/wallet/:id/context', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const userId = req.user?.userId;
+  const userId = req.user!.userId;
 
   // Verify wallet access
   const wallet = await prisma.wallet.findFirst({
@@ -265,7 +265,7 @@ router.get('/wallet/:id/context', asyncHandler(async (req, res) => {
  */
 router.get('/wallet/:id/utxo-health', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const userId = req.user?.userId;
+  const userId = req.user!.userId;
 
   const wallet = await prisma.wallet.findFirst({
     where: { id, ...buildWalletAccessWhere(userId) },
@@ -310,7 +310,7 @@ router.get('/wallet/:id/utxo-health', asyncHandler(async (req, res) => {
  */
 router.get('/wallet/:id/fee-history', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const userId = req.user?.userId;
+  const userId = req.user!.userId;
 
   const wallet = await prisma.wallet.findFirst({
     where: { id, ...buildWalletAccessWhere(userId) },
@@ -361,7 +361,7 @@ router.get('/wallet/:id/fee-history', asyncHandler(async (req, res) => {
  */
 router.get('/wallet/:id/spending-velocity', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const userId = req.user?.userId;
+  const userId = req.user!.userId;
 
   const wallet = await prisma.wallet.findFirst({
     where: { id, ...buildWalletAccessWhere(userId) },
@@ -417,7 +417,7 @@ router.get('/wallet/:id/spending-velocity', asyncHandler(async (req, res) => {
  */
 router.get('/wallet/:id/utxo-age-profile', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const userId = req.user?.userId;
+  const userId = req.user!.userId;
 
   const wallet = await prisma.wallet.findFirst({
     where: { id, ...buildWalletAccessWhere(userId) },

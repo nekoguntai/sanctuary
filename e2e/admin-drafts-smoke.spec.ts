@@ -189,6 +189,10 @@ async function mockAuthenticatedApi(page: Page) {
       });
     }
 
+    if (method === 'GET' && path === '/intelligence/status') {
+      return json(route, { available: false, ollamaConfigured: false });
+    }
+
     return unmocked(route, method, path);
   };
 

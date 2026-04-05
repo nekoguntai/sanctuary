@@ -72,6 +72,7 @@ async function mockSettingsApi(page: Page) {
     if (method === 'GET' && path === '/transactions/recent') return json(route, []);
     if (method === 'GET' && path === '/transactions/balance-history') return json(route, []);
     if (method === 'GET' && path === '/ai/status') return json(route, { available: false, containerAvailable: false });
+    if (method === 'GET' && path === '/intelligence/status') return json(route, { available: false, ollamaConfigured: false });
 
     unhandledRequests.push(`${method} ${path}`);
     return unmocked(route, method, path);

@@ -97,6 +97,7 @@ async function mockErrorApi(
     if (method === 'GET' && path === '/admin/version') return json(route, { updateAvailable: false, currentVersion: '0.8.14' });
     if (method === 'GET' && path === '/transactions/recent') return json(route, []);
     if (method === 'GET' && path === '/transactions/balance-history') return json(route, []);
+    if (method === 'GET' && path === '/intelligence/status') return json(route, { available: false, ollamaConfigured: false });
 
     // Wallet detail
     if (method === 'GET' && path === `/wallets/${WALLET_ID}`) return json(route, WALLET);
@@ -338,6 +339,7 @@ test.describe('Error recovery', () => {
       if (method === 'GET' && path === '/admin/settings') return json(route, { registrationEnabled: false, confirmationThreshold: 1, deepConfirmationThreshold: 6, dustThreshold: 546, aiEnabled: false });
       if (method === 'GET' && path === '/admin/features') return json(route, []);
       if (method === 'GET' && path === '/ai/status') return json(route, { available: false, containerAvailable: false });
+      if (method === 'GET' && path === '/intelligence/status') return json(route, { available: false, ollamaConfigured: false });
       return unmocked(route, method, path);
     });
 

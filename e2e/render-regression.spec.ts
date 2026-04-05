@@ -669,6 +669,9 @@ async function mockAuthenticatedApi(page: Page, options?: { failures?: MockApiFa
     if (method === 'GET' && path === '/ai/ollama-container/status') {
       return json(route, AI_CONTAINER_STATUS);
     }
+    if (method === 'GET' && path === '/intelligence/status') {
+      return json(route, { available: false, ollamaConfigured: false });
+    }
 
     unhandledRequests.push(`${method} ${path}`);
     return unmocked(route, method, path);

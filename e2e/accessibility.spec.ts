@@ -95,6 +95,7 @@ async function mockA11yApi(page: Page) {
     if (method === 'GET' && path === '/transactions/recent') return json(route, []);
     if (method === 'GET' && path === '/transactions/balance-history') return json(route, []);
     if (method === 'GET' && path === '/ai/status') return json(route, { available: false, containerAvailable: false });
+    if (method === 'GET' && path === '/intelligence/status') return json(route, { available: false, ollamaConfigured: false });
     if (method === 'GET' && path === '/admin/groups') return json(route, []);
 
     // Wallet detail

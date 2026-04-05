@@ -467,6 +467,9 @@ async function mockAuthenticatedApi(
     if (method === 'GET' && path === '/ai/status') {
       return json(route, { available: false, containerAvailable: false });
     }
+    if (method === 'GET' && path === '/intelligence/status') {
+      return json(route, { available: false, ollamaConfigured: false });
+    }
     if (method === 'GET' && path === '/ai/ollama-container/status') {
       return json(route, { available: true, exists: true, running: false, status: 'exited' });
     }

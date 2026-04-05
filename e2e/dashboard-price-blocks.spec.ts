@@ -202,6 +202,9 @@ async function mockDashboardApi(
         recentRateLimitEvents: [],
       });
     }
+    if (method === 'GET' && path === '/intelligence/status') {
+      return json(route, { available: false, ollamaConfigured: false });
+    }
 
     return unmocked(route, method, path);
   };

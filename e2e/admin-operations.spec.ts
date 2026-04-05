@@ -256,6 +256,7 @@ async function mockAdminApi(
     // AI
     if (method === 'GET' && path === '/ai/status') return json(route, { available: false, containerAvailable: false });
     if (method === 'GET' && path === '/ai/ollama-container/status') return json(route, { available: true, exists: true, running: false, status: 'exited' });
+    if (method === 'GET' && path === '/intelligence/status') return json(route, { available: false, ollamaConfigured: false });
 
     // Encryption keys
     if (method === 'GET' && path === '/admin/encryption-keys') {

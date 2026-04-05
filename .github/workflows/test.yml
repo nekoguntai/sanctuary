@@ -242,6 +242,7 @@ jobs:
 
       - name: Run integration smoke tests (root runner)
         env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/sanctuary_test?schema=public
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
           ENCRYPTION_KEY: test-encryption-key-32-chars-long!
           NODE_ENV: test
@@ -409,6 +410,7 @@ jobs:
       - name: Run integration tests (root runner)
         working-directory: ${{ github.workspace }}
         env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/sanctuary_test?schema=public
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
           ENCRYPTION_KEY: test-encryption-key-32-chars-long!
           NODE_ENV: test

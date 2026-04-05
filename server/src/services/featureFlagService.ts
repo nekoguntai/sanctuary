@@ -47,6 +47,7 @@ import { db as prisma } from '../repositories/db';
 import { getDistributedCache, getDistributedEventBus } from '../infrastructure';
 import { createLogger } from '../utils/logger';
 import { getFeatureFlagDefinition } from './featureFlags/definitions';
+import { FEATURE_FLAG_CACHE_TTL_SECONDS } from '../constants';
 
 const log = createLogger('FEATURE_FLAG:SVC');
 
@@ -92,7 +93,7 @@ export interface AuditEntry {
 // =============================================================================
 
 const CACHE_KEY = 'feature:flags';
-const CACHE_TTL = 60; // 1 minute cache
+const CACHE_TTL = FEATURE_FLAG_CACHE_TTL_SECONDS;
 
 // =============================================================================
 // Service

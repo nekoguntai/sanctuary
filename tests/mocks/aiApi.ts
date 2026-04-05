@@ -313,13 +313,6 @@ export function createAiApiMockModule() {
 // ========================================
 
 /**
- * Wait for async operations in tests
- */
-export async function flushPromises(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0));
-}
-
-/**
  * Create a delayed mock response
  */
 export function createDelayedMock<T>(response: T, delayMs: number = 100): () => Promise<T> {
@@ -373,7 +366,6 @@ export default {
   createAiApiMockModule,
 
   // Test utilities
-  flushPromises,
   createDelayedMock,
   createRetryMock,
 };

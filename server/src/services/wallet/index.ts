@@ -7,17 +7,18 @@
  */
 
 // Types
-export type { WalletRole, WalletAccessCheckResult, CreateWalletInput, WalletWithBalance } from './types';
+export type { WalletAccessCheckResult, CreateWalletInput, WalletWithBalance } from './types';
+export type { WalletRole } from '../accessControl';
 
-// Access control
+// Access control — consolidated into services/accessControl (with Redis caching)
 export {
   getUserWalletRole,
-  checkWalletAccess,
+  hasWalletAccess as checkWalletAccess,
   checkWalletEditAccess,
   checkWalletOwnerAccess,
   checkWalletApproveAccess,
-  checkWalletAccessWithRole,
-} from './accessControl';
+  checkWalletAccess as checkWalletAccessWithRole,
+} from '../accessControl';
 
 // Address generation
 export { generateInitialAddresses, generateAddress } from './addressGeneration';

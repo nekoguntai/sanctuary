@@ -59,11 +59,6 @@ export const DEFAULT_DEEP_CONFIRMATION_THRESHOLD = 3;
 // ============================================================================
 
 /**
- * Satoshis per Bitcoin
- */
-export const SATOSHIS_PER_BTC = 100_000_000;
-
-/**
  * Default dust threshold in satoshis
  * Outputs below this value are considered "dust" and won't be relayed by nodes.
  * Based on 3 × minimum relay fee × output size for P2PKH outputs.
@@ -117,6 +112,39 @@ export const PRICE_CACHE_TTL_MS = 60000; // 1 minute
  * Fee estimate cache TTL in milliseconds
  */
 export const FEE_CACHE_TTL_MS = 30000; // 30 seconds
+
+// ============================================================================
+// AUDIT LOG CONSTANTS
+// ============================================================================
+
+/**
+ * Default page size for audit log queries
+ */
+export const AUDIT_DEFAULT_PAGE_SIZE = 50;
+
+/**
+ * Default limit for per-user audit log queries
+ */
+export const AUDIT_USER_LOG_LIMIT = 20;
+
+/**
+ * Default limit for failed login queries (security monitoring)
+ */
+export const AUDIT_FAILED_LOGIN_LIMIT = 100;
+
+/**
+ * Default number of days for audit statistics window
+ */
+export const AUDIT_STATS_DAYS = 30;
+
+// ============================================================================
+// FEATURE FLAG CONSTANTS
+// ============================================================================
+
+/**
+ * Cache TTL for feature flags in seconds
+ */
+export const FEATURE_FLAG_CACHE_TTL_SECONDS = 60;
 
 // ============================================================================
 // AI CONSTANTS

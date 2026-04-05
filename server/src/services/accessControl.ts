@@ -16,6 +16,9 @@ const log = createLogger('ACCESS_CONTROL:SVC');
 // Roles that can edit wallet data (labels, memos, etc.)
 const EDIT_ROLES = ['owner', 'signer'];
 
+// Roles that can approve transactions
+const APPROVE_ROLES = ['owner', 'approver'];
+
 /**
  * Cache TTL for wallet access checks (30 seconds - short for security)
  */
@@ -68,7 +71,7 @@ export async function clearAccessCache(): Promise<void> {
   }
 }
 
-export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
+export type WalletRole = 'owner' | 'approver' | 'signer' | 'viewer' | null;
 
 /**
  * Access check result for a wallet
@@ -225,6 +228,38 @@ export async function requireWalletOwnerAccess(walletId: string, userId: string)
 }
 
 /**
+ * Check if user has any access to wallet (boolean convenience function)
+ */
+export async function hasWalletAccess(walletId: string, userId: string): Promise<boolean> {
+  const role = await getUserWalletRole(walletId, userId);
+  return role !== null;
+}
+
+/**
+ * Check if user has edit access to wallet (owner or signer roles)
+ */
+export async function checkWalletEditAccess(walletId: string, userId: string): Promise<boolean> {
+  const role = await getUserWalletRole(walletId, userId);
+  return role !== null && EDIT_ROLES.includes(role);
+}
+
+/**
+ * Check if user is wallet owner
+ */
+export async function checkWalletOwnerAccess(walletId: string, userId: string): Promise<boolean> {
+  const role = await getUserWalletRole(walletId, userId);
+  return role === 'owner';
+}
+
+/**
+ * Check if user can approve transactions on a wallet (owner or approver roles)
+ */
+export async function checkWalletApproveAccess(walletId: string, userId: string): Promise<boolean> {
+  const role = await getUserWalletRole(walletId, userId);
+  return role !== null && APPROVE_ROLES.includes(role);
+}
+
+/**
  * Check transaction access via wallet
  */
 export async function checkTransactionAccess(
@@ -350,7 +385,11 @@ export async function requireAddressEditAccess(
 export const accessControlService = {
   buildWalletAccessWhere,
   getUserWalletRole,
+  hasWalletAccess,
   checkWalletAccess,
+  checkWalletEditAccess,
+  checkWalletOwnerAccess,
+  checkWalletApproveAccess,
   requireWalletAccess,
   requireWalletEditAccess,
   requireWalletOwnerAccess,

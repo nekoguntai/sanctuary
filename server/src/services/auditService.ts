@@ -19,6 +19,12 @@ import { auditLogRepository } from '../repositories';
 import type { AuditCategory as RepoAuditCategory } from '../repositories/auditLogRepository';
 import { createLogger } from '../utils/logger';
 import { Request } from 'express';
+import {
+  AUDIT_DEFAULT_PAGE_SIZE,
+  AUDIT_USER_LOG_LIMIT,
+  AUDIT_FAILED_LOGIN_LIMIT,
+  AUDIT_STATS_DAYS,
+} from '../constants';
 
 const log = createLogger('AUDIT:SVC');
 
@@ -241,7 +247,7 @@ class AuditService {
       success,
       startDate,
       endDate,
-      limit = 50,
+      limit = AUDIT_DEFAULT_PAGE_SIZE,
       offset = 0,
     } = options;
 
@@ -263,14 +269,14 @@ class AuditService {
   /**
    * Get recent audit logs for a specific user
    */
-  async getForUser(userId: string, limit = 20): Promise<any[]> {
+  async getForUser(userId: string, limit = AUDIT_USER_LOG_LIMIT): Promise<any[]> {
     return auditLogRepository.findByUserId(userId, { limit });
   }
 
   /**
    * Get failed login attempts (for security monitoring)
    */
-  async getFailedLogins(since: Date, limit = 100): Promise<any[]> {
+  async getFailedLogins(since: Date, limit = AUDIT_FAILED_LOGIN_LIMIT): Promise<any[]> {
     const result = await auditLogRepository.findMany(
       {
         action: AuditAction.LOGIN_FAILED,
@@ -285,7 +291,7 @@ class AuditService {
   /**
    * Get all admin actions
    */
-  async getAdminActions(limit = 50, offset = 0): Promise<any[]> {
+  async getAdminActions(limit = AUDIT_DEFAULT_PAGE_SIZE, offset = 0): Promise<any[]> {
     // Use findMany with admin category filter
     const result = await auditLogRepository.findMany(
       { category: 'admin' },
@@ -311,7 +317,7 @@ class AuditService {
   /**
    * Get audit statistics
    */
-  async getStats(days = 30): Promise<{
+  async getStats(days = AUDIT_STATS_DAYS): Promise<{
     totalEvents: number;
     byCategory: Record<string, number>;
     byAction: Record<string, number>;

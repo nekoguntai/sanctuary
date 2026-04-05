@@ -310,7 +310,7 @@ describe('urHelpers', () => {
     expect(extractFromUrResult(throwingBytes)).toBeNull();
     expect(loggerSpies.error).toHaveBeenCalledWith(
       'Failed to extract from UR result',
-      expect.objectContaining({ err: expect.any(Error) }),
+      expect.objectContaining({ error: expect.any(Error) }),
     );
   });
 

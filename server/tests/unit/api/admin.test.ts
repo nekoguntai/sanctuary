@@ -155,6 +155,11 @@ vi.mock('../../../src/constants', () => ({
   WALLET_LOG_MAX_ENTRIES: 200,
   WALLET_LOG_INACTIVE_CLEANUP_MS: 30 * 60 * 1000,
   WALLET_LOG_CLEANUP_INTERVAL_MS: 5 * 60 * 1000,
+  AUDIT_DEFAULT_PAGE_SIZE: 50,
+  AUDIT_USER_LOG_LIMIT: 20,
+  AUDIT_FAILED_LOGIN_LIMIT: 100,
+  AUDIT_STATS_DAYS: 30,
+  FEATURE_FLAG_CACHE_TTL_SECONDS: 60,
 }));
 
 // Mock websocket server to prevent import chain to tiny-secp256k1

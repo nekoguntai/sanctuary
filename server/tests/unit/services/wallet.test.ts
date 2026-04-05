@@ -17,6 +17,7 @@ const {
   mockSyncUnsubscribeWalletAddresses,
   mockNotificationUnsubscribeWalletAddresses,
   mockHookExecuteAfter,
+  mockCache,
 } = vi.hoisted(() => ({
   mockBuildDescriptorFromDevices: vi.fn(),
   mockLogWarn: vi.fn(),
@@ -24,6 +25,13 @@ const {
   mockSyncUnsubscribeWalletAddresses: vi.fn(),
   mockNotificationUnsubscribeWalletAddresses: vi.fn(),
   mockHookExecuteAfter: vi.fn(),
+  mockCache: {
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+    deletePattern: vi.fn().mockResolvedValue(undefined),
+    clear: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 // Mock Prisma
@@ -43,6 +51,11 @@ vi.mock('../../../src/services/bitcoin/addressDerivation', () => ({
     address: 'bc1qmockaddress',
     derivationPath: "m/84'/0'/0'/0/0",
   }),
+}));
+
+// Mock Redis cache (access control uses cached getUserWalletRole)
+vi.mock('../../../src/infrastructure/redis', () => ({
+  getNamespacedCache: () => mockCache,
 }));
 
 // Mock logger

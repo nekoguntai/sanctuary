@@ -248,17 +248,5 @@ export function getDecodedPsbt(decoder: URDecoder): string {
   }
 }
 
-/**
- * Check if a string is a valid UR format
- */
-export function isUrFormat(content: string): boolean {
-  return content.toLowerCase().startsWith('ur:');
-}
-
-/**
- * Extract UR type from a UR string
- */
-export function getUrType(urString: string): string | null {
-  const match = urString.toLowerCase().match(/^ur:([a-z0-9-]+)/);
-  return match ? match[1] : null;
-}
+// Re-export UR format utilities from canonical location
+export { isUrFormat, getUrType } from './urDeviceDecoder';

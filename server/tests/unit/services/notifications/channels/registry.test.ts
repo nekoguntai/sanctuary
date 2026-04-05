@@ -314,4 +314,235 @@ describe('NotificationChannelRegistry', () => {
 
     allSettledSpy.mockRestore();
   });
+
+  // ========================================
+  // AI Insight Notifications (lines 200-251)
+  // ========================================
+
+  it('filters insight-capable handlers correctly', () => {
+    const insightCapable = createHandler({
+      id: 'insight-channel',
+      capabilities: {
+        supportsTransactions: false,
+        supportsDrafts: false,
+        supportsConsolidationSuggestions: false,
+        supportsAIInsights: true,
+        supportsRichFormatting: false,
+        supportsImages: false,
+      },
+      notifyAIInsight: vi.fn(),
+    });
+
+    const noInsight = createHandler({
+      id: 'no-insight',
+      capabilities: {
+        supportsTransactions: true,
+        supportsDrafts: false,
+        supportsConsolidationSuggestions: false,
+        supportsAIInsights: false,
+        supportsRichFormatting: false,
+        supportsImages: false,
+      },
+    });
+
+    const insightCapabilityButNoMethod = createHandler({
+      id: 'insight-no-method',
+      capabilities: {
+        supportsTransactions: false,
+        supportsDrafts: false,
+        supportsConsolidationSuggestions: false,
+        supportsAIInsights: true,
+        supportsRichFormatting: false,
+        supportsImages: false,
+      },
+      notifyAIInsight: undefined,
+    });
+
+    registry.register(insightCapable);
+    registry.register(noInsight);
+    registry.register(insightCapabilityButNoMethod);
+
+    const capable = registry.getInsightCapable();
+    expect(capable.map((h) => h.id)).toEqual(['insight-channel']);
+  });
+
+  it('notifies insight channels and handles disabled/missing handlers/errors', async () => {
+    const insightNotification = {
+      id: 'insight-1',
+      type: 'utxo_health',
+      severity: 'warning',
+      title: 'Test Insight',
+      summary: 'Test summary',
+      walletName: 'Main Wallet',
+    };
+
+    const enabled = createHandler({
+      id: 'insight-enabled',
+      capabilities: {
+        supportsTransactions: false,
+        supportsDrafts: false,
+        supportsConsolidationSuggestions: false,
+        supportsAIInsights: true,
+        supportsRichFormatting: false,
+        supportsImages: false,
+      },
+      notifyAIInsight: vi.fn().mockResolvedValue({
+        success: true,
+        channelId: 'insight-enabled',
+        usersNotified: 2,
+      }),
+    });
+
+    const disabled = createHandler({
+      id: 'insight-disabled',
+      capabilities: {
+        supportsTransactions: false,
+        supportsDrafts: false,
+        supportsConsolidationSuggestions: false,
+        supportsAIInsights: true,
+        supportsRichFormatting: false,
+        supportsImages: false,
+      },
+      isEnabled: vi.fn().mockResolvedValue(false),
+      notifyAIInsight: vi.fn(),
+    });
+
+    const failing = createHandler({
+      id: 'insight-failing',
+      capabilities: {
+        supportsTransactions: false,
+        supportsDrafts: false,
+        supportsConsolidationSuggestions: false,
+        supportsAIInsights: true,
+        supportsRichFormatting: false,
+        supportsImages: false,
+      },
+      notifyAIInsight: vi.fn().mockRejectedValue(new Error('insight boom')),
+    });
+
+    const noMethod = createHandler({
+      id: 'insight-no-method',
+      capabilities: {
+        supportsTransactions: false,
+        supportsDrafts: false,
+        supportsConsolidationSuggestions: false,
+        supportsAIInsights: true,
+        supportsRichFormatting: false,
+        supportsImages: false,
+      },
+      notifyAIInsight: undefined,
+    });
+
+    registry.register(enabled);
+    registry.register(disabled);
+    registry.register(failing);
+
+    vi.spyOn(registry, 'getInsightCapable').mockReturnValue([
+      enabled,
+      disabled,
+      failing,
+      noMethod as NotificationChannelHandler,
+    ]);
+
+    const results = await registry.notifyInsight('wallet-1', insightNotification);
+
+    expect(results).toHaveLength(4);
+    expect(results).toContainEqual({ success: true, channelId: 'insight-enabled', usersNotified: 2 });
+    expect(results).toContainEqual({ success: true, channelId: 'insight-disabled', usersNotified: 0 });
+    expect(results).toContainEqual({
+      success: false,
+      channelId: 'insight-failing',
+      usersNotified: 0,
+      errors: ['insight boom'],
+    });
+    expect(results).toContainEqual({ success: true, channelId: 'insight-no-method', usersNotified: 0 });
+  });
+
+  it('falls back to unknown insight channel result when settled promise rejects', async () => {
+    const insightNotification = {
+      id: 'insight-1',
+      type: 'utxo_health',
+      severity: 'warning',
+      title: 'Test',
+      summary: 'Test',
+      walletName: 'Wallet',
+    };
+
+    const handler = createHandler({
+      id: 'insight-handler',
+      capabilities: {
+        supportsTransactions: false,
+        supportsDrafts: false,
+        supportsConsolidationSuggestions: false,
+        supportsAIInsights: true,
+        supportsRichFormatting: false,
+        supportsImages: false,
+      },
+      notifyAIInsight: vi.fn(),
+    });
+    registry.register(handler);
+
+    const allSettledSpy = vi
+      .spyOn(Promise, 'allSettled')
+      .mockResolvedValueOnce([
+        { status: 'rejected', reason: new Error('settled insight failure') } as PromiseRejectedResult,
+      ] as PromiseSettledResult<NotificationResult>[]);
+
+    const results = await registry.notifyInsight('wallet-1', insightNotification);
+
+    expect(results).toEqual([
+      {
+        success: false,
+        channelId: 'unknown',
+        usersNotified: 0,
+        errors: ['settled insight failure'],
+      },
+    ]);
+
+    allSettledSpy.mockRestore();
+  });
+
+  it('uses generic unknown insight error message when rejection reason has no message', async () => {
+    const insightNotification = {
+      id: 'insight-1',
+      type: 'utxo_health',
+      severity: 'warning',
+      title: 'Test',
+      summary: 'Test',
+      walletName: 'Wallet',
+    };
+
+    const handler = createHandler({
+      id: 'insight-handler',
+      capabilities: {
+        supportsTransactions: false,
+        supportsDrafts: false,
+        supportsConsolidationSuggestions: false,
+        supportsAIInsights: true,
+        supportsRichFormatting: false,
+        supportsImages: false,
+      },
+      notifyAIInsight: vi.fn(),
+    });
+    registry.register(handler);
+
+    const allSettledSpy = vi
+      .spyOn(Promise, 'allSettled')
+      .mockResolvedValueOnce([
+        { status: 'rejected', reason: {} } as PromiseRejectedResult,
+      ] as PromiseSettledResult<NotificationResult>[]);
+
+    const results = await registry.notifyInsight('wallet-1', insightNotification);
+
+    expect(results).toEqual([
+      {
+        success: false,
+        channelId: 'unknown',
+        usersNotified: 0,
+        errors: ['Unknown error'],
+      },
+    ]);
+
+    allSettledSpy.mockRestore();
+  });
 });

@@ -23,7 +23,21 @@ export default defineConfig({
       reporter: ['text', 'lcov', 'html'],
       reportsDirectory: './coverage',
       include: ['src/**/*.ts'],
-      exclude: ['**/*.d.ts', '**/index.ts'],
+      exclude: [
+        '**/*.d.ts',
+        '**/index.ts',
+        '**/types.ts',
+        // Re-export shims preserving backward-compatible import paths (zero logic)
+        'src/services/aiService.ts',
+        'src/services/eventService.ts',
+        'src/services/maintenanceService.ts',
+        'src/services/payjoinService.ts',
+        'src/services/syncService.ts',
+        'src/services/bitcoin/addressDerivation.ts',
+        'src/services/bitcoin/sync/confirmations.ts',
+        'src/services/bitcoin/sync/phases/processTransactions.ts',
+        'src/services/telegram/telegramService.ts',
+      ],
       thresholds: {
         // Coverage baseline locked to current observed total coverage (2026-03-04).
         // Remaining gaps are v8 arrow-function artifacts in delegate methods.

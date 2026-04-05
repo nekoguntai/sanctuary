@@ -240,14 +240,15 @@ jobs:
         working-directory: server
         run: npm ci
 
-      - name: Run integration smoke tests (root runner)
+      - name: Run integration smoke tests
+        working-directory: ${{ github.workspace }}/server
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/sanctuary_test?schema=public
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
           ENCRYPTION_KEY: test-encryption-key-32-chars-long!
           NODE_ENV: test
         run: >
-          npm run test:integration --
+          npx vitest run --no-file-parallelism --maxWorkers 1
           tests/integration/websocket/websocket.integration.test.ts
           tests/integration/flows/auth.integration.test.ts
 
@@ -407,8 +408,8 @@ jobs:
           NODE_ENV: test
         run: npm run test:unit -- --coverage
 
-      - name: Run integration tests (root runner)
-        working-directory: ${{ github.workspace }}
+      - name: Run integration tests
+        working-directory: ${{ github.workspace }}/server
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/sanctuary_test?schema=public
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars

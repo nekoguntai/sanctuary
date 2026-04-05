@@ -1209,6 +1209,7 @@ describe('Admin Routes', () => {
       mockPrisma.group.findUnique.mockResolvedValue({
         id: 'group-to-delete',
         name: 'Test Group',
+        members: [{ userId: 'user-1' }],
       });
       mockPrisma.group.delete.mockResolvedValue({ id: 'group-to-delete' });
 

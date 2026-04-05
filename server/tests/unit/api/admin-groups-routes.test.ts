@@ -461,7 +461,7 @@ describe('Admin Groups Routes', () => {
   });
 
   it('deletes a group and writes audit log', async () => {
-    mockPrismaClient.group.findUnique.mockResolvedValue({ id: 'group-1', name: 'Team A' } as any);
+    mockPrismaClient.group.findUnique.mockResolvedValue({ id: 'group-1', name: 'Team A', members: [{ userId: 'u1' }] } as any);
 
     const response = await request(app).delete('/api/v1/admin/groups/group-1');
 
@@ -474,10 +474,11 @@ describe('Admin Groups Routes', () => {
       expect.objectContaining({ details: { groupName: 'Team A', groupId: 'group-1' } })
     );
     expect(response.body).toEqual({ message: 'Group deleted successfully' });
+    expect(mockInvalidateUserAccessCache).toHaveBeenCalledWith('u1');
   });
 
   it('returns 500 when group deletion fails', async () => {
-    mockPrismaClient.group.findUnique.mockResolvedValue({ id: 'group-1', name: 'x' } as any);
+    mockPrismaClient.group.findUnique.mockResolvedValue({ id: 'group-1', name: 'x', members: [] } as any);
     mockPrismaClient.group.delete.mockRejectedValue(new Error('delete failed'));
 
     const response = await request(app).delete('/api/v1/admin/groups/group-1');

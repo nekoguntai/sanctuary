@@ -224,6 +224,7 @@ router.delete('/:groupId', authenticate, requireAdmin, asyncHandler(async (req, 
 
   const existingGroup = await prisma.group.findUnique({
     where: { id: groupId },
+    include: { members: { select: { userId: true } } },
   });
 
   if (!existingGroup) {
@@ -233,6 +234,11 @@ router.delete('/:groupId', authenticate, requireAdmin, asyncHandler(async (req, 
   await prisma.group.delete({
     where: { id: groupId },
   });
+
+  // Invalidate access cache for all former group members
+  await Promise.all(
+    existingGroup.members.map((m) => invalidateUserAccessCache(m.userId))
+  );
 
   log.info('Group deleted:', { groupId, name: existingGroup.name });
 

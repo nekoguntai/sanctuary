@@ -986,6 +986,7 @@ describe('Admin API', () => {
         const groupToDelete = {
           id: 'group-1',
           name: 'Old Group',
+          members: [{ userId: 'user-1' }, { userId: 'user-2' }],
         };
 
         mockPrismaClient.group.findUnique.mockResolvedValue(groupToDelete);

@@ -4,7 +4,7 @@
  * Endpoints for UTXO selection strategies
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
 import { db as prisma } from '../../repositories/db';
 import { asyncHandler } from '../../errors/errorHandler';
@@ -16,7 +16,7 @@ const router = Router();
  * POST /api/v1/wallets/:walletId/utxos/select
  * Select UTXOs for a transaction using specified strategy
  */
-router.post('/wallets/:walletId/utxos/select', requireWalletAccess('view'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/utxos/select', requireWalletAccess('view'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
   const { amount, feeRate, strategy = 'efficiency', scriptType } = req.body;
 
@@ -63,7 +63,7 @@ router.post('/wallets/:walletId/utxos/select', requireWalletAccess('view'), asyn
  * POST /api/v1/wallets/:walletId/utxos/compare-strategies
  * Compare different UTXO selection strategies for a given amount
  */
-router.post('/wallets/:walletId/utxos/compare-strategies', requireWalletAccess('view'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/utxos/compare-strategies', requireWalletAccess('view'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
   const { amount, feeRate, scriptType } = req.body;
 
@@ -109,7 +109,7 @@ router.post('/wallets/:walletId/utxos/compare-strategies', requireWalletAccess('
  * GET /api/v1/wallets/:walletId/utxos/recommended-strategy
  * Get recommended UTXO selection strategy based on wallet and fee context
  */
-router.get('/wallets/:walletId/utxos/recommended-strategy', requireWalletAccess('view'), asyncHandler(async (req: Request, res: Response) => {
+router.get('/wallets/:walletId/utxos/recommended-strategy', requireWalletAccess('view'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
   const feeRate = parseFloat(req.query.feeRate as string) || 10;
   const prioritizePrivacy = req.query.prioritizePrivacy === 'true';

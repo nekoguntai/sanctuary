@@ -4,7 +4,7 @@
  * Fee estimation endpoints
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import * as blockchain from '../../services/bitcoin/blockchain';
 import * as utils from '../../services/bitcoin/utils';
 import * as mempool from '../../services/bitcoin/mempool';
@@ -20,7 +20,7 @@ const log = createLogger('BITCOIN_FEE:ROUTE');
  * GET /api/v1/bitcoin/fees
  * Get current fee estimates from configured source (mempool.space API or Electrum)
  */
-router.get('/fees', asyncHandler(async (_req: Request, res: Response) => {
+router.get('/fees', asyncHandler(async (_req, res) => {
   // Check configured fee estimator source
   const nodeConfig = await prisma.nodeConfig.findFirst({
     where: { isDefault: true },
@@ -59,7 +59,7 @@ router.get('/fees', asyncHandler(async (_req: Request, res: Response) => {
  * GET /api/v1/bitcoin/fees/advanced
  * Get advanced fee estimates with time predictions
  */
-router.get('/fees/advanced', asyncHandler(async (_req: Request, res: Response) => {
+router.get('/fees/advanced', asyncHandler(async (_req, res) => {
   const advancedTx = await import('../../services/bitcoin/advancedTx');
   const fees = await advancedTx.getAdvancedFeeEstimates();
 
@@ -70,7 +70,7 @@ router.get('/fees/advanced', asyncHandler(async (_req: Request, res: Response) =
  * POST /api/v1/bitcoin/utils/estimate-fee
  * Estimate transaction fee
  */
-router.post('/utils/estimate-fee', asyncHandler(async (req: Request, res: Response) => {
+router.post('/utils/estimate-fee', asyncHandler(async (req, res) => {
   const {
     inputCount,
     outputCount,
@@ -96,7 +96,7 @@ router.post('/utils/estimate-fee', asyncHandler(async (req: Request, res: Respon
  * POST /api/v1/bitcoin/utils/estimate-optimal-fee
  * Estimate optimal fee for a transaction based on priority
  */
-router.post('/utils/estimate-optimal-fee', asyncHandler(async (req: Request, res: Response) => {
+router.post('/utils/estimate-optimal-fee', asyncHandler(async (req, res) => {
   const {
     inputCount,
     outputCount,

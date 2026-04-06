@@ -5,7 +5,7 @@
  * including single, batch, and estimation flows.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
 import { createLogger } from '../../utils/logger';
 import { walletRepository } from '../../repositories/walletRepository';
@@ -22,7 +22,7 @@ const log = createLogger('TX_DRAFT:ROUTE');
  * POST /api/v1/wallets/:walletId/transactions/create
  * Create a new transaction PSBT (returns PSBT for hardware wallet signing)
  */
-router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
   const {
     recipient,
@@ -128,7 +128,7 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
  * POST /api/v1/wallets/:walletId/transactions/batch
  * Create a batch transaction with multiple outputs
  */
-router.post('/wallets/:walletId/transactions/batch', requireWalletAccess('edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/transactions/batch', requireWalletAccess('edit'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
   const {
     outputs, // Array of { address, amount, sendMax? }
@@ -231,7 +231,7 @@ router.post('/wallets/:walletId/transactions/batch', requireWalletAccess('edit')
  * POST /api/v1/wallets/:walletId/transactions/estimate
  * Estimate transaction cost before creating
  */
-router.post('/wallets/:walletId/transactions/estimate', requireWalletAccess('view'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/transactions/estimate', requireWalletAccess('view'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
   const { recipient, amount, feeRate, selectedUtxoIds } = req.body;
 
@@ -258,7 +258,7 @@ router.post('/wallets/:walletId/transactions/estimate', requireWalletAccess('vie
  * Create a PSBT for hardware wallet signing
  * This is the preferred endpoint for hardware wallet integrations
  */
-router.post('/wallets/:walletId/psbt/create', requireWalletAccess('edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/psbt/create', requireWalletAccess('edit'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
   const {
     recipients, // Array of { address, amount }

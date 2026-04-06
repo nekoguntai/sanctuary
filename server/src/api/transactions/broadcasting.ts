@@ -7,7 +7,7 @@
  * on failed broadcasts before re-throwing to asyncHandler.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
@@ -26,7 +26,7 @@ const log = createLogger('TX_BROADCAST:ROUTE');
  * - signedPsbtBase64: Signed PSBT from Ledger or file upload
  * - rawTxHex: Raw transaction hex from Trezor (fully signed)
  */
-router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('edit'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
   const {
     signedPsbtBase64,
@@ -133,7 +133,7 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
  * POST /api/v1/wallets/:walletId/psbt/broadcast
  * Broadcast a signed PSBT
  */
-router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
   const { signedPsbt, label, memo } = req.body;
 

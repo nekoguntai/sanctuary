@@ -4,7 +4,7 @@
  * Endpoints for listing and generating wallet addresses
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
 import { db as prisma } from '../../repositories/db';
 import * as addressDerivation from '../../services/bitcoin/addressDerivation';
@@ -22,7 +22,7 @@ const log = createLogger('ADDRESS:ROUTE');
  * Get all addresses for a wallet
  * Auto-generates addresses if wallet has descriptor but no addresses
  */
-router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), asyncHandler(async (req: Request, res: Response) => {
+router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
   const { used, change } = req.query;
   const hasPagination = req.query.limit !== undefined || req.query.offset !== undefined;
@@ -191,7 +191,7 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), asyncHan
  * GET /api/v1/wallets/:walletId/addresses/summary
  * Get summary counts and balances for a wallet's addresses
  */
-router.get('/wallets/:walletId/addresses/summary', requireWalletAccess('view'), asyncHandler(async (req: Request, res: Response) => {
+router.get('/wallets/:walletId/addresses/summary', requireWalletAccess('view'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
 
   const [totalCount, usedCount, unusedCount, totalBalanceResult, usedBalances] = await Promise.all([
@@ -235,7 +235,7 @@ router.get('/wallets/:walletId/addresses/summary', requireWalletAccess('view'), 
  * POST /api/v1/wallets/:walletId/addresses/generate
  * Generate more addresses for a wallet (requires edit access: owner or signer)
  */
-router.post('/wallets/:walletId/addresses/generate', requireWalletAccess('edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/addresses/generate', requireWalletAccess('edit'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
   const { count = 10 } = req.body;
 

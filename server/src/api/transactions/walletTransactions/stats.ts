@@ -4,7 +4,7 @@
  * Endpoint for transaction summary statistics with caching.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { requireWalletAccess } from '../../../middleware/walletAccess';
 import { db as prisma } from '../../../repositories/db';
 import { bigIntToNumberOrZero } from '../../../utils/errors';
@@ -23,7 +23,7 @@ export function createStatsRouter(): Router {
    * Returns counts and totals independent of pagination
    * CACHED: Results are cached for 30 seconds to reduce database load
    */
-  router.get('/wallets/:walletId/transactions/stats', requireWalletAccess('view'), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/wallets/:walletId/transactions/stats', requireWalletAccess('view'), asyncHandler(async (req, res) => {
     const walletId = req.walletId!;
 
     // Use cache to reduce database load for frequently accessed stats (30 second TTL)

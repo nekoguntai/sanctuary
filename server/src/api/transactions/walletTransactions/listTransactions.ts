@@ -4,7 +4,7 @@
  * Endpoint for listing wallet transactions with pagination.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { requireWalletAccess } from '../../../middleware/walletAccess';
 import { db as prisma } from '../../../repositories/db';
 import { validatePagination, bigIntToNumber, bigIntToNumberOrZero } from '../../../utils/errors';
@@ -22,7 +22,7 @@ export function createListTransactionsRouter(): Router {
    * GET /api/v1/wallets/:walletId/transactions
    * Get all transactions for a wallet
    */
-  router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), asyncHandler(async (req, res) => {
     const walletId = req.walletId!;
     const { limit, offset } = validatePagination(
       req.query.limit as string,

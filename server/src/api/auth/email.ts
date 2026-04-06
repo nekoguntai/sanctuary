@@ -5,7 +5,7 @@
  */
 
 import { Router, Response } from 'express';
-import type { Request, RequestHandler } from 'express';
+import type { RequestHandler } from 'express';
 import { verifyEmail, resendVerification } from '../../services/email';
 import { userRepository } from '../../repositories';
 import { verifyPassword } from '../../utils/password';
@@ -111,7 +111,7 @@ export function createEmailRouter(
     '/email/resend',
     authenticate,
     resendLimiter,
-    asyncHandler(async (req: Request, res: Response) => {
+    asyncHandler(async (req, res) => {
       const userId = req.user!.userId;
 
       // Get user to retrieve email
@@ -160,7 +160,7 @@ export function createEmailRouter(
     '/me/email',
     authenticate,
     updateLimiter,
-    asyncHandler(async (req: Request, res: Response) => {
+    asyncHandler(async (req, res) => {
       const parseResult = UpdateEmailSchema.safeParse(req.body);
       if (!parseResult.success) {
         throw new ValidationError('Invalid request', undefined, {

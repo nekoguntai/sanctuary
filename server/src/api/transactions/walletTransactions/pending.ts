@@ -5,7 +5,7 @@
  * with mempool data enrichment.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { requireWalletAccess } from '../../../middleware/walletAccess';
 import { db as prisma } from '../../../repositories/db';
 import { createLogger } from '../../../utils/logger';
@@ -24,7 +24,7 @@ export function createPendingRouter(): Router {
    * Get pending (unconfirmed) transactions for a wallet
    * Returns data formatted for block queue visualization
    */
-  router.get('/wallets/:walletId/transactions/pending', requireWalletAccess('view'), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/wallets/:walletId/transactions/pending', requireWalletAccess('view'), asyncHandler(async (req, res) => {
     const walletId = req.walletId!;
 
     // Get wallet name for display

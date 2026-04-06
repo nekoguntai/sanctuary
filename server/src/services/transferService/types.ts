@@ -8,7 +8,7 @@ import type { OwnershipTransfer } from '../../generated/prisma/client';
 import { db as prisma } from '../../repositories/db';
 
 /** Prisma transaction client type */
-export type PrismaTx = Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
+export type PrismaTx = Omit<typeof prisma, '$connect' | '$disconnect' | '$transaction' | '$extends'>;
 
 /** OwnershipTransfer with user relations */
 export type TransferWithUsers = OwnershipTransfer & {

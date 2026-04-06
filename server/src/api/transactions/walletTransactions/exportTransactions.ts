@@ -4,7 +4,7 @@
  * Endpoint for exporting wallet transactions in CSV or JSON format.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { requireWalletAccess } from '../../../middleware/walletAccess';
 import { db as prisma } from '../../../repositories/db';
 import { asyncHandler } from '../../../errors/errorHandler';
@@ -19,7 +19,7 @@ export function createExportRouter(): Router {
    * GET /api/v1/wallets/:walletId/transactions/export
    * Export transactions for a wallet in CSV or JSON format
    */
-  router.get('/wallets/:walletId/transactions/export', requireWalletAccess('view'), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/wallets/:walletId/transactions/export', requireWalletAccess('view'), asyncHandler(async (req, res) => {
     const walletId = req.walletId!;
     const { format = 'csv', startDate, endDate } = req.query;
 

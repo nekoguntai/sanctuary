@@ -4,7 +4,7 @@
  * Endpoint for recalculating running balances for wallet transactions.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { requireWalletAccess } from '../../../middleware/walletAccess';
 import { db as prisma } from '../../../repositories/db';
 import { recalculateWalletBalances } from '../../../services/bitcoin/blockchain';
@@ -20,7 +20,7 @@ export function createRecalculateRouter(): Router {
    * POST /api/v1/wallets/:walletId/transactions/recalculate
    * Recalculate running balances (balanceAfter) for all transactions in a wallet
    */
-  router.post('/wallets/:walletId/transactions/recalculate', requireWalletAccess('view'), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/wallets/:walletId/transactions/recalculate', requireWalletAccess('view'), asyncHandler(async (req, res) => {
     const walletId = req.walletId!;
 
     await recalculateWalletBalances(walletId);

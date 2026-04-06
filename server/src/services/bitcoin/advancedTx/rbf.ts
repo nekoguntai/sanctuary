@@ -8,8 +8,7 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import { BIP32Factory } from 'bip32';
-import * as ecc from 'tiny-secp256k1';
+import bip32 from '../bip32';
 import { getNetwork, calculateFee } from '../utils';
 import { parseDescriptor } from '../addressDerivation';
 import { getNodeClient } from '../nodeClient';
@@ -17,8 +16,6 @@ import { db as prisma } from '../../../repositories/db';
 import { getErrorMessage } from '../../../utils/errors';
 import { normalizeDerivationPath } from '../../../../../shared/utils/bitcoin';
 import { log, RBF_SEQUENCE, MIN_RBF_FEE_BUMP, getDustThreshold } from './shared';
-
-const bip32 = BIP32Factory(ecc);
 
 /**
  * Check if a transaction signals RBF

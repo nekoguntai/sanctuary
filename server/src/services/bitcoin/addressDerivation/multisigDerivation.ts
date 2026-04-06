@@ -6,13 +6,10 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import { BIP32Factory } from 'bip32';
-import * as ecc from 'tiny-secp256k1';
+import bip32 from '../bip32';
 import { convertToStandardXpub } from './xpubConversion';
 import { getNetwork } from './utils';
 import type { ParsedDescriptor, DerivationNode, DescriptorDerivationDeps, DerivedAddress } from './types';
-
-const bip32 = BIP32Factory(ecc);
 
 /**
  * Derive multisig address from parsed descriptor
@@ -82,7 +79,7 @@ export function deriveMultisigAddress(
   }
 
   // Sort public keys for sortedmulti (lexicographic order)
-  pubkeys.sort((a, b) => a.compare(b));
+  pubkeys.sort((a, b) => Buffer.from(a).compare(Buffer.from(b)));
 
   // Create the multisig redeem script (p2ms)
   const p2ms = bitcoin.payments.p2ms({

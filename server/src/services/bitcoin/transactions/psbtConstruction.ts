@@ -9,8 +9,7 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import * as ecc from 'tiny-secp256k1';
-import { BIP32Factory } from 'bip32';
+import bip32 from '../bip32';
 import { db as prisma } from '../../../repositories/db';
 import { parseDescriptor, convertToStandardXpub, MultisigKeyInfo } from '../addressDerivation';
 import { createLogger } from '../../../utils/logger';
@@ -24,12 +23,6 @@ import { getRawTransactionHex } from './helpers';
 import type { WalletSigningInfo } from './types';
 
 const log = createLogger('BITCOIN:SVC_PSBT_BUILD');
-
-// Initialize BIP32 for key derivation
-// Note: bitcoin.initEccLib(ecc) is NOT called here because it's already
-// called in utils.ts which is imported by callers of this module. Calling
-// it a second time can fail in test environments with module mocking.
-const bip32 = BIP32Factory(ecc);
 
 /**
  * Wallet data shape expected by PSBT construction functions.
@@ -456,7 +449,7 @@ function addSingleSigBip32Info(
       inputIndex,
       fingerprint: masterFingerprint.toString('hex'),
       path: normalizedPath,
-      pubkeyHex: pubkeyNode.publicKey.toString('hex').substring(0, 20) + '...',
+      pubkeyHex: Buffer.from(pubkeyNode.publicKey).toString('hex').substring(0, 20) + '...',
     });
   } catch (e) {
     log.warn(`${logPrefix}Single-sig BIP32 derivation failed for input`, {

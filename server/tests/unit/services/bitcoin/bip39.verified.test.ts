@@ -17,11 +17,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { pbkdf2Sync } from 'crypto';
-import { BIP32Factory } from 'bip32';
-import * as ecc from 'tiny-secp256k1';
+import bip32 from '../../../../src/services/bitcoin/bip32';
 import { BIP39_ENGLISH_VECTORS, BIP39_TEST_PASSWORD } from '@fixtures/bip39-test-vectors';
-
-const bip32 = BIP32Factory(ecc);
 
 describe('BIP-39 Official Test Vectors', () => {
   describe('Mnemonic to Seed derivation', () => {

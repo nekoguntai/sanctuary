@@ -13,11 +13,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { BIP32Factory } from 'bip32';
-import * as ecc from 'tiny-secp256k1';
+import bip32 from '../../../../src/services/bitcoin/bip32';
 import { BIP32_TEST_VECTORS } from '@fixtures/bip32-test-vectors';
-
-const bip32 = BIP32Factory(ecc);
 
 describe('BIP-32 Official Test Vectors', () => {
   BIP32_TEST_VECTORS.forEach((vector) => {

@@ -5,8 +5,7 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import * as ecc from 'tiny-secp256k1';
-import { BIP32Factory } from 'bip32';
+import bip32 from '../bip32';
 import { convertToStandardXpub, MultisigKeyInfo } from '../addressDerivation';
 import { createLogger } from '../../../utils/logger';
 import {
@@ -16,9 +15,6 @@ import {
 import type { Bip32DerivationEntry } from './types';
 
 const log = createLogger('BITCOIN:SVC_PSBT_DERIV');
-
-// Initialize BIP32 for key derivation
-const bip32 = BIP32Factory(ecc);
 
 /**
  * Build BIP32 derivation entries for all cosigners in a multisig wallet.
@@ -66,14 +62,14 @@ export function buildMultisigBip32Derivations(
           bip32Derivations.push({
             masterFingerprint: Buffer.from(keyInfo.fingerprint, 'hex'),
             path: fullPath,
-            pubkey: derivedNode.publicKey,
+            pubkey: Buffer.from(derivedNode.publicKey),
           });
 
           log.debug('Multisig bip32Derivation added', {
             inputIndex,
             fingerprint: keyInfo.fingerprint,
             path: fullPath,
-            pubkeyPrefix: derivedNode.publicKey.toString('hex').substring(0, 16),
+            pubkeyPrefix: Buffer.from(derivedNode.publicKey).toString('hex').substring(0, 16),
           });
         }
       } catch (keyError) {

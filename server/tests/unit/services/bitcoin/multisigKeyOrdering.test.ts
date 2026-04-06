@@ -17,10 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { deriveAddressFromDescriptor, parseDescriptor } from '@/services/bitcoin/addressDerivation';
 import * as bitcoin from 'bitcoinjs-lib';
-import * as ecc from 'tiny-secp256k1';
-import BIP32Factory from 'bip32';
-
-const bip32 = BIP32Factory(ecc);
+import bip32 from '../../../../src/services/bitcoin/bip32';
 
 // Test xpubs from different seeds - these produce different public keys
 // These are verified valid xpubs from the verified-address-vectors.ts
@@ -171,7 +168,7 @@ describe('Multisig Key Ordering (BIP-67)', () => {
       expect(childPubkeys[1]).not.toEqual(childPubkeys[2]);
 
       // Manual BIP-67 sort
-      const sortedPubkeys = [...childPubkeys].sort((a, b) => a.compare(b));
+      const sortedPubkeys = [...childPubkeys].sort((a, b) => Buffer.from(a).compare(Buffer.from(b)));
 
       // The sorted order should be deterministic
       expect(sortedPubkeys.length).toBe(3);

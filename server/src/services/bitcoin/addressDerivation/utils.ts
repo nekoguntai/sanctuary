@@ -6,13 +6,10 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import { BIP32Factory } from 'bip32';
-import * as ecc from 'tiny-secp256k1';
+import bip32 from '../bip32';
 import { getErrorMessage } from '../../../utils/errors';
 import { convertToStandardXpub } from './xpubConversion';
 import type { XpubValidationResult } from './types';
-
-const bip32 = BIP32Factory(ecc);
 
 /**
  * Get network object from network string

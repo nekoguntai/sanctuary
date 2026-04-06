@@ -5,16 +5,12 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import * as ecc from 'tiny-secp256k1';
-import { BIP32Factory } from 'bip32';
+import bip32 from '../bip32';
 import { convertToStandardXpub, MultisigKeyInfo } from '../addressDerivation';
 import { createLogger } from '../../../utils/logger';
 import { extractChangeAndAddressIndex } from '../../../../../shared/utils/bitcoin';
 
 const log = createLogger('BITCOIN:SVC_PSBT_WITNESS');
-
-// Initialize BIP32 for key derivation
-const bip32 = BIP32Factory(ecc);
 
 /**
  * Build the witnessScript (multisig redeem script) for a P2WSH multisig input.

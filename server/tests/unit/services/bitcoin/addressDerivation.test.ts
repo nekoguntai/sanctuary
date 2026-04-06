@@ -34,7 +34,7 @@ vi.mock('bitcoinjs-lib', async (importOriginal) => {
 
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
-import { BIP32Factory } from 'bip32';
+import bip32 from '../../../../src/services/bitcoin/bip32';
 import { vi } from 'vitest';
 import {
   parseDescriptor,
@@ -51,7 +51,6 @@ import { testXpubs, testnetAddresses, mainnetAddresses } from '../../../fixtures
 
 // Initialize ECC library for Taproot support
 bitcoin.initEccLib(ecc);
-const bip32 = BIP32Factory(ecc);
 
 describe('Address Derivation Service', () => {
   describe('parseDescriptor', () => {

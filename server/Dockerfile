@@ -13,6 +13,7 @@ RUN apk add --no-cache openssl
 # Copy package files first (better layer caching)
 COPY server/package*.json ./
 COPY server/prisma ./prisma/
+COPY server/prisma.config.ts ./
 
 # Install all dependencies (including dev for building)
 RUN npm ci

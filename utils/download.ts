@@ -66,7 +66,7 @@ export function downloadText(
  * downloadBinary(bytes, 'transaction.psbt');
  */
 export function downloadBinary(
-  data: Uint8Array | ArrayBuffer,
+  data: Uint8Array<ArrayBuffer> | ArrayBuffer,
   filename: string,
   mimeType: string = 'application/octet-stream'
 ): void {

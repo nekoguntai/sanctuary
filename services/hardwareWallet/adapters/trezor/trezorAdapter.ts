@@ -151,9 +151,9 @@ export class TrezorAdapter implements DeviceAdapter {
         label: features.label || undefined,
       };
 
-      this.connectedDevice = {
+      const device = {
         id: `trezor-${features.device_id || 'unknown'}`,
-        type: 'trezor',
+        type: 'trezor' as const,
         name: features.label || modelName,
         model: modelName,
         connected: true,
@@ -161,6 +161,7 @@ export class TrezorAdapter implements DeviceAdapter {
         needsPin: (features.pin_protection && !features.unlocked) ?? undefined,
         needsPassphrase: features.passphrase_protection ?? undefined,
       };
+      this.connectedDevice = device;
 
       log.info('Trezor connected', {
         model: modelName,
@@ -168,8 +169,7 @@ export class TrezorAdapter implements DeviceAdapter {
         fingerprint,
       });
 
-      // connectedDevice was just assigned above, guaranteed non-null
-      return this.connectedDevice!;
+      return device;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       log.error('Failed to connect Trezor', { error: message });

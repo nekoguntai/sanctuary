@@ -17,6 +17,9 @@ export interface NotificationData {
   change?: number;
   height?: number;
   transactionCount?: number;
+  blockHeight?: number;
+  timestamp?: string;
+  hash?: string;
 }
 
 export interface Notification {

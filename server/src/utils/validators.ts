@@ -4,11 +4,12 @@
  * Common validation functions used across routes and services.
  */
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { EmailSchema } from '../api/schemas/common';
 
 /**
- * Validate email address format
+ * Validate email address format.
+ * Uses the same Zod email schema as the API validation layer.
  */
 export function isValidEmail(email: string): boolean {
-  return EMAIL_REGEX.test(email);
+  return EmailSchema.safeParse(email).success;
 }

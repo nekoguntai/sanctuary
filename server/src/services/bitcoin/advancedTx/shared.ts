@@ -5,10 +5,7 @@
  * used across RBF, CPFP, batch, and fee estimation modules.
  */
 
-import { systemSettingRepository } from '../../../repositories';
 import { createLogger } from '../../../utils/logger';
-import { SystemSettingSchemas } from '../../../utils/safeJson';
-import { DEFAULT_DUST_THRESHOLD } from '../../../constants';
 
 export const log = createLogger('BITCOIN:SVC_ADVANCED_TX');
 
@@ -24,9 +21,5 @@ export const MIN_RBF_FEE_BUMP = 1; // Minimum 1 sat/vB increase
  */
 export const CPFP_MIN_FEE_RATE = 1;
 
-/**
- * Get dust threshold from system settings
- */
-export async function getDustThreshold(): Promise<number> {
-  return systemSettingRepository.getParsed('dustThreshold', SystemSettingSchemas.number, DEFAULT_DUST_THRESHOLD);
-}
+// Re-export from canonical location
+export { getDustThreshold } from '../estimation';

@@ -327,7 +327,7 @@ test.describe('Import wallet flow', () => {
     await main.getByRole('button', { name: 'Next Step' }).click();
 
     // Should show error
-    await expect(main.getByText(/invalid|error|format/i)).toBeVisible({ timeout: 10000 });
+    await expect(main.getByText(/invalid|error|format/i).first()).toBeVisible({ timeout: 10000 });
   });
 
   test('import API error shows error message', async ({ page }) => {

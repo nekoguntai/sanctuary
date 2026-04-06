@@ -12,6 +12,7 @@ import * as draftsApi from '../../src/api/drafts';
 import { isMultisigType } from '../../types';
 import { createLogger } from '../../utils/logger';
 import { downloadBinary } from '../../utils/download';
+import { uint8ArrayEquals, toHex } from '../../utils/bufferUtils';
 import type { Wallet } from '../../types';
 import type { TransactionData } from './types';
 
@@ -131,10 +132,10 @@ export function useQrSigning({
                   for (const ps of input.partialSig) {
                     // Find the bip32Derivation entry for this pubkey
                     const derivation = input.bip32Derivation.find(d =>
-                      d.pubkey.equals(ps.pubkey)
+                      uint8ArrayEquals(d.pubkey, ps.pubkey)
                     );
                     if (derivation) {
-                      const sigFingerprint = derivation.masterFingerprint.toString('hex');
+                      const sigFingerprint = toHex(derivation.masterFingerprint);
                       log.debug('Signature fingerprint check', {
                         sigFingerprint,
                         expectedFingerprint: deviceFingerprint,
@@ -179,13 +180,13 @@ export function useQrSigning({
               for (const input of existingPsbtObj.data.inputs) {
                 if (input.partialSig) {
                   existingSigCount += input.partialSig.length;
-                  input.partialSig.forEach(ps => existingPubkeys.push(ps.pubkey.toString('hex').substring(0, 16)));
+                  input.partialSig.forEach(ps => existingPubkeys.push(toHex(ps.pubkey).substring(0, 16)));
                 }
               }
               for (const input of newPsbtObj.data.inputs) {
                 if (input.partialSig) {
                   newSigCount += input.partialSig.length;
-                  input.partialSig.forEach(ps => newPubkeys.push(ps.pubkey.toString('hex').substring(0, 16)));
+                  input.partialSig.forEach(ps => newPubkeys.push(toHex(ps.pubkey).substring(0, 16)));
                 }
               }
 

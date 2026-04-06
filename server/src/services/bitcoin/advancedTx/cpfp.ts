@@ -106,7 +106,7 @@ export async function createCPFPTransaction(
     parentInputValue += Math.round(prevOut.value * 100000000);
   }
 
-  const parentOutputValue = tx.outs.reduce((sum, out) => sum + out.value, 0);
+  const parentOutputValue = tx.outs.reduce((sum, out) => sum + Number(out.value), 0);
   const parentFee = parentInputValue - parentOutputValue;
   const parentFeeRate = parentFee / parentVsize;
 
@@ -145,13 +145,13 @@ export async function createCPFPTransaction(
     index: parentVout,
     witnessUtxo: {
       script: Buffer.from(utxo.scriptPubKey, 'hex'),
-      value: utxoValue,
+      value: BigInt(utxoValue),
     },
   });
 
   psbt.addOutput({
     address: recipientAddress,
-    value: outputValue,
+    value: BigInt(outputValue),
   });
 
   return {

@@ -80,7 +80,7 @@ describe('PSBT Structure Validation', () => {
         it('should have witnessUtxo for all inputs', () => {
           psbt.data.inputs.forEach((input) => {
             expect(input.witnessUtxo).toBeDefined();
-            expect(input.witnessUtxo?.value).toBeGreaterThan(0);
+            expect(Number(input.witnessUtxo?.value)).toBeGreaterThan(0);
           });
         });
 
@@ -157,13 +157,13 @@ describe('PSBT Fee Calculation', () => {
       let inputValue = 0;
       psbt.data.inputs.forEach((input) => {
         if (input.witnessUtxo) {
-          inputValue += input.witnessUtxo.value;
+          inputValue += Number(input.witnessUtxo.value);
         }
       });
 
       let outputValue = 0;
       psbt.txOutputs.forEach((output) => {
-        outputValue += output.value;
+        outputValue += Number(output.value);
       });
 
       const calculatedFee = inputValue - outputValue;
@@ -193,7 +193,7 @@ describe('PSBT Invariants (Property-Based)', () => {
         let inputValue = 0;
         psbt.data.inputs.forEach((input) => {
           if (input.witnessUtxo) {
-            inputValue += input.witnessUtxo.value;
+            inputValue += Number(input.witnessUtxo.value);
           }
         });
 
@@ -210,7 +210,7 @@ describe('PSBT Invariants (Property-Based)', () => {
         const psbt = bitcoin.Psbt.fromBase64(vector.psbtBase64);
 
         psbt.txOutputs.forEach((output) => {
-          expect(output.value).toBeGreaterThanOrEqual(DUST_THRESHOLD);
+          expect(Number(output.value)).toBeGreaterThanOrEqual(DUST_THRESHOLD);
         });
       });
     });

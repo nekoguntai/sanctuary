@@ -23,11 +23,11 @@ describe('BIP-143 SegWit v0 Sighash Verification', () => {
       const sigHash = transaction.hashForWitnessV0(
         vector.inputIndex,
         scriptCode,
-        vector.value,
+        BigInt(vector.value),
         vector.hashType,
       );
 
-      expect(sigHash.toString('hex')).toBe(vector.expectedSigHash);
+      expect(Buffer.from(sigHash).toString('hex')).toBe(vector.expectedSigHash);
     });
   });
 });

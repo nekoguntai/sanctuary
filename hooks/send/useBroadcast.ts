@@ -16,6 +16,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { queryClient } from '../../providers/QueryProvider';
 import { isMultisigType } from '../../types';
 import { createLogger } from '../../utils/logger';
+import { toHex } from '../../utils/bufferUtils';
 import type { Wallet } from '../../types';
 import type { TransactionState } from '../../contexts/send/types';
 import type { TransactionData } from './types';
@@ -92,10 +93,10 @@ export function useBroadcast({
               inputIndex: i,
               signatureCount: input.partialSig.length,
               signatures: input.partialSig.map(ps => ({
-                pubkeyPrefix: ps.pubkey.slice(0, 8).toString('hex'),
+                pubkeyPrefix: toHex(ps.pubkey.slice(0, 8)),
                 sigLength: ps.signature.length,
-                sigHexStart: ps.signature.slice(0, 10).toString('hex'),
-                sigHexEnd: ps.signature.slice(-5).toString('hex'),
+                sigHexStart: toHex(ps.signature.slice(0, 10)),
+                sigHexEnd: toHex(ps.signature.slice(-5)),
               })),
             });
           }

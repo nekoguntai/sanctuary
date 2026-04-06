@@ -70,7 +70,7 @@ export class SanctuaryImplementation implements PsbtImplementation {
           value: output.value,
           n: index,
           scriptPubKey: {
-            hex: output.script.toString('hex'),
+            hex: Buffer.from(output.script).toString('hex'),
           },
         })),
       },
@@ -80,31 +80,31 @@ export class SanctuaryImplementation implements PsbtImplementation {
         witnessUtxo: input.witnessUtxo
           ? {
               amount: input.witnessUtxo.value,
-              scriptPubKey: input.witnessUtxo.script.toString('hex'),
+              scriptPubKey: Buffer.from(input.witnessUtxo.script).toString('hex'),
             }
           : undefined,
-        redeemScript: input.redeemScript?.toString('hex'),
-        witnessScript: input.witnessScript?.toString('hex'),
+        redeemScript: input.redeemScript ? Buffer.from(input.redeemScript).toString('hex') : undefined,
+        witnessScript: input.witnessScript ? Buffer.from(input.witnessScript).toString('hex') : undefined,
         bip32Derivation: input.bip32Derivation?.map((d) => ({
-          pubkey: d.pubkey.toString('hex'),
-          masterFingerprint: d.masterFingerprint.toString('hex'),
+          pubkey: Buffer.from(d.pubkey).toString('hex'),
+          masterFingerprint: Buffer.from(d.masterFingerprint).toString('hex'),
           path: d.path,
         })),
         partialSig: input.partialSig?.map((s) => ({
-          pubkey: s.pubkey.toString('hex'),
-          signature: s.signature.toString('hex'),
+          pubkey: Buffer.from(s.pubkey).toString('hex'),
+          signature: Buffer.from(s.signature).toString('hex'),
         })),
         sighashType: input.sighashType,
-        finalScriptSig: input.finalScriptSig?.toString('hex'),
-        finalScriptWitness: input.finalScriptWitness?.toString('hex'),
+        finalScriptSig: input.finalScriptSig ? Buffer.from(input.finalScriptSig).toString('hex') : undefined,
+        finalScriptWitness: input.finalScriptWitness ? Buffer.from(input.finalScriptWitness).toString('hex') : undefined,
       })),
       outputs: psbt.data.outputs.map((output, index) => ({
         index,
-        redeemScript: output.redeemScript?.toString('hex'),
-        witnessScript: output.witnessScript?.toString('hex'),
+        redeemScript: output.redeemScript ? Buffer.from(output.redeemScript).toString('hex') : undefined,
+        witnessScript: output.witnessScript ? Buffer.from(output.witnessScript).toString('hex') : undefined,
         bip32Derivation: output.bip32Derivation?.map((d) => ({
-          pubkey: d.pubkey.toString('hex'),
-          masterFingerprint: d.masterFingerprint.toString('hex'),
+          pubkey: Buffer.from(d.pubkey).toString('hex'),
+          masterFingerprint: Buffer.from(d.masterFingerprint).toString('hex'),
           path: d.path,
         })),
       })),

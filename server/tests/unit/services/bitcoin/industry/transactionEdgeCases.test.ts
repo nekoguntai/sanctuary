@@ -183,7 +183,7 @@ describe('Transaction Creation Industry Edge Cases', () => {
 
       // Should create two outputs to the same address
       expect(result.psbt.txOutputs).toHaveLength(2);
-      expect(result.psbt.txOutputs[0].value + result.psbt.txOutputs[1].value).toBe(30_000);
+      expect(result.psbt.txOutputs[0].value + result.psbt.txOutputs[1].value).toBe(BigInt(30_000));
     });
   });
 

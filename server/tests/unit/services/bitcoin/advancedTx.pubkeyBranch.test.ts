@@ -49,8 +49,8 @@ describe('advancedTx bip32 derivation branch coverage', () => {
     const spendAddress = testnetAddresses.nativeSegwit[0];
     const changeAddress = testnetAddresses.nativeSegwit[1];
 
-    const spendScriptHex = bitcoin.address
-      .toOutputScript(spendAddress, bitcoin.networks.testnet)
+    const spendScriptHex = Buffer.from(bitcoin.address
+      .toOutputScript(spendAddress, bitcoin.networks.testnet))
       .toString('hex');
 
     const inputHash = Buffer.from('33'.repeat(32), 'hex');
@@ -59,8 +59,8 @@ describe('advancedTx bip32 derivation branch coverage', () => {
     const tx = new bitcoin.Transaction();
     tx.version = 2;
     tx.addInput(inputHash, 0, RBF_SEQUENCE);
-    tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), 42_000);
-    tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), 53_000);
+    tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), BigInt(42_000));
+    tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), BigInt(53_000));
 
     const txHex = tx.toHex();
 

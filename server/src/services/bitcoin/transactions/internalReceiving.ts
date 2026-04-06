@@ -41,7 +41,7 @@ export async function createInternalReceivingTransactions(
     for (const output of txParsed.outs) {
       try {
         const addr = bitcoin.address.fromOutputScript(output.script, networkObj);
-        outputAddresses.push({ address: addr, amount: output.value });
+        outputAddresses.push({ address: addr, amount: Number(output.value) });
       } catch (_e) {
         // Skip OP_RETURN or non-standard outputs
       }

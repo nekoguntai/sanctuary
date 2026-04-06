@@ -258,14 +258,14 @@ export async function updateDraft(
         for (const input of existingPsbtObj.data.inputs) {
           if (input.partialSig) {
             for (const ps of input.partialSig) {
-              existingSigs.push(ps.pubkey.toString('hex').substring(0, 16));
+              existingSigs.push(Buffer.from(ps.pubkey).toString('hex').substring(0, 16));
             }
           }
         }
         for (const input of newPsbtObj.data.inputs) {
           if (input.partialSig) {
             for (const ps of input.partialSig) {
-              newSigs.push(ps.pubkey.toString('hex').substring(0, 16));
+              newSigs.push(Buffer.from(ps.pubkey).toString('hex').substring(0, 16));
             }
           }
         }
@@ -290,7 +290,7 @@ export async function updateDraft(
           if (input.partialSig) {
             totalSigs += input.partialSig.length;
             for (const ps of input.partialSig) {
-              combinedSigs.push(ps.pubkey.toString('hex').substring(0, 16));
+              combinedSigs.push(Buffer.from(ps.pubkey).toString('hex').substring(0, 16));
             }
           }
         }

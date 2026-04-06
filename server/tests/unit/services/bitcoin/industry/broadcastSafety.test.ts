@@ -156,12 +156,12 @@ describe('Transaction Broadcasting Safety', () => {
         sequence: 0xfffffffd,
         witnessUtxo: {
           script: Buffer.from('0014' + 'aa'.repeat(20), 'hex'),
-          value: 100_000,
+          value: BigInt(100_000),
         },
       });
       originalPsbt.addOutput({
         address: intendedRecipient,
-        value: intendedAmount,
+        value: BigInt(intendedAmount),
       });
 
       // Verify that the outputs match intent
@@ -176,7 +176,7 @@ describe('Transaction Broadcasting Safety', () => {
       });
 
       expect(recipientOutput).toBeDefined();
-      expect(recipientOutput!.value).toBe(intendedAmount);
+      expect(recipientOutput!.value).toBe(BigInt(intendedAmount));
     });
 
     it('should verify all outputs in signed PSBT match draft metadata', () => {
@@ -209,7 +209,7 @@ describe('Transaction Broadcasting Safety', () => {
         const recipientFound = outputs.some(o => {
           try {
             const addr = bitcoin.address.fromOutputScript(o.script, network);
-            return addr === intent.recipient && o.value === intent.amount;
+            return addr === intent.recipient && Number(o.value) === intent.amount;
           } catch {
             return false;
           }
@@ -220,15 +220,15 @@ describe('Transaction Broadcasting Safety', () => {
         }
 
         // Check fee matches (within 10% tolerance for rounding)
-        let totalInput = 0;
+        let totalInput = BigInt(0);
         for (let i = 0; i < psbt.inputCount; i++) {
           const input = psbt.data.inputs[i];
           if (input.witnessUtxo) {
             totalInput += input.witnessUtxo.value;
           }
         }
-        const totalOutput = outputs.reduce((sum, o) => sum + o.value, 0);
-        const actualFee = totalInput - totalOutput;
+        const totalOutput = outputs.reduce((sum, o) => sum + o.value, BigInt(0));
+        const actualFee = Number(totalInput - totalOutput);
         const feeDiff = Math.abs(actualFee - intent.fee);
 
         if (feeDiff > intent.fee * 0.1) {
@@ -246,12 +246,12 @@ describe('Transaction Broadcasting Safety', () => {
         sequence: 0xfffffffd,
         witnessUtxo: {
           script: Buffer.from('0014' + 'aa'.repeat(20), 'hex'),
-          value: 51_000, // amount + fee
+          value: BigInt(51_000), // amount + fee
         },
       });
       psbt.addOutput({
         address: metadata.recipient,
-        value: metadata.amount,
+        value: BigInt(metadata.amount),
       });
 
       const result = verifyPsbtMatchesIntent(psbt, metadata, TESTNET);

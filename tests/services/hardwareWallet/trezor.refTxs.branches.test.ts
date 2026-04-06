@@ -25,12 +25,17 @@ vi.mock('../../../utils/logger', () => ({
   }),
 }));
 
+/** Convert hex to Uint8Array (bitcoinjs-lib v7 requires Uint8Array, not Buffer, in jsdom) */
+function hexToBytes(hex: string): Uint8Array {
+  return new Uint8Array(Buffer.from(hex, 'hex'));
+}
+
 function makeRawTxHex(): string {
   const tx = new bitcoin.Transaction();
   tx.version = 2;
   tx.locktime = 10;
-  tx.addInput(Buffer.alloc(32, 1), 1, 0xfffffffd);
-  tx.addOutput(Buffer.from(`0014${'22'.repeat(20)}`, 'hex'), 12_345);
+  tx.addInput(new Uint8Array(32).fill(1), 1, 0xfffffffd);
+  tx.addOutput(hexToBytes(`0014${'22'.repeat(20)}`), BigInt(12_345));
   return tx.toHex();
 }
 
@@ -42,14 +47,14 @@ function makePsbtWithInputs(hashes: string[]): bitcoin.Psbt {
       index: idx % 2,
       sequence: 0xfffffffd - idx,
       witnessUtxo: {
-        script: Buffer.from(`0014${'11'.repeat(20)}`, 'hex'),
-        value: 50_000,
+        script: hexToBytes(`0014${'11'.repeat(20)}`),
+        value: BigInt(50_000),
       },
     } as any);
   });
   psbt.addOutput({
-    script: Buffer.from(`0014${'33'.repeat(20)}`, 'hex'),
-    value: 40_000,
+    script: hexToBytes(`0014${'33'.repeat(20)}`),
+    value: BigInt(40_000),
   });
   return psbt;
 }
@@ -86,7 +91,7 @@ describe('trezor refTxs branch coverage', () => {
     );
     expect(refTxs[0].bin_outputs[0]).toEqual(
       expect.objectContaining({
-        amount: 12_345,
+        amount: BigInt(12_345),
       })
     );
   });

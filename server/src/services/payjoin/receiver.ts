@@ -131,14 +131,14 @@ export async function processPayjoinRequest(
       // For P2WPKH, we need to add witnessUtxo
       witnessUtxo: {
         script: Buffer.from(contributionUtxo.scriptPubKey, 'hex'),
-        value: contributionAmount,
+        value: BigInt(contributionAmount),
       },
     });
 
     // Increase our output by contribution amount
     // The output value needs to be updated
     const newOutputValue = paymentAmount + contributionAmount;
-    proposalPsbt.txOutputs[ourOutputIndex].value = newOutputValue;
+    proposalPsbt.txOutputs[ourOutputIndex].value = BigInt(newOutputValue);
 
     // Note: In a full implementation, we would sign our input here
     // For now, we return the unsigned proposal

@@ -349,19 +349,19 @@ describe('Payjoin Service', () => {
       psbt.updateInput(0, {
         witnessUtxo: {
           script: bitcoin.address.toOutputScript(TEST_ADDRESS_TESTNET, bitcoin.networks.testnet),
-          value: 100000,
+          value: BigInt(100000),
         },
       });
       psbt.addOutput({
         address: TEST_ADDRESS_TESTNET,
-        value: 80000,
+        value: BigInt(80000),
       });
       psbt.addOutput({
         script: bitcoin.payments.p2wpkh({
           hash: Buffer.alloc(20, 1),
           network: bitcoin.networks.testnet,
         }).output!,
-        value: 10000,
+        value: BigInt(10000),
       });
       return psbt;
     };
@@ -832,12 +832,12 @@ describe('Payjoin Service', () => {
       psbt.updateInput(0, {
         witnessUtxo: {
           script: bitcoin.address.toOutputScript(TEST_ADDRESS_TESTNET, bitcoin.networks.testnet),
-          value: paymentAmount + 10000, // Include some for fee
+          value: BigInt(paymentAmount + 10000), // Include some for fee
         },
       });
       psbt.addOutput({
         address: TEST_ADDRESS_TESTNET,
-        value: paymentAmount,
+        value: BigInt(paymentAmount),
       });
       return psbt;
     };
@@ -889,12 +889,12 @@ describe('Payjoin Service', () => {
         clone.updateInput(0, {
           witnessUtxo: {
             script: Buffer.from('0014' + 'a'.repeat(40), 'hex'),
-            value: paymentAmount + 10000,
+            value: BigInt(paymentAmount + 10000),
           },
         });
         clone.addOutput({
           script: bitcoin.address.toOutputScript(TEST_ADDRESS_TESTNET, bitcoin.networks.testnet),
-          value: paymentAmount,
+          value: BigInt(paymentAmount),
         });
         return clone;
       });

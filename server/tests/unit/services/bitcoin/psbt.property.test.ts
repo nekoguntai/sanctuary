@@ -103,12 +103,12 @@ describe('PSBT Property-Based Tests', () => {
 
       const psbt = bitcoin.Psbt.fromBase64(psbtWithUtxo);
 
-      let totalInput = 0;
+      let totalInput = BigInt(0);
       let hasAllUtxos = true;
 
       psbt.data.inputs.forEach((input) => {
         if (input.witnessUtxo) {
-          totalInput += input.witnessUtxo.value;
+          totalInput += BigInt(input.witnessUtxo.value);
         } else if (input.nonWitnessUtxo) {
           // Would need to parse the full tx - skip for this test
           hasAllUtxos = false;
@@ -118,13 +118,13 @@ describe('PSBT Property-Based Tests', () => {
       });
 
       if (hasAllUtxos) {
-        let totalOutput = 0;
+        let totalOutput = BigInt(0);
         psbt.txOutputs.forEach((output) => {
-          totalOutput += output.value;
+          totalOutput += BigInt(output.value);
         });
 
         const fee = totalInput - totalOutput;
-        expect(fee).toBeGreaterThanOrEqual(0);
+        expect(fee).toBeGreaterThanOrEqual(BigInt(0));
       }
     });
 
@@ -138,7 +138,7 @@ describe('PSBT Property-Based Tests', () => {
           const psbt = bitcoin.Psbt.fromBase64(psbtBase64);
 
           psbt.txOutputs.forEach((output) => {
-            expect(output.value).toBeGreaterThan(0);
+            expect(Number(output.value)).toBeGreaterThan(0);
           });
         }),
         { numRuns: 10 }
@@ -306,7 +306,7 @@ describe('PSBT Property-Based Tests', () => {
 
       psbt.data.inputs.forEach((input) => {
         if (input.witnessUtxo) {
-          expect(input.witnessUtxo.value).toBeGreaterThan(0);
+          expect(Number(input.witnessUtxo.value)).toBeGreaterThan(0);
         }
       });
     });

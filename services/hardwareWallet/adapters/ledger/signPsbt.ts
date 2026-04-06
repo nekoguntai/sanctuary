@@ -9,6 +9,7 @@ import type { AppClient } from 'ledger-bitcoin';
 import { DefaultWalletPolicy } from 'ledger-bitcoin';
 import * as bitcoin from 'bitcoinjs-lib';
 import { createLogger } from '../../../../utils/logger';
+import { toHex } from '../../../../utils/bufferUtils';
 import type { PSBTSignRequest, PSBTSignResponse } from '../../types';
 import { extractAccountPath, inferScriptTypeFromPath, getDescriptorTemplate } from './utils';
 
@@ -94,7 +95,7 @@ export async function signPsbt(
 
     if (input.bip32Derivation && input.bip32Derivation.length > 0) {
       input.bip32Derivation.forEach((deriv) => {
-        const fpHex = deriv.masterFingerprint.toString('hex');
+        const fpHex = toHex(deriv.masterFingerprint);
         const matches = fpHex.toLowerCase() === masterFpHex.toLowerCase();
 
         if (!matches) {

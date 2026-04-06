@@ -95,7 +95,7 @@ function createTestPsbt(options: {
       psbt.updateInput(i, {
         witnessUtxo: {
           script: outputScript,
-          value: inputValues[i] || 100000,
+          value: BigInt(inputValues[i] || 100000),
         },
       });
     }
@@ -110,7 +110,7 @@ function createTestPsbt(options: {
 
     psbt.addOutput({
       script: outputScript,
-      value: outputValues[i] || 50000,
+      value: BigInt(outputValues[i] || 50000),
     });
   }
 
@@ -133,7 +133,7 @@ function createNonWitnessPsbt(options: {
       hash: Buffer.alloc(20, seed),
       network: TESTNET,
     }).output!,
-    inputValue
+    BigInt(inputValue)
   );
 
   const psbt = new bitcoin.Psbt({ network: TESTNET });
@@ -148,7 +148,7 @@ function createNonWitnessPsbt(options: {
       hash: Buffer.alloc(20, 0x20 + seed),
       network: TESTNET,
     }).output!,
-    value: outputValue,
+    value: BigInt(outputValue),
   });
 
   return psbt;
@@ -167,12 +167,12 @@ function createOpReturnPsbt(seed: number = 1): bitcoin.Psbt {
         hash: Buffer.alloc(20, seed),
         network: TESTNET,
       }).output!,
-      value: 100000,
+      value: BigInt(100000),
     },
   });
   psbt.addOutput({
     script: Buffer.from([0x6a, 0x01, seed]),
-    value: 0,
+    value: BigInt(0),
   });
 
   return psbt;
@@ -281,7 +281,7 @@ describe('PSBT Validation Utilities', () => {
           hash: Buffer.alloc(20, 1),
           network: TESTNET,
         }).output!,
-        value: 50000,
+        value: BigInt(50000),
       });
 
       const result = validatePsbtStructure(psbt.toBase64());
@@ -325,7 +325,7 @@ describe('PSBT Validation Utilities', () => {
             hash: Buffer.alloc(20, 1),
             network: TESTNET,
           }).output!,
-          value: 100000,
+          value: BigInt(100000),
         },
       });
 
@@ -471,7 +471,7 @@ describe('PSBT Validation Utilities', () => {
               hash: Buffer.alloc(20, 1),
               network: TESTNET,
             }).output!,
-            value: 100000,
+            value: BigInt(100000),
           },
         });
 
@@ -487,7 +487,7 @@ describe('PSBT Validation Utilities', () => {
               hash: Buffer.alloc(20, 2),
               network: TESTNET,
             }).output!,
-            value: 30000,
+            value: BigInt(30000),
           },
         });
 
@@ -498,14 +498,14 @@ describe('PSBT Validation Utilities', () => {
             hash: Buffer.alloc(20, 0x10),
             network: TESTNET,
           }).output!,
-          value: 60000, // Increased from 50000 (output increased by 10000)
+          value: BigInt(60000), // Increased from 50000 (output increased by 10000)
         });
         proposal.addOutput({
           script: bitcoin.payments.p2wpkh({
             hash: Buffer.alloc(20, 0x11),
             network: TESTNET,
           }).output!,
-          value: 58000, // Increased from 40000 to absorb receiver contribution
+          value: BigInt(58000), // Increased from 40000 to absorb receiver contribution
         });
 
         const result = validatePayjoinProposal(
@@ -582,7 +582,7 @@ describe('PSBT Validation Utilities', () => {
               hash: Buffer.alloc(20, 1),
               network: TESTNET,
             }).output!,
-            value: 100000,
+            value: BigInt(100000),
           },
         });
         proposal.addInput({
@@ -596,7 +596,7 @@ describe('PSBT Validation Utilities', () => {
               hash: Buffer.alloc(20, 2),
               network: TESTNET,
             }).output!,
-            value: 30000,
+            value: BigInt(30000),
           },
         });
         // Add matching outputs
@@ -605,14 +605,14 @@ describe('PSBT Validation Utilities', () => {
             hash: Buffer.alloc(20, 0x10),
             network: TESTNET,
           }).output!,
-          value: 50000,
+          value: BigInt(50000),
         });
         proposal.addOutput({
           script: bitcoin.payments.p2wpkh({
             hash: Buffer.alloc(20, 0x11),
             network: TESTNET,
           }).output!,
-          value: 50000,
+          value: BigInt(50000),
         });
 
         const result = validatePayjoinProposal(
@@ -814,7 +814,7 @@ describe('PSBT Validation Utilities', () => {
               hash: Buffer.alloc(20, 1),
               network: TESTNET,
             }).output!,
-            value: 100000,
+            value: BigInt(100000),
           },
         });
 
@@ -831,7 +831,7 @@ describe('PSBT Validation Utilities', () => {
                 hash: Buffer.alloc(20, i + 10),
                 network: TESTNET,
               }).output!,
-              value: 30000,
+              value: BigInt(30000),
             },
           });
         }
@@ -842,14 +842,14 @@ describe('PSBT Validation Utilities', () => {
             hash: Buffer.alloc(20, 0x10),
             network: TESTNET,
           }).output!,
-          value: 50000,
+          value: BigInt(50000),
         });
         proposal.addOutput({
           script: bitcoin.payments.p2wpkh({
             hash: Buffer.alloc(20, 0x11),
             network: TESTNET,
           }).output!,
-          value: 100000, // Receiver gets their contribution
+          value: BigInt(100000), // Receiver gets their contribution
         });
 
         const result = validatePayjoinProposal(
@@ -912,7 +912,7 @@ describe('PSBT Validation Utilities', () => {
               hash: Buffer.alloc(20, 1),
               network: TESTNET,
             }).output!,
-            value: 100000,
+            value: BigInt(100000),
           },
         });
 
@@ -928,7 +928,7 @@ describe('PSBT Validation Utilities', () => {
               hash: Buffer.alloc(20, 20),
               network: TESTNET,
             }).output!,
-            value: 30000,
+            value: BigInt(30000),
           },
         });
 
@@ -938,14 +938,14 @@ describe('PSBT Validation Utilities', () => {
             hash: Buffer.alloc(20, 0x10),
             network: TESTNET,
           }).output!,
-          value: 50000,
+          value: BigInt(50000),
         });
         proposal.addOutput({
           script: bitcoin.payments.p2wpkh({
             hash: Buffer.alloc(20, 0x11),
             network: TESTNET,
           }).output!,
-          value: 70000, // Increased by receiver contribution
+          value: BigInt(70000), // Increased by receiver contribution
         });
 
         const result = validatePayjoinProposal(
@@ -1049,7 +1049,7 @@ describe('PSBT Validation Utilities', () => {
             hash: Buffer.alloc(20, 1),
             network: TESTNET,
           }).output!,
-          value: 100000,
+          value: BigInt(100000),
         },
       });
       psbt.addOutput({
@@ -1057,7 +1057,7 @@ describe('PSBT Validation Utilities', () => {
           hash: Buffer.alloc(20, 2),
           network: TESTNET,
         }).output!,
-        value: 50000,
+        value: BigInt(50000),
       });
 
       const inputs = getPsbtInputs(psbt);
@@ -1102,13 +1102,13 @@ describe('PSBT Validation Utilities', () => {
             hash: Buffer.alloc(20, 1),
             network: TESTNET,
           }).output!,
-          value: 100000,
+          value: BigInt(100000),
         },
       });
       // Add OP_RETURN output
       psbt.addOutput({
         script: Buffer.from([0x6a, 0x04, 0x74, 0x65, 0x73, 0x74]), // OP_RETURN "test"
-        value: 0,
+        value: BigInt(0),
       });
 
       const outputs = getPsbtOutputs(psbt, TESTNET);
@@ -1157,7 +1157,7 @@ describe('PSBT Validation Utilities', () => {
             hash: Buffer.alloc(20, 1),
             network: TESTNET,
           }).output!,
-          value: 100000,
+          value: BigInt(100000),
         },
       });
 
@@ -1173,7 +1173,7 @@ describe('PSBT Validation Utilities', () => {
             hash: Buffer.alloc(20, 2),
             network: TESTNET,
           }).output!,
-          value: 50000,
+          value: BigInt(50000),
         },
       });
 
@@ -1182,7 +1182,7 @@ describe('PSBT Validation Utilities', () => {
           hash: Buffer.alloc(20, 3),
           network: TESTNET,
         }).output!,
-        value: 100000,
+        value: BigInt(100000),
       });
 
       expect(isRbfEnabled(psbt)).toBe(true);
@@ -1301,7 +1301,7 @@ describe('PSBT Validation Utilities', () => {
           hash: Buffer.alloc(20, 0xff),
           network: TESTNET,
         }).output!,
-        value: 1000,
+        value: BigInt(1000),
       });
 
       // Clone should not be affected

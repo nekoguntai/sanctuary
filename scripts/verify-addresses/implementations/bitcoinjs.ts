@@ -10,8 +10,10 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import { fromBase58 } from 'bip32';
+import BIP32Factory from 'bip32';
 import * as ecc from 'tiny-secp256k1';
+
+const bip32 = BIP32Factory(ecc);
 import bs58check from 'bs58check';
 import type { AddressDeriver, ScriptType, MultisigScriptType, Network } from '../types.js';
 
@@ -83,7 +85,7 @@ export const bitcoinjsImpl: AddressDeriver = {
     const standardXpub = convertToStandardXpub(xpub);
 
     // Parse xpub and derive child key
-    const node = fromBase58(standardXpub, networkObj);
+    const node = bip32.fromBase58(standardXpub, networkObj);
     const changeIndex = change ? 1 : 0;
     const derived = node.derive(changeIndex).derive(index);
 
@@ -163,7 +165,7 @@ export const bitcoinjsImpl: AddressDeriver = {
     const pubkeys: Buffer[] = [];
     for (const xpub of xpubs) {
       const standardXpub = convertToStandardXpub(xpub);
-      const node = fromBase58(standardXpub, networkObj);
+      const node = bip32.fromBase58(standardXpub, networkObj);
       const derived = node.derive(changeIndex).derive(index);
 
       if (!derived.publicKey) {

@@ -4,6 +4,34 @@
  * Tests for BIP32/44/49/84/86 address derivation paths.
  */
 
+// bitcoinjs-lib v7 exports as ESM with non-configurable properties.
+// To mock payment functions for branch coverage tests, we intercept
+// them at the module level with conditional passthrough.
+const { paymentMocks } = vi.hoisted(() => ({
+  paymentMocks: {
+    p2wpkh: null as ((args: unknown) => unknown) | null,
+    p2sh: null as ((args: unknown) => unknown) | null,
+    p2tr: null as ((args: unknown) => unknown) | null,
+    p2pkh: null as ((args: unknown) => unknown) | null,
+    p2wsh: null as ((args: unknown) => unknown) | null,
+  },
+}));
+
+vi.mock('bitcoinjs-lib', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('bitcoinjs-lib')>();
+  return {
+    ...actual,
+    payments: {
+      ...actual.payments,
+      p2wpkh: (...args: unknown[]) => paymentMocks.p2wpkh ? paymentMocks.p2wpkh(args[0]) : actual.payments.p2wpkh(...args as [Parameters<typeof actual.payments.p2wpkh>[0]]),
+      p2sh: (...args: unknown[]) => paymentMocks.p2sh ? paymentMocks.p2sh(args[0]) : actual.payments.p2sh(...args as [Parameters<typeof actual.payments.p2sh>[0]]),
+      p2tr: (...args: unknown[]) => paymentMocks.p2tr ? paymentMocks.p2tr(args[0]) : actual.payments.p2tr(...args as [Parameters<typeof actual.payments.p2tr>[0]]),
+      p2pkh: (...args: unknown[]) => paymentMocks.p2pkh ? paymentMocks.p2pkh(args[0]) : actual.payments.p2pkh(...args as [Parameters<typeof actual.payments.p2pkh>[0]]),
+      p2wsh: (...args: unknown[]) => paymentMocks.p2wsh ? paymentMocks.p2wsh(args[0]) : actual.payments.p2wsh(...args as [Parameters<typeof actual.payments.p2wsh>[0]]),
+    },
+  };
+});
+
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
 import { BIP32Factory } from 'bip32';
@@ -598,7 +626,7 @@ describe('Address Derivation Service', () => {
       const result1 = deriveAddress(testTpub, 5, { network: 'testnet' });
       const result2 = deriveAddress(testTpub, 5, { network: 'testnet' });
 
-      expect(result1.publicKey.equals(result2.publicKey)).toBe(true);
+      expect(Buffer.from(result1.publicKey).equals(Buffer.from(result2.publicKey))).toBe(true);
     });
   });
 
@@ -628,7 +656,7 @@ describe('Address Derivation Service', () => {
         const xpubAddr = deriveAddress(converted, 0, { network: 'mainnet' });
 
         // Public keys should be identical since they represent the same key
-        expect(zpubAddr.publicKey.equals(xpubAddr.publicKey)).toBe(true);
+        expect(Buffer.from(zpubAddr.publicKey).equals(Buffer.from(xpubAddr.publicKey))).toBe(true);
       });
     });
 
@@ -696,56 +724,53 @@ describe('Address Derivation Service', () => {
   });
 
   describe('Additional branch coverage', () => {
-    it('throws when native segwit address generation returns no address', () => {
-      const spy = vi.spyOn(bitcoin.payments, 'p2wpkh').mockReturnValue({ address: undefined } as any);
+    // Use the hoisted paymentMocks to intercept payment functions
+    afterEach(() => {
+      paymentMocks.p2wpkh = null;
+      paymentMocks.p2sh = null;
+      paymentMocks.p2tr = null;
+      paymentMocks.p2pkh = null;
+      paymentMocks.p2wsh = null;
+    });
 
+    it('throws when native segwit address generation returns no address', () => {
+      paymentMocks.p2wpkh = () => ({ address: undefined });
       expect(() =>
         deriveAddress(testXpubs.testnet.bip84, 0, {
           scriptType: 'native_segwit',
           network: 'testnet',
         })
       ).toThrow('Failed to generate address');
-
-      spy.mockRestore();
     });
 
     it('throws when nested segwit address generation returns no address', () => {
-      const spy = vi.spyOn(bitcoin.payments, 'p2sh').mockReturnValue({ address: undefined } as any);
-
+      paymentMocks.p2sh = () => ({ address: undefined });
       expect(() =>
         deriveAddress(testXpubs.testnet.bip84, 0, {
           scriptType: 'nested_segwit',
           network: 'testnet',
         })
       ).toThrow('Failed to generate address');
-
-      spy.mockRestore();
     });
 
     it('throws when taproot address generation returns no address', () => {
-      const spy = vi.spyOn(bitcoin.payments, 'p2tr').mockReturnValue({ address: undefined } as any);
-
+      paymentMocks.p2tr = () => ({ address: undefined });
       expect(() =>
         deriveAddress(testXpubs.testnet.bip84, 0, {
           scriptType: 'taproot',
           network: 'testnet',
         })
       ).toThrow('Failed to generate address');
-
-      spy.mockRestore();
     });
 
     it('throws when legacy address generation returns no address', () => {
-      const spy = vi.spyOn(bitcoin.payments, 'p2pkh').mockReturnValue({ address: undefined } as any);
-
+      paymentMocks.p2pkh = () => ({ address: undefined });
       expect(() =>
         deriveAddress(testXpubs.testnet.bip84, 0, {
           scriptType: 'legacy',
           network: 'testnet',
         })
       ).toThrow('Failed to generate address');
-
-      spy.mockRestore();
     });
 
     it('throws when xpub derivation yields no public key', () => {
@@ -770,25 +795,19 @@ describe('Address Derivation Service', () => {
     it('throws when multisig P2WSH address generation returns no address', () => {
       const tpub = testXpubs.testnet.bip84;
       const descriptor = `wsh(sortedmulti(1,[aabbccdd/84h/1h/0h]${tpub}/0/*))`;
-      const spy = vi.spyOn(bitcoin.payments, 'p2wsh').mockReturnValue({ address: undefined } as any);
-
+      paymentMocks.p2wsh = () => ({ address: undefined });
       expect(() =>
         deriveAddressFromDescriptor(descriptor, 0, { network: 'testnet' })
       ).toThrow('Failed to generate P2WSH address');
-
-      spy.mockRestore();
     });
 
     it('throws when nested multisig P2SH-P2WSH address generation returns no address', () => {
       const tpub = testXpubs.testnet.bip84;
       const descriptor = `sh(wsh(sortedmulti(1,[aabbccdd/84h/1h/0h]${tpub}/0/*)))`;
-      const spy = vi.spyOn(bitcoin.payments, 'p2sh').mockReturnValue({ address: undefined } as any);
-
+      paymentMocks.p2sh = () => ({ address: undefined });
       expect(() =>
         deriveAddressFromDescriptor(descriptor, 0, { network: 'testnet' })
       ).toThrow('Failed to generate P2SH-P2WSH address');
-
-      spy.mockRestore();
     });
 
     it('returns original key when convertToStandardXpub fails to decode prefixed key', () => {

@@ -318,7 +318,7 @@ export function addInputsWithBip32(
     } else {
       inputOptions.witnessUtxo = {
         script: Buffer.from(utxo.scriptPubKey, 'hex'),
-        value: Number(utxo.amount),
+        value: BigInt(utxo.amount),
       };
     }
 

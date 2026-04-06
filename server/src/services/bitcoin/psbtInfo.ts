@@ -40,47 +40,7 @@ export interface PSBTInfo {
  * @returns Parsed PSBT information including inputs, outputs, and fee
  */
 export function getPSBTInfo(psbtBase64: string): PSBTInfo {
-  const psbt = bitcoin.Psbt.fromBase64(psbtBase64);
-
-  // Get inputs
-  const inputs = psbt.data.inputs.map((input, index) => {
-    const txInput = psbt.txInputs[index];
-    const txid = Buffer.from(txInput.hash).reverse().toString('hex');
-    const vout = txInput.index;
-    const value = input.witnessUtxo?.value || 0;
-
-    return { txid, vout, value };
-  });
-
-  // Get outputs
-  const outputs = psbt.txOutputs.map((output) => {
-    let address: string | undefined;
-    try {
-      address = bitcoin.address.fromOutputScript(
-        output.script,
-        bitcoin.networks.bitcoin
-      );
-    } catch (e) {
-      // Some outputs might not have addresses (e.g., OP_RETURN)
-    }
-
-    return {
-      address,
-      value: output.value,
-      isChange: false, // Would need wallet context to determine this
-    };
-  });
-
-  // Calculate fee
-  const totalInput = inputs.reduce((sum, input) => sum + input.value, 0);
-  const totalOutput = outputs.reduce((sum, output) => sum + output.value, 0);
-  const fee = totalInput - totalOutput;
-
-  return {
-    inputs,
-    outputs,
-    fee,
-  };
+  return getPSBTInfoWithNetwork(psbtBase64, 'mainnet');
 }
 
 /**
@@ -94,33 +54,30 @@ export function getPSBTInfoWithNetwork(psbtBase64: string, network: 'mainnet' | 
   const psbt = bitcoin.Psbt.fromBase64(psbtBase64);
   const networkObj = network === 'testnet' ? bitcoin.networks.testnet : bitcoin.networks.bitcoin;
 
-  // Get inputs
   const inputs = psbt.data.inputs.map((input, index) => {
     const txInput = psbt.txInputs[index];
     const txid = Buffer.from(txInput.hash).reverse().toString('hex');
     const vout = txInput.index;
-    const value = input.witnessUtxo?.value || 0;
+    const value = Number(input.witnessUtxo?.value ?? 0);
 
     return { txid, vout, value };
   });
 
-  // Get outputs
   const outputs = psbt.txOutputs.map((output) => {
     let address: string | undefined;
     try {
       address = bitcoin.address.fromOutputScript(output.script, networkObj);
-    } catch (e) {
-      // Some outputs might not have addresses (e.g., OP_RETURN)
+    } catch {
+      // OP_RETURN and other non-address outputs are expected
     }
 
     return {
       address,
-      value: output.value,
+      value: Number(output.value),
       isChange: false,
     };
   });
 
-  // Calculate fee
   const totalInput = inputs.reduce((sum, input) => sum + input.value, 0);
   const totalOutput = outputs.reduce((sum, output) => sum + output.value, 0);
   const fee = totalInput - totalOutput;

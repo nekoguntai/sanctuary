@@ -248,8 +248,8 @@ describe('Advanced Transaction Features', () => {
     it('creates an RBF PSBT when wallet metadata has no devices, fingerprint, or descriptor', async () => {
       const spendAddress = testnetAddresses.nativeSegwit[0];
       const changeAddress = testnetAddresses.nativeSegwit[1];
-      const spendScriptHex = bitcoin.address
-        .toOutputScript(spendAddress, bitcoin.networks.testnet)
+      const spendScriptHex = Buffer.from(bitcoin.address
+        .toOutputScript(spendAddress, bitcoin.networks.testnet))
         .toString('hex');
       const inputHash = Buffer.from('10'.repeat(32), 'hex');
       const inputTxid = Buffer.from(inputHash).reverse().toString('hex');
@@ -257,8 +257,8 @@ describe('Advanced Transaction Features', () => {
       const tx = new bitcoin.Transaction();
       tx.version = 2;
       tx.addInput(inputHash, 0, RBF_SEQUENCE);
-      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), 45_000);
-      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), 54_000);
+      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), BigInt(45_000));
+      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), BigInt(54_000));
       const txHex = tx.toHex();
 
       mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({
@@ -295,8 +295,8 @@ describe('Advanced Transaction Features', () => {
     it('supports zero current fee rate and wallet devices without fingerprint/xpub', async () => {
       const spendAddress = testnetAddresses.nativeSegwit[0];
       const changeAddress = testnetAddresses.nativeSegwit[1];
-      const spendScriptHex = bitcoin.address
-        .toOutputScript(spendAddress, bitcoin.networks.testnet)
+      const spendScriptHex = Buffer.from(bitcoin.address
+        .toOutputScript(spendAddress, bitcoin.networks.testnet))
         .toString('hex');
       const inputHash = Buffer.from('11'.repeat(32), 'hex');
       const inputTxid = Buffer.from(inputHash).reverse().toString('hex');
@@ -304,8 +304,8 @@ describe('Advanced Transaction Features', () => {
       const tx = new bitcoin.Transaction();
       tx.version = 2;
       tx.addInput(inputHash, 0, RBF_SEQUENCE);
-      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), 60_000);
-      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), 40_000);
+      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), BigInt(60_000));
+      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), BigInt(40_000));
       const txHex = tx.toHex();
 
       mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({
@@ -343,15 +343,15 @@ describe('Advanced Transaction Features', () => {
       const spendAddress = testnetAddresses.nativeSegwit[0];
       const changeAddress = testnetAddresses.nativeSegwit[1];
       const externalAddress = spendAddress;
-      const spendScriptHex = bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet).toString('hex');
+      const spendScriptHex = Buffer.from(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet)).toString('hex');
       const inputHash = Buffer.from('01'.repeat(32), 'hex');
       const inputTxid = Buffer.from(inputHash).reverse().toString('hex');
 
       const tx = new bitcoin.Transaction();
       tx.version = 2;
       tx.addInput(inputHash, 0, RBF_SEQUENCE);
-      tx.addOutput(bitcoin.address.toOutputScript(externalAddress, bitcoin.networks.testnet), 40_000);
-      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), 55_000);
+      tx.addOutput(bitcoin.address.toOutputScript(externalAddress, bitcoin.networks.testnet), BigInt(40_000));
+      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), BigInt(55_000));
       const txHex = tx.toHex();
 
       mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({
@@ -409,14 +409,14 @@ describe('Advanced Transaction Features', () => {
     it('should fail when no wallet change output is available for fee bump', async () => {
       const spendAddress = testnetAddresses.nativeSegwit[0];
       const externalAddress = testnetAddresses.nativeSegwit[1];
-      const spendScriptHex = bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet).toString('hex');
+      const spendScriptHex = Buffer.from(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet)).toString('hex');
       const inputHash = Buffer.from('02'.repeat(32), 'hex');
       const inputTxid = Buffer.from(inputHash).reverse().toString('hex');
 
       const tx = new bitcoin.Transaction();
       tx.version = 2;
       tx.addInput(inputHash, 0, RBF_SEQUENCE);
-      tx.addOutput(bitcoin.address.toOutputScript(externalAddress, bitcoin.networks.testnet), 95_000);
+      tx.addOutput(bitcoin.address.toOutputScript(externalAddress, bitcoin.networks.testnet), BigInt(95_000));
       const txHex = tx.toHex();
 
       mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({
@@ -450,15 +450,15 @@ describe('Advanced Transaction Features', () => {
       const spendAddress = testnetAddresses.nativeSegwit[0];
       const changeAddress = testnetAddresses.nativeSegwit[1];
       const externalAddress = spendAddress;
-      const spendScriptHex = bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet).toString('hex');
+      const spendScriptHex = Buffer.from(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet)).toString('hex');
       const inputHash = Buffer.from('03'.repeat(32), 'hex');
       const inputTxid = Buffer.from(inputHash).reverse().toString('hex');
 
       const tx = new bitcoin.Transaction();
       tx.version = 2;
       tx.addInput(inputHash, 0, RBF_SEQUENCE);
-      tx.addOutput(bitcoin.address.toOutputScript(externalAddress, bitcoin.networks.testnet), 98_000);
-      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), 1_000);
+      tx.addOutput(bitcoin.address.toOutputScript(externalAddress, bitcoin.networks.testnet), BigInt(98_000));
+      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), BigInt(1_000));
       const txHex = tx.toHex();
 
       mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({
@@ -494,15 +494,15 @@ describe('Advanced Transaction Features', () => {
     it('uses descriptor xpub fallback when device xpub is unavailable', async () => {
       const spendAddress = testnetAddresses.nativeSegwit[0];
       const changeAddress = testnetAddresses.nativeSegwit[1];
-      const spendScriptHex = bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet).toString('hex');
+      const spendScriptHex = Buffer.from(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet)).toString('hex');
       const inputHash = Buffer.from('04'.repeat(32), 'hex');
       const inputTxid = Buffer.from(inputHash).reverse().toString('hex');
 
       const tx = new bitcoin.Transaction();
       tx.version = 2;
       tx.addInput(inputHash, 0, RBF_SEQUENCE);
-      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), 45_000);
-      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), 50_000);
+      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), BigInt(45_000));
+      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), BigInt(50_000));
       const txHex = tx.toHex();
 
       const parseSpy = vi.spyOn(addressDerivation, 'parseDescriptor').mockReturnValue({
@@ -546,8 +546,8 @@ describe('Advanced Transaction Features', () => {
       const tx = new bitcoin.Transaction();
       tx.version = 2;
       tx.addInput(inputHash, 0, RBF_SEQUENCE);
-      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), 40_000);
-      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), 55_000);
+      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), BigInt(40_000));
+      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), BigInt(55_000));
       const txHex = tx.toHex();
 
       mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({
@@ -580,15 +580,15 @@ describe('Advanced Transaction Features', () => {
     it('continues when bip32Derivation update fails for malformed derivation path', async () => {
       const spendAddress = testnetAddresses.nativeSegwit[0];
       const changeAddress = testnetAddresses.nativeSegwit[1];
-      const spendScriptHex = bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet).toString('hex');
+      const spendScriptHex = Buffer.from(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet)).toString('hex');
       const inputHash = Buffer.from('06'.repeat(32), 'hex');
       const inputTxid = Buffer.from(inputHash).reverse().toString('hex');
 
       const tx = new bitcoin.Transaction();
       tx.version = 2;
       tx.addInput(inputHash, 0, RBF_SEQUENCE);
-      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), 42_000);
-      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), 53_000);
+      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), BigInt(42_000));
+      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), BigInt(53_000));
       const txHex = tx.toHex();
 
       mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({
@@ -624,15 +624,15 @@ describe('Advanced Transaction Features', () => {
     it('handles unhardened derivation path segments when building RBF bip32 data', async () => {
       const spendAddress = testnetAddresses.nativeSegwit[0];
       const changeAddress = testnetAddresses.nativeSegwit[1];
-      const spendScriptHex = bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet).toString('hex');
+      const spendScriptHex = Buffer.from(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet)).toString('hex');
       const inputHash = Buffer.from('12'.repeat(32), 'hex');
       const inputTxid = Buffer.from(inputHash).reverse().toString('hex');
 
       const tx = new bitcoin.Transaction();
       tx.version = 2;
       tx.addInput(inputHash, 0, RBF_SEQUENCE);
-      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), 42_000);
-      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), 53_000);
+      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), BigInt(42_000));
+      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), BigInt(53_000));
       const txHex = tx.toHex();
 
       mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({
@@ -669,7 +669,7 @@ describe('Advanced Transaction Features', () => {
     it('keeps outputs unchanged when calculated fee delta is not positive', async () => {
       const spendAddress = testnetAddresses.nativeSegwit[0];
       const changeAddress = testnetAddresses.nativeSegwit[1];
-      const spendScriptHex = bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet).toString('hex');
+      const spendScriptHex = Buffer.from(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet)).toString('hex');
       const inputHashes = ['21', '22', '23', '24', '25'].map((hex) => Buffer.from(hex.repeat(32), 'hex'));
       const inputTxids = inputHashes.map((hash) => Buffer.from(hash).reverse().toString('hex'));
 
@@ -680,8 +680,8 @@ describe('Advanced Transaction Features', () => {
       }
 
       const externalValue = 100_000;
-      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), externalValue);
-      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), 1);
+      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), BigInt(externalValue));
+      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), BigInt(1));
 
       const vsize = tx.virtualSize();
       let oldFee = 0;
@@ -697,7 +697,7 @@ describe('Advanced Transaction Features', () => {
       const totalInput = inputHashes.length * 100_000;
       const originalChangeValue = totalInput - externalValue - oldFee;
       expect(originalChangeValue).toBeGreaterThan(546);
-      tx.outs[1].value = originalChangeValue;
+      tx.outs[1].value = BigInt(originalChangeValue);
       const txHex = tx.toHex();
 
       mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({

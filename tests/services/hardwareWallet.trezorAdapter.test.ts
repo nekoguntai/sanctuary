@@ -46,6 +46,11 @@ isBip48MultisigPath,
 validateSatoshiAmount,
 } from '../../services/hardwareWallet/adapters/trezor';
 
+/** Convert hex to Uint8Array (bitcoinjs-lib v7 requires Uint8Array, not Buffer, in jsdom) */
+function hexToBytes(hex: string): Uint8Array {
+  return new Uint8Array(Buffer.from(hex, 'hex'));
+}
+
 const originalWindow = globalThis.window;
 
 function setSecureContext(value: boolean) {
@@ -75,8 +80,8 @@ function createSingleSigPsbt({
   fingerprintHex?: string;
 } = {}) {
   const psbt = new bitcoin.Psbt({ network: bitcoin.networks.bitcoin });
-  const inputPubkey = Buffer.from(`02${'11'.repeat(32)}`, 'hex');
-  const inputScript = Buffer.from(`0014${'11'.repeat(20)}`, 'hex');
+  const inputPubkey = hexToBytes(`02${'11'.repeat(32)}`);
+  const inputScript = hexToBytes(`0014${'11'.repeat(20)}`);
 
   const input: any = {
     hash: '11'.repeat(32),
@@ -84,14 +89,14 @@ function createSingleSigPsbt({
     sequence: 0xffffffff,
     witnessUtxo: {
       script: inputScript,
-      value: 60000,
+      value: BigInt(60000),
     },
   };
 
   if (includeBip32Derivation) {
     input.bip32Derivation = [
       {
-        masterFingerprint: Buffer.from(fingerprintHex, 'hex'),
+        masterFingerprint: hexToBytes(fingerprintHex),
         path: inputPath,
         pubkey: inputPubkey,
       },
@@ -100,24 +105,20 @@ function createSingleSigPsbt({
 
   psbt.addInput(input);
   psbt.addOutput({
-    script: Buffer.from(`0014${'22'.repeat(20)}`, 'hex'),
-    value: 59000,
+    script: hexToBytes(`0014${'22'.repeat(20)}`),
+    value: BigInt(59000),
   });
 
   return { psbt, inputScript };
 }
 
 function createMultisigPsbt(includeDeviceCosigner = true) {
-  const devicePubkey = Buffer.from(`02${'11'.repeat(32)}`, 'hex');
-  const cosignerPubkey = Buffer.from(`03${'22'.repeat(32)}`, 'hex');
+  const devicePubkey = hexToBytes(`02${'11'.repeat(32)}`);
+  const cosignerPubkey = hexToBytes(`03${'22'.repeat(32)}`);
   const deviceFingerprint = includeDeviceCosigner ? 'deadbeef' : 'cccccccc';
 
-  const witnessScript = Buffer.concat([
-    Buffer.from([0x52, 0x21]),
-    devicePubkey,
-    Buffer.from([0x21]),
-    cosignerPubkey,
-    Buffer.from([0x52, 0xae]),
+  const witnessScript = new Uint8Array([
+    0x52, 0x21, ...devicePubkey, 0x21, ...cosignerPubkey, 0x52, 0xae,
   ]);
   const p2wsh = bitcoin.payments.p2wsh({ redeem: { output: witnessScript } });
 
@@ -127,38 +128,38 @@ function createMultisigPsbt(includeDeviceCosigner = true) {
     index: 1,
     witnessUtxo: {
       script: p2wsh.output!,
-      value: 100000,
+      value: BigInt(100000),
     },
     witnessScript,
     bip32Derivation: [
       {
-        masterFingerprint: Buffer.from(deviceFingerprint, 'hex'),
+        masterFingerprint: hexToBytes(deviceFingerprint),
         path: "m/48'/0'/0'/2'/0/1",
         pubkey: devicePubkey,
       },
       {
-        masterFingerprint: Buffer.from('aaaaaaaa', 'hex'),
+        masterFingerprint: hexToBytes('aaaaaaaa'),
         path: "m/48'/0'/0'/2'/0/1",
         pubkey: cosignerPubkey,
       },
     ],
   });
   psbt.addOutput({
-    script: Buffer.from(`0014${'33'.repeat(20)}`, 'hex'),
-    value: 90000,
+    script: hexToBytes(`0014${'33'.repeat(20)}`),
+    value: BigInt(90000),
   });
   psbt.addOutput({
     script: p2wsh.output!,
-    value: 9000,
+    value: BigInt(9000),
     witnessScript,
     bip32Derivation: [
       {
-        masterFingerprint: Buffer.from(deviceFingerprint, 'hex'),
+        masterFingerprint: hexToBytes(deviceFingerprint),
         path: "m/48'/0'/0'/2'/1/0",
         pubkey: devicePubkey,
       },
       {
-        masterFingerprint: Buffer.from('aaaaaaaa', 'hex'),
+        masterFingerprint: hexToBytes('aaaaaaaa'),
         path: "m/48'/0'/0'/2'/1/0",
         pubkey: cosignerPubkey,
       },
@@ -173,7 +174,7 @@ function unsignedTxHexFromPsbt(psbt: bitcoin.Psbt): string {
   return bitcoin.Transaction.fromBuffer(psbtTx.toBuffer()).toHex();
 }
 
-function createSignedMultisigTxHex(psbt: bitcoin.Psbt, witnessScript: Buffer): string {
+function createSignedMultisigTxHex(psbt: bitcoin.Psbt, witnessScript: Uint8Array): string {
   const psbtTx = psbt.data.globalMap.unsignedTx as unknown as { toBuffer(): Buffer };
   const tx = bitcoin.Transaction.fromBuffer(psbtTx.toBuffer());
   const signature = Buffer.from(
@@ -184,11 +185,11 @@ function createSignedMultisigTxHex(psbt: bitcoin.Psbt, witnessScript: Buffer): s
   return tx.toHex();
 }
 
-function createRefTxHex(amount: number, script: Buffer): string {
+function createRefTxHex(amount: number, script: Uint8Array): string {
   const tx = new bitcoin.Transaction();
   tx.version = 2;
-  tx.addInput(Buffer.alloc(32, 2), 0, 0xfffffffd, Buffer.alloc(0));
-  tx.addOutput(script, amount);
+  tx.addInput(new Uint8Array(32).fill(2), 0, 0xfffffffd, new Uint8Array(0));
+  tx.addOutput(script, BigInt(amount));
   return tx.toHex();
 }
 
@@ -670,13 +671,13 @@ describe('TrezorAdapter class', () => {
 
     const { psbt } = createSingleSigPsbt({ inputPath: "m/86'/0'/0'/0/0" });
     psbt.addOutput({
-      script: Buffer.from(`0014${'44'.repeat(20)}`, 'hex'),
-      value: 500,
+      script: hexToBytes(`0014${'44'.repeat(20)}`),
+      value: BigInt(500),
       bip32Derivation: [
         {
-          masterFingerprint: Buffer.from('deadbeef', 'hex'),
+          masterFingerprint: hexToBytes('deadbeef'),
           path: "m/86'/0'/0'/1/0",
-          pubkey: Buffer.from(`02${'11'.repeat(32)}`, 'hex'),
+          pubkey: hexToBytes(`02${'11'.repeat(32)}`),
         },
       ],
     });
@@ -733,7 +734,7 @@ describe('TrezorAdapter class', () => {
 
     const updatedPsbt = bitcoin.Psbt.fromBase64(response.psbt);
     const partialSig = updatedPsbt.data.inputs[0].partialSig ?? [];
-    expect(partialSig.some(sig => sig.pubkey.equals(devicePubkey))).toBe(true);
+    expect(partialSig.some(sig => sig.pubkey.length === devicePubkey.length && sig.pubkey.every((v, i) => v === devicePubkey[i]))).toBe(true);
 
     const call = mockSignTransaction.mock.calls.at(-1)?.[0];
     expect(call.inputs[0].multisig).toBeDefined();

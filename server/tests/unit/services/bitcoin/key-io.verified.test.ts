@@ -64,7 +64,7 @@ describe('Bitcoin Core key_io Address Verification', () => {
           }
         }
 
-        expect(output.toString('hex')).toBe(vector.scriptPubKeyHex);
+        expect(Buffer.from(output).toString('hex')).toBe(vector.scriptPubKeyHex);
       });
     });
   });
@@ -90,7 +90,7 @@ describe('Bitcoin Core key_io Address Verification', () => {
             }
           }
 
-          expect(output.toString('hex')).toBe(vector.scriptPubKeyHex);
+          expect(Buffer.from(output).toString('hex')).toBe(vector.scriptPubKeyHex);
         });
       });
   });

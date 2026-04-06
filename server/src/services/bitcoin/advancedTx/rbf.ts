@@ -96,7 +96,7 @@ export async function canReplaceTransaction(txid: string): Promise<{
 
     let outputValue = 0;
     for (const output of tx.outs) {
-      outputValue += output.value;
+      outputValue += Number(output.value);
     }
 
     const currentFee = inputValue - outputValue;
@@ -258,7 +258,7 @@ export async function createRBFTransaction(
       sequence: RBF_SEQUENCE,
       witnessUtxo: {
         script: Buffer.from(prevOut.scriptPubKey.hex, 'hex'),
-        value,
+        value: BigInt(value),
       },
     });
 
@@ -333,11 +333,11 @@ export async function createRBFTransaction(
       changeOutputIndex = i;
     }
 
-    outputs.push({ address, value: output.value });
+    outputs.push({ address, value: Number(output.value) });
   }
 
   // Calculate fee difference
-  const oldFee = totalInput - tx.outs.reduce((sum, out) => sum + out.value, 0);
+  const oldFee = totalInput - tx.outs.reduce((sum, out) => sum + Number(out.value), 0);
   const feeDelta = newFee - oldFee;
 
   // Adjust change output to account for fee increase
@@ -358,7 +358,7 @@ export async function createRBFTransaction(
   for (const output of outputs) {
     psbt.addOutput({
       address: output.address,
-      value: output.value,
+      value: BigInt(output.value),
     });
     totalOutput += output.value;
   }

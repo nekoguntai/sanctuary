@@ -56,7 +56,7 @@
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
     "bip32": "^4.0.0",
-    "bitcoinjs-lib": "^6.1.7",
+    "bitcoinjs-lib": "^7.0.1",
     "bullmq": "^5.73.0",
     "compression": "^1.8.1",
     "cors": "^2.8.6",

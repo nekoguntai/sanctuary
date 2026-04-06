@@ -54,6 +54,11 @@ vi.mock('../../../utils/logger', () => ({
   }),
 }));
 
+/** Convert hex to Uint8Array (bitcoinjs-lib v7 requires Uint8Array, not Buffer, in jsdom) */
+function hexToBytes(hex: string): Uint8Array {
+  return new Uint8Array(Buffer.from(hex, 'hex'));
+}
+
 function createPsbt({
   includeInputDerivation = true,
   includeWitnessUtxo = true,
@@ -64,8 +69,8 @@ function createPsbt({
   includeChangeDerivation?: boolean;
 } = {}) {
   const psbt = new bitcoin.Psbt({ network: bitcoin.networks.bitcoin });
-  const inputPubkey = Buffer.from(`02${'11'.repeat(32)}`, 'hex');
-  const inputScript = Buffer.from(`0014${'11'.repeat(20)}`, 'hex');
+  const inputPubkey = hexToBytes(`02${'11'.repeat(32)}`);
+  const inputScript = hexToBytes(`0014${'11'.repeat(20)}`);
 
   const input: any = {
     hash: 'aa'.repeat(32),
@@ -76,14 +81,14 @@ function createPsbt({
   if (includeWitnessUtxo) {
     input.witnessUtxo = {
       script: inputScript,
-      value: 50_000,
+      value: BigInt(50_000),
     };
   }
 
   if (includeInputDerivation) {
     input.bip32Derivation = [
       {
-        masterFingerprint: Buffer.from('deadbeef', 'hex'),
+        masterFingerprint: hexToBytes('deadbeef'),
         path: "m/49'/0'/0'/0/0",
         pubkey: inputPubkey,
       },
@@ -93,18 +98,18 @@ function createPsbt({
   psbt.addInput(input);
 
   psbt.addOutput({
-    script: Buffer.from(`0014${'22'.repeat(20)}`, 'hex'),
-    value: 40_000,
+    script: hexToBytes(`0014${'22'.repeat(20)}`),
+    value: BigInt(40_000),
   });
 
   const changeOutput: any = {
-    script: Buffer.from(`0014${'33'.repeat(20)}`, 'hex'),
-    value: 9_000,
+    script: hexToBytes(`0014${'33'.repeat(20)}`),
+    value: BigInt(9_000),
   };
   if (includeChangeDerivation) {
     changeOutput.bip32Derivation = [
       {
-        masterFingerprint: Buffer.from('deadbeef', 'hex'),
+        masterFingerprint: hexToBytes('deadbeef'),
         path: "m/49'/0'/0'/1/0",
         pubkey: inputPubkey,
       },
@@ -487,26 +492,26 @@ describe('signPsbtWithTrezor branch coverage', () => {
       index: 0,
       sequence: 0xfffffffc,
       witnessUtxo: {
-        script: Buffer.from(`0014${'44'.repeat(20)}`, 'hex'),
-        value: 20_000,
+        script: hexToBytes(`0014${'44'.repeat(20)}`),
+        value: BigInt(20_000),
       },
       bip32Derivation: [
         {
-          masterFingerprint: Buffer.from('aaaaaaaa', 'hex'),
+          masterFingerprint: hexToBytes('aaaaaaaa'),
           path: "m/48'/0'/0'/2'/0/2",
-          pubkey: Buffer.from(`02${'55'.repeat(32)}`, 'hex'),
+          pubkey: hexToBytes(`02${'55'.repeat(32)}`),
         },
         {
-          masterFingerprint: Buffer.from('bbbbbbbb', 'hex'),
+          masterFingerprint: hexToBytes('bbbbbbbb'),
           path: "m/48'/0'/0'/2'/0/2",
-          pubkey: Buffer.from(`03${'66'.repeat(32)}`, 'hex'),
+          pubkey: hexToBytes(`03${'66'.repeat(32)}`),
         },
       ],
-      witnessScript: Buffer.from('5221' + '22'.repeat(33) + '51ae', 'hex'),
+      witnessScript: hexToBytes('5221' + '22'.repeat(33) + '51ae'),
     } as any);
     psbt.addOutput({
-      script: Buffer.from(`0014${'66'.repeat(20)}`, 'hex'),
-      value: 19_000,
+      script: hexToBytes(`0014${'66'.repeat(20)}`),
+      value: BigInt(19_000),
     });
 
     const changeOutput = psbt.data.outputs[1] as any;
@@ -719,8 +724,8 @@ describe('signPsbtWithTrezor branch coverage', () => {
     const parsed = bitcoin.Psbt.fromBase64(response.psbt);
     const partialSig = (parsed.data.inputs[0] as any).partialSig;
     expect(partialSig).toHaveLength(1);
-    expect(partialSig[0].pubkey.equals(pubkey)).toBe(true);
-    expect(partialSig[0].signature.equals(signature)).toBe(true);
+    expect(partialSig[0].pubkey.length === pubkey.length && partialSig[0].pubkey.every((v: number, i: number) => v === pubkey[i])).toBe(true);
+    expect(partialSig[0].signature.length === signature.length && partialSig[0].signature.every((v: number, i: number) => v === signature[i])).toBe(true);
 
     const existing = psbt.data.inputs[0] as any;
     existing.partialSig = [{ pubkey, signature: Buffer.from('300103', 'hex') }];

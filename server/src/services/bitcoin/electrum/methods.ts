@@ -75,7 +75,7 @@ export function decodeRawTransaction(rawTx: string, network: BitcoinNetwork): Tr
     const tx = bitcoin.Transaction.fromHex(rawTx);
 
     // Build vout array with address info
-    const vout = tx.outs.map((output: { script: Buffer; value: number }, index: number) => {
+    const vout = tx.outs.map((output: { script: Buffer; value: bigint }, index: number) => {
       let address: string | undefined;
 
       try {
@@ -87,7 +87,7 @@ export function decodeRawTransaction(rawTx: string, network: BitcoinNetwork): Tr
       }
 
       return {
-        value: output.value / 100000000, // Convert satoshis to BTC
+        value: Number(output.value) / 100000000, // Convert satoshis to BTC
         n: index,
         scriptPubKey: {
           hex: output.script.toString('hex'),

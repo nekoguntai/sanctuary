@@ -115,7 +115,7 @@ export async function createBatchTransaction(
       sequence: RBF_SEQUENCE,
       witnessUtxo: {
         script: Buffer.from(utxo.scriptPubKey, 'hex'),
-        value: Number(utxo.amount),
+        value: BigInt(utxo.amount),
       },
     });
   }
@@ -124,7 +124,7 @@ export async function createBatchTransaction(
   for (const recipient of recipients) {
     psbt.addOutput({
       address: recipient.address,
-      value: recipient.amount,
+      value: BigInt(recipient.amount),
     });
   }
 
@@ -145,7 +145,7 @@ export async function createBatchTransaction(
 
     psbt.addOutput({
       address: changeAddress.address,
-      value: changeAmount,
+      value: BigInt(changeAmount),
     });
   }
 

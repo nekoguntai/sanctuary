@@ -161,7 +161,7 @@ describe('Bitcoin Utilities', () => {
       tx.addInput(Buffer.from('11'.repeat(32), 'hex'), 1, 0xfffffffe);
       tx.addOutput(
         bitcoin.address.toOutputScript(testnetAddresses.nativeSegwit[0], bitcoin.networks.testnet),
-        12_345
+        BigInt(12_345)
       );
 
       const parsed = parseTransaction(tx.toHex(), 'testnet');
@@ -179,7 +179,7 @@ describe('Bitcoin Utilities', () => {
       tx.addInput(Buffer.from('22'.repeat(32), 'hex'), 0, 0xffffffff);
       tx.addOutput(
         bitcoin.script.compile([bitcoin.opcodes.OP_RETURN, Buffer.from('hi')]),
-        0
+        BigInt(0)
       );
 
       const parsed = parseTransaction(tx.toHex(), 'testnet');

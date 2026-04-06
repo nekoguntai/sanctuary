@@ -68,20 +68,19 @@ export function getNetwork(
  * Get address type
  */
 export function getAddressType(address: string): string {
-  try {
-    if (address.startsWith('bc1q') || address.startsWith('tb1q')) {
-      return 'P2WPKH'; // Native SegWit (Bech32)
-    } else if (address.startsWith('bc1p') || address.startsWith('tb1p')) {
-      return 'P2TR'; // Taproot
-    } else if (address.startsWith('3') || address.startsWith('2')) {
-      return 'P2SH'; // Nested SegWit or Multisig
-    } else if (address.startsWith('1') || address.startsWith('m') || address.startsWith('n')) {
-      return 'P2PKH'; // Legacy
-    } else {
-      return 'Unknown';
-    }
-  } catch (error) {
+  if (!address || typeof address !== 'string') {
     return 'Invalid';
+  }
+  if (address.startsWith('bc1q') || address.startsWith('tb1q')) {
+    return 'P2WPKH'; // Native SegWit (Bech32)
+  } else if (address.startsWith('bc1p') || address.startsWith('tb1p')) {
+    return 'P2TR'; // Taproot
+  } else if (address.startsWith('3') || address.startsWith('2')) {
+    return 'P2SH'; // Nested SegWit or Multisig
+  } else if (address.startsWith('1') || address.startsWith('m') || address.startsWith('n')) {
+    return 'P2PKH'; // Legacy
+  } else {
+    return 'Unknown';
   }
 }
 
@@ -157,13 +156,13 @@ export function parseTransaction(
     let address: string | undefined;
     try {
       address = bitcoin.address.fromOutputScript(output.script, networkObj);
-    } catch (e) {
-      // Some scripts don't have addresses (e.g., OP_RETURN)
+    } catch {
+      // OP_RETURN and other non-address outputs are expected
     }
 
     return {
-      value: output.value,
-      scriptPubKey: output.script.toString('hex'),
+      value: Number(output.value),
+      scriptPubKey: Buffer.from(output.script).toString('hex'),
       address,
     };
   });
@@ -222,7 +221,7 @@ export function createTransaction(
       sequence,
       witnessUtxo: {
         script: Buffer.from(input.scriptPubKey, 'hex'),
-        value: input.value,
+        value: BigInt(input.value),
       },
     });
     totalInput += input.value;
@@ -233,7 +232,7 @@ export function createTransaction(
   for (const output of outputs) {
     psbt.addOutput({
       address: output.address,
-      value: output.value,
+      value: BigInt(output.value),
     });
     totalOutput += output.value;
   }

@@ -10,7 +10,7 @@ describe('psbtInfo', () => {
       index: 0,
       witnessUtxo: {
         script: Buffer.from('0014' + 'aa'.repeat(20), 'hex'),
-        value: 100_000,
+        value: BigInt(100_000),
       },
     });
     psbt.addInput({
@@ -20,12 +20,12 @@ describe('psbtInfo', () => {
     });
     psbt.addOutput({
       address: outputAddress,
-      value: 70_000,
+      value: BigInt(70_000),
     });
     if (includeOpReturn) {
       psbt.addOutput({
         script: bitcoin.script.compile([bitcoin.opcodes.OP_RETURN, Buffer.from('memo')]),
-        value: 0,
+        value: BigInt(0),
       });
     }
     return psbt.toBase64();

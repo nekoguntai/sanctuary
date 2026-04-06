@@ -8,6 +8,7 @@
 import TrezorConnect from '@trezor/connect-web';
 import * as bitcoin from 'bitcoinjs-lib';
 import { createLogger } from '../../../../utils/logger';
+import { uint8ArrayEquals, toHex } from '../../../../utils/bufferUtils';
 import type { PSBTSignRequest, PSBTSignResponse } from '../../types';
 import type { TrezorConnection } from './types';
 import { getTrezorScriptType, pathToAddressN, validateSatoshiAmount } from './pathUtils';
@@ -97,11 +98,11 @@ export async function signPsbtWithTrezor(
     const firstInput = psbt.data.inputs[0];
     if (firstInput?.bip32Derivation && firstInput.bip32Derivation.length > 1 && deviceFingerprintBuffer) {
       const isCosigner = firstInput.bip32Derivation.some(d =>
-        d.masterFingerprint.equals(deviceFingerprintBuffer)
+        uint8ArrayEquals(d.masterFingerprint, deviceFingerprintBuffer)
       );
       if (!isCosigner) {
         const cosignerFingerprints = firstInput.bip32Derivation.map(d =>
-          d.masterFingerprint.toString('hex')
+          toHex(d.masterFingerprint)
         );
         log.error('Device is not a cosigner for this multisig wallet', {
           deviceFingerprint,
@@ -126,7 +127,7 @@ export async function signPsbtWithTrezor(
 
         if (deviceFingerprintBuffer && input.bip32Derivation.length > 1) {
           const matching = input.bip32Derivation.find(d =>
-            d.masterFingerprint.equals(deviceFingerprintBuffer)
+            uint8ArrayEquals(d.masterFingerprint, deviceFingerprintBuffer)
           );
           if (matching) {
             matchingDerivation = matching;
@@ -140,7 +141,7 @@ export async function signPsbtWithTrezor(
               inputIdx: idx,
               deviceFingerprint,
               availableFingerprints: input.bip32Derivation.map(d =>
-                d.masterFingerprint.toString('hex')
+                toHex(d.masterFingerprint)
               ),
             });
           }
@@ -170,7 +171,7 @@ export async function signPsbtWithTrezor(
 
       // Add multisig structure for multisig inputs (required for Trezor to validate multisig paths)
       if (isMultisigInput(input) && input.bip32Derivation) {
-        const multisig = buildTrezorMultisig(input.witnessScript, input.bip32Derivation, request.multisigXpubs);
+        const multisig = buildTrezorMultisig(input.witnessScript ? Buffer.from(input.witnessScript) : undefined, input.bip32Derivation as any, request.multisigXpubs);
         if (multisig) {
           trezorInput.multisig = multisig;
           log.info('Built multisig structure for input', {
@@ -194,7 +195,7 @@ export async function signPsbtWithTrezor(
         addressN: trezorInput.address_n,
         // Log witnessUtxo from PSBT for comparison
         psbtWitnessUtxoValue: input.witnessUtxo?.value,
-        psbtWitnessUtxoScript: input.witnessUtxo?.script?.toString('hex'),
+        psbtWitnessUtxoScript: input.witnessUtxo?.script ? toHex(input.witnessUtxo.script) : undefined,
       });
 
       return trezorInput;
@@ -215,7 +216,7 @@ export async function signPsbtWithTrezor(
 
         if (deviceFingerprintBuffer && psbtOutput.bip32Derivation.length > 1) {
           const matching = psbtOutput.bip32Derivation.find(d =>
-            d.masterFingerprint.equals(deviceFingerprintBuffer)
+            uint8ArrayEquals(d.masterFingerprint, deviceFingerprintBuffer)
           );
           if (matching) {
             matchingDerivation = matching;
@@ -234,7 +235,7 @@ export async function signPsbtWithTrezor(
 
         // Add multisig structure for multisig change outputs
         if (psbtOutput.bip32Derivation && psbtOutput.bip32Derivation.length > 1 && psbtOutput.witnessScript) {
-          const multisig = buildTrezorMultisig(psbtOutput.witnessScript, psbtOutput.bip32Derivation, request.multisigXpubs);
+          const multisig = buildTrezorMultisig(Buffer.from(psbtOutput.witnessScript), psbtOutput.bip32Derivation as any, request.multisigXpubs);
           if (multisig) {
             changeOutput.multisig = multisig;
             log.info('Built multisig structure for change output', {
@@ -277,7 +278,8 @@ export async function signPsbtWithTrezor(
           const psbtAmount = psbtInput.witnessUtxo.value;
           const refAmount = refOutput.amount;
 
-          if (psbtAmount !== refAmount) {
+          // Use == for comparison since psbtAmount is bigint (bitcoinjs-lib v7) and refAmount may be number
+          if (psbtAmount != refAmount) { // eslint-disable-line eqeqeq
             log.error('Input amount mismatch between PSBT and reference transaction', {
               inputIndex: i,
               txid,
@@ -336,13 +338,13 @@ export async function signPsbtWithTrezor(
       for (let i = 0; i < Math.min(txFromPsbt.outs.length, signedTx.outs.length); i++) {
         const psbtOut = txFromPsbt.outs[i];
         const trezorOut = signedTx.outs[i];
-        if (psbtOut.value !== trezorOut.value || !psbtOut.script.equals(trezorOut.script)) {
+        if (psbtOut.value !== trezorOut.value || !uint8ArrayEquals(psbtOut.script, trezorOut.script)) {
           log.error('Output mismatch between PSBT and Trezor signed transaction', {
             outputIndex: i,
             psbtValue: psbtOut.value,
             trezorValue: trezorOut.value,
-            psbtScriptHex: psbtOut.script.toString('hex'),
-            trezorScriptHex: trezorOut.script.toString('hex'),
+            psbtScriptHex: toHex(psbtOut.script),
+            trezorScriptHex: toHex(trezorOut.script),
           });
         }
       }
@@ -351,11 +353,11 @@ export async function signPsbtWithTrezor(
       for (let i = 0; i < Math.min(txFromPsbt.ins.length, signedTx.ins.length); i++) {
         const psbtIn = txFromPsbt.ins[i];
         const trezorIn = signedTx.ins[i];
-        if (!psbtIn.hash.equals(trezorIn.hash) || psbtIn.index !== trezorIn.index || psbtIn.sequence !== trezorIn.sequence) {
+        if (!uint8ArrayEquals(psbtIn.hash, trezorIn.hash) || psbtIn.index !== trezorIn.index || psbtIn.sequence !== trezorIn.sequence) {
           log.error('Input mismatch between PSBT and Trezor signed transaction', {
             inputIndex: i,
-            psbtPrevHash: Buffer.from(psbtIn.hash).reverse().toString('hex'),
-            trezorPrevHash: Buffer.from(trezorIn.hash).reverse().toString('hex'),
+            psbtPrevHash: toHex(Buffer.from(psbtIn.hash).reverse()),
+            trezorPrevHash: toHex(Buffer.from(trezorIn.hash).reverse()),
             psbtPrevIndex: psbtIn.index,
             trezorPrevIndex: trezorIn.index,
             psbtSequence: psbtIn.sequence,
@@ -385,17 +387,17 @@ export async function signPsbtWithTrezor(
 
             // Verify Trezor's witnessScript matches PSBT's
             const trezorWitnessScript = witness[witness.length - 1];
-            if (!witnessScript.equals(trezorWitnessScript)) {
+            if (!uint8ArrayEquals(witnessScript, trezorWitnessScript)) {
               log.error('WitnessScript mismatch - Trezor signed with different script', {
                 inputIndex: i,
-                psbtWitnessScriptHex: witnessScript.toString('hex'),
-                trezorWitnessScriptHex: trezorWitnessScript.toString('hex'),
+                psbtWitnessScriptHex: toHex(witnessScript),
+                trezorWitnessScriptHex: toHex(trezorWitnessScript),
               });
             }
 
             // Extract pubkeys from witnessScript
             // Format: OP_M [pubkey1] [pubkey2] ... OP_N OP_CHECKMULTISIG
-            const pubkeys: Buffer[] = [];
+            const pubkeys: Uint8Array[] = [];
             let offset = 1; // Skip OP_M
             while (offset < witnessScript.length - 2) {
               const len = witnessScript[offset];
@@ -415,10 +417,10 @@ export async function signPsbtWithTrezor(
             const signatures = witness.slice(1, witness.length - 1).filter(sig => sig.length > 0);
 
             // Find Trezor's pubkey using bip32Derivation and device fingerprint
-            let trezorPubkey: Buffer | null = null;
+            let trezorPubkey: Uint8Array | null = null;
             if (deviceFingerprintBuffer && psbtInput.bip32Derivation) {
               const trezorDerivation = psbtInput.bip32Derivation.find(d =>
-                d.masterFingerprint.equals(deviceFingerprintBuffer)
+                uint8ArrayEquals(d.masterFingerprint, deviceFingerprintBuffer)
               );
               if (trezorDerivation) {
                 trezorPubkey = trezorDerivation.pubkey;
@@ -431,7 +433,7 @@ export async function signPsbtWithTrezor(
 
               // Check if this pubkey already has a signature
               const existingSig = psbtInput.partialSig?.find(
-                ps => ps.pubkey.equals(trezorPubkey!)
+                ps => uint8ArrayEquals(ps.pubkey, trezorPubkey!)
               );
               if (!existingSig) {
                 if (!psbtInput.partialSig) {

@@ -372,7 +372,7 @@ describe('ElectrumClient behavior', () => {
     const client = makeClient();
     const tx = new bitcoin.Transaction();
     tx.addInput(Buffer.alloc(32, 0x01), 0xffffffff, 0xffffffff, Buffer.alloc(0));
-    tx.addOutput(Buffer.from([0x6a, 0x01, 0x01]), 0);
+    tx.addOutput(Buffer.from([0x6a, 0x01, 0x01]), BigInt(0));
 
     const decoded = (client as any).decodeRawTransaction(tx.toHex());
     expect(decoded.vout[0].scriptPubKey.address).toBeUndefined();
@@ -388,7 +388,7 @@ describe('ElectrumClient behavior', () => {
         hash: Buffer.alloc(20, 0x55),
         network: bitcoin.networks.testnet,
       }).output!,
-      1000
+      BigInt(1000)
     );
 
     const decoded = (client as any).decodeRawTransaction(tx.toHex());

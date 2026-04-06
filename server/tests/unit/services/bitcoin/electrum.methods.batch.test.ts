@@ -7,7 +7,7 @@ const RAW_TX_HEX = (() => {
   tx.version = 2;
   tx.addInput(Buffer.alloc(32), 0);
   // OP_RETURN output keeps decoding deterministic without relying on network-specific address extraction.
-  tx.addOutput(Buffer.from('6a', 'hex'), 0);
+  tx.addOutput(Buffer.from('6a', 'hex'), BigInt(0));
   return tx.toHex();
 })();
 

@@ -17,8 +17,11 @@
  */
 
 import * as bip39 from 'bip39';
-import { fromSeed } from 'bip32';
+import BIP32Factory from 'bip32';
+import * as ecc from 'tiny-secp256k1';
 import * as bitcoin from 'bitcoinjs-lib';
+
+const bip32 = BIP32Factory(ecc);
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -81,7 +84,7 @@ const MIN_IMPLEMENTATIONS = 2;
  */
 function deriveXpub(mnemonic: string, path: string, network: Network): string {
   const seed = bip39.mnemonicToSeedSync(mnemonic);
-  const root = fromSeed(seed, network === 'mainnet'
+  const root = bip32.fromSeed(seed, network === 'mainnet'
     ? { bip32: { public: 0x0488B21E, private: 0x0488ADE4 }, wif: 0x80 } as any
     : { bip32: { public: 0x043587CF, private: 0x04358394 }, wif: 0xEF } as any
   );
@@ -252,7 +255,7 @@ function decodeBech32WitnessProgram(address: string): string | null {
     // Try bech32 first (segwit v0)
     try {
       const decoded = bitcoin.address.fromBech32(address);
-      return decoded.data.toString('hex');
+      return Buffer.from(decoded.data).toString('hex');
     } catch {
       // Not valid bech32, might be bech32m or invalid
     }

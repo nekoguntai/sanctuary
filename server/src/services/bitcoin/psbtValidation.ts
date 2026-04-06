@@ -68,7 +68,7 @@ export function getPsbtOutputs(
     }
     return {
       address,
-      value: output.value,
+      value: Number(output.value),
     };
   });
 }
@@ -177,24 +177,8 @@ export function validatePayjoinProposal(
     }
 
     // Rule 3: Fee must not increase unreasonably
-    const calculateFee = (psbt: bitcoin.Psbt): number => {
-      let inputTotal = 0;
-      for (let i = 0; i < psbt.inputCount; i++) {
-        const input = psbt.data.inputs[i];
-        if (input.witnessUtxo) {
-          inputTotal += input.witnessUtxo.value;
-        } else if (input.nonWitnessUtxo) {
-          const tx = bitcoin.Transaction.fromBuffer(input.nonWitnessUtxo);
-          inputTotal += tx.outs[psbt.txInputs[i].index].value;
-        }
-      }
-
-      const outputTotal = psbt.txOutputs.reduce((sum, out) => sum + out.value, 0);
-      return inputTotal - outputTotal;
-    };
-
-    const originalFee = calculateFee(original);
-    const proposalFee = calculateFee(proposal);
+    const originalFee = calculatePsbtFee(original);
+    const proposalFee = calculatePsbtFee(proposal);
 
     if (proposalFee > originalFee * 1.5) {
       errors.push(
@@ -261,23 +245,30 @@ export function calculateVSize(psbt: bitcoin.Psbt): number {
 }
 
 /**
- * Calculate fee rate of a PSBT
+ * Calculate the total fee of a PSBT (inputTotal - outputTotal)
  */
-export function calculateFeeRate(psbt: bitcoin.Psbt): number {
+export function calculatePsbtFee(psbt: bitcoin.Psbt): number {
   let inputTotal = 0;
 
   for (let i = 0; i < psbt.inputCount; i++) {
     const input = psbt.data.inputs[i];
     if (input.witnessUtxo) {
-      inputTotal += input.witnessUtxo.value;
+      inputTotal += Number(input.witnessUtxo.value);
     } else if (input.nonWitnessUtxo) {
       const tx = bitcoin.Transaction.fromBuffer(input.nonWitnessUtxo);
-      inputTotal += tx.outs[psbt.txInputs[i].index].value;
+      inputTotal += Number(tx.outs[psbt.txInputs[i].index].value);
     }
   }
 
-  const outputTotal = psbt.txOutputs.reduce((sum, out) => sum + out.value, 0);
-  const fee = inputTotal - outputTotal;
+  const outputTotal = psbt.txOutputs.reduce((sum, out) => sum + Number(out.value), 0);
+  return inputTotal - outputTotal;
+}
+
+/**
+ * Calculate fee rate of a PSBT
+ */
+export function calculateFeeRate(psbt: bitcoin.Psbt): number {
+  const fee = calculatePsbtFee(psbt);
   const vsize = calculateVSize(psbt);
 
   return vsize > 0 ? fee / vsize : 0;

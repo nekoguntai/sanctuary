@@ -7,18 +7,19 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import apiClient from '../../../../src/api/client';
 import { createLogger } from '../../../../utils/logger';
+import { toHex } from '../../../../utils/bufferUtils';
 
 const log = createLogger('TrezorAdapter');
 
 /**
  * Fetch reference transactions needed for Trezor signing
  */
-export const fetchRefTxs = async (psbt: bitcoin.Psbt): Promise<any[]> => {
+export async function fetchRefTxs(psbt: bitcoin.Psbt): Promise<any[]> {
   const refTxs: any[] = [];
   const seenTxids = new Set<string>();
 
-  for (const input of psbt.data.inputs) {
-    const txInput = psbt.txInputs[psbt.data.inputs.indexOf(input)];
+  for (let i = 0; i < psbt.data.inputs.length; i++) {
+    const txInput = psbt.txInputs[i];
     const txid = Buffer.from(txInput.hash).reverse().toString('hex');
 
     if (seenTxids.has(txid)) continue;
@@ -32,15 +33,15 @@ export const fetchRefTxs = async (psbt: bitcoin.Psbt): Promise<any[]> => {
         hash: txid,
         version: rawTx.version,
         lock_time: rawTx.locktime,
-        inputs: rawTx.ins.map(input => ({
-          prev_hash: Buffer.from(input.hash).reverse().toString('hex'),
-          prev_index: input.index,
-          script_sig: input.script.toString('hex'),
-          sequence: input.sequence,
+        inputs: rawTx.ins.map(txIn => ({
+          prev_hash: toHex(Buffer.from(txIn.hash).reverse()),
+          prev_index: txIn.index,
+          script_sig: toHex(txIn.script),
+          sequence: txIn.sequence,
         })),
         bin_outputs: rawTx.outs.map(output => ({
           amount: output.value,
-          script_pubkey: output.script.toString('hex'),
+          script_pubkey: toHex(output.script),
         })),
       };
 
@@ -51,4 +52,4 @@ export const fetchRefTxs = async (psbt: bitcoin.Psbt): Promise<any[]> => {
   }
 
   return refTxs;
-};
+}

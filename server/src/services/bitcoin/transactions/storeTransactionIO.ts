@@ -177,7 +177,7 @@ export async function storeTransactionOutputs(
         amount: BigInt(output.value),
         outputType,
         isOurs,
-        scriptPubKey: output.script.toString('hex'),
+        scriptPubKey: Buffer.from(output.script).toString('hex'),
       };
     });
 

@@ -160,7 +160,7 @@ export async function createBatchTransaction(
   for (const output of finalOutputs) {
     psbt.addOutput({
       address: output.address,
-      value: output.amount,
+      value: BigInt(output.amount),
     });
   }
 
@@ -172,7 +172,7 @@ export async function createBatchTransaction(
 
     psbt.addOutput({
       address: changeAddress,
-      value: changeAmount,
+      value: BigInt(changeAmount),
     });
   }
 

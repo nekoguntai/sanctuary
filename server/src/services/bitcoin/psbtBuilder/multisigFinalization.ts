@@ -41,7 +41,7 @@ export function finalizeMultisigInput(psbt: bitcoin.Psbt, inputIndex: number): v
   }
 
   // Verify partialSig pubkeys are in witnessScript - only log mismatches
-  const partialSigPubkeys = input.partialSig.map(ps => ps.pubkey.toString('hex'));
+  const partialSigPubkeys = input.partialSig.map(ps => Buffer.from(ps.pubkey).toString('hex'));
   const scriptPubkeyHexes = scriptPubkeys.map(pk => pk.toString('hex'));
 
   for (const sigPubkey of partialSigPubkeys) {
@@ -61,11 +61,12 @@ export function finalizeMultisigInput(psbt: bitcoin.Psbt, inputIndex: number): v
 
   // Verify each signature before finalization
   for (const ps of input.partialSig) {
-    const pubkeyHex = ps.pubkey.toString('hex');
+    const pubkeyHex = Buffer.from(ps.pubkey).toString('hex');
     try {
       // Decode the DER signature to extract r, s values
-      const sighashType = ps.signature[ps.signature.length - 1];
-      const derSig = ps.signature.slice(0, -1);
+      const sigBuf = Buffer.from(ps.signature);
+      const sighashType = sigBuf[sigBuf.length - 1];
+      const derSig = sigBuf.slice(0, -1);
 
       // Parse DER signature: 0x30 [total-len] 0x02 [r-len] [r] 0x02 [s-len] [s]
       let offset = 2; // Skip 0x30 and length byte
@@ -98,8 +99,8 @@ export function finalizeMultisigInput(psbt: bitcoin.Psbt, inputIndex: number): v
         log.error('Invalid signature detected during multisig finalization', {
           inputIndex,
           pubkey: pubkeyHex,
-          sighashHex: sighash.toString('hex'),
-          sigHex: ps.signature.toString('hex'),
+          sighashHex: Buffer.from(sighash).toString('hex'),
+          sigHex: Buffer.from(ps.signature).toString('hex'),
         });
       }
     } catch (verifyError) {
@@ -114,7 +115,7 @@ export function finalizeMultisigInput(psbt: bitcoin.Psbt, inputIndex: number): v
   // Create a map of pubkey hex to signature
   const sigMap = new Map<string, Buffer>();
   for (const ps of input.partialSig) {
-    sigMap.set(ps.pubkey.toString('hex'), ps.signature);
+    sigMap.set(Buffer.from(ps.pubkey).toString('hex'), Buffer.from(ps.signature));
   }
 
   // Sort signatures according to pubkey order in the witnessScript
@@ -161,10 +162,10 @@ export function finalizeMultisigInput(psbt: bitcoin.Psbt, inputIndex: number): v
 
   // Build the witness stack: [OP_0 (empty buffer)] [sig1] [sig2] ... [witnessScript]
   // The empty buffer at the start is for the CHECKMULTISIG bug
-  const witnessStack = [
+  const witnessStack: Buffer[] = [
     Buffer.alloc(0), // OP_0 (dummy element for CHECKMULTISIG bug)
     ...orderedSigs,
-    witnessScript,
+    Buffer.from(witnessScript),
   ];
 
   // Set the final witness and clear partial data

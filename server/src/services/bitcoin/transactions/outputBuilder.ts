@@ -71,7 +71,7 @@ export async function buildAndAddOutputs(
   for (const output of pendingOutputs) {
     psbt.addOutput({
       address: output.address,
-      value: output.value,
+      value: BigInt(output.value),
     });
   }
 

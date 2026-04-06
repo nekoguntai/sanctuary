@@ -101,7 +101,7 @@ const createRawTxHex = (outputs: Array<{ address: string; value: number }>, netw
   tx.version = 2;
   tx.addInput(Buffer.alloc(32, 0), 0, 0xffffffff, Buffer.alloc(0));
   outputs.forEach(({ address, value }) => {
-    tx.addOutput(bitcoin.address.toOutputScript(address, network), value);
+    tx.addOutput(bitcoin.address.toOutputScript(address, network), BigInt(value));
   });
   return tx.toHex();
 };
@@ -703,7 +703,7 @@ describe('Transaction Service', () => {
       const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
 
       expect(psbt.data.inputs[0].bip32Derivation?.length).toBe(1);
-      expect(psbt.data.inputs[0].bip32Derivation?.[0].masterFingerprint.toString('hex')).toBe('aabbccdd');
+      expect(Buffer.from(psbt.data.inputs[0].bip32Derivation?.[0].masterFingerprint!).toString('hex')).toBe('aabbccdd');
     });
 
     it('should use descriptor xpub and fingerprint fallback when device metadata is absent', async () => {
@@ -719,7 +719,7 @@ describe('Transaction Service', () => {
       const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
 
       expect(psbt.data.inputs[0].bip32Derivation?.length).toBe(1);
-      expect(psbt.data.inputs[0].bip32Derivation?.[0].masterFingerprint.toString('hex')).toBe('aabbccdd');
+      expect(Buffer.from(psbt.data.inputs[0].bip32Derivation?.[0].masterFingerprint!).toString('hex')).toBe('aabbccdd');
     });
 
     it('should continue when single-sig descriptor parsing fails', async () => {
@@ -972,7 +972,7 @@ describe('Transaction Service', () => {
 
       // Verify fingerprints are valid hex strings
       const fingerprints = input.bip32Derivation!.map(d =>
-        d.masterFingerprint.toString('hex')
+        Buffer.from(d.masterFingerprint).toString('hex')
       );
       // At least the first two keys should be present
       expect(fingerprints).toContain('aabbccdd');
@@ -2716,7 +2716,7 @@ describe('Transaction Service', () => {
       const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
 
       expect(psbt.data.inputs[0].bip32Derivation?.length).toBe(1);
-      expect(psbt.data.inputs[0].bip32Derivation?.[0].masterFingerprint.toString('hex')).toBe('aabbccdd');
+      expect(Buffer.from(psbt.data.inputs[0].bip32Derivation?.[0].masterFingerprint!).toString('hex')).toBe('aabbccdd');
     });
 
     it('should skip single-sig BIP32 when primary batch device has no fingerprint and xpub', async () => {
@@ -3008,7 +3008,7 @@ describe('Transaction Service', () => {
 
       // Verify fingerprints are valid hex strings
       const fingerprints = input.bip32Derivation!.map(d =>
-        d.masterFingerprint.toString('hex')
+        Buffer.from(d.masterFingerprint).toString('hex')
       );
       // At least the first two keys should be present
       expect(fingerprints).toContain('aabbccdd');
@@ -3310,7 +3310,7 @@ describe('Transaction Service', () => {
 
       // Verify pubkeys are sorted
       for (let j = 0; j < pubkeys.length - 1; j++) {
-        expect(pubkeys[j].compare(pubkeys[j + 1])).toBeLessThan(0);
+        expect(Buffer.from(pubkeys[j]).compare(Buffer.from(pubkeys[j + 1]))).toBeLessThan(0);
       }
     });
 
@@ -3374,7 +3374,7 @@ describe('Transaction Service', () => {
       expect(changeScript).toBeDefined();
 
       // Different paths should produce different scripts (different pubkeys derived)
-      expect(receiveScript!.equals(changeScript!)).toBe(false);
+      expect(Buffer.from(receiveScript!).equals(Buffer.from(changeScript!))).toBe(false);
     });
   });
 
@@ -4444,7 +4444,7 @@ describe('Transaction Service', () => {
       );
 
       // Should still produce a valid script for change addresses
-      expect(result === undefined || Buffer.isBuffer(result)).toBe(true);
+      expect(result === undefined || result instanceof Uint8Array).toBe(true);
     });
 
     it('should build valid 2-of-2 multisig script', () => {
@@ -4475,7 +4475,7 @@ describe('Transaction Service', () => {
       // Should produce a valid witness script
       expect(result).toBeDefined();
       if (result) {
-        expect(Buffer.isBuffer(result)).toBe(true);
+        expect(result instanceof Uint8Array).toBe(true);
         // Multisig script should end with OP_CHECKMULTISIG (0xae)
         expect(result[result.length - 1]).toBe(0xae);
       }

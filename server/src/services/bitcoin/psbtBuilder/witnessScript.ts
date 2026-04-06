@@ -36,12 +36,12 @@ export function buildMultisigWitnessScript(
   quorum: number,
   network: bitcoin.Network,
   inputIndex?: number
-): Buffer | undefined {
+): Uint8Array | undefined {
   try {
     const { changeIdx, addressIdx } = extractChangeAndAddressIndex(derivationPath);
 
     // Derive public keys from each xpub at the change/index level
-    const pubkeys: Buffer[] = [];
+    const pubkeys: Uint8Array[] = [];
     for (const keyInfo of multisigKeys) {
       try {
         const standardXpub = convertToStandardXpub(keyInfo.xpub);
@@ -67,7 +67,7 @@ export function buildMultisigWitnessScript(
     }
 
     // Sort public keys lexicographically (required for sortedmulti)
-    pubkeys.sort((a, b) => a.compare(b));
+    pubkeys.sort((a, b) => Buffer.from(a).compare(Buffer.from(b)));
 
     // Create the multisig redeem script (p2ms)
     const p2ms = bitcoin.payments.p2ms({
@@ -102,7 +102,7 @@ export function buildMultisigWitnessScript(
  * Check if a witnessScript is a multisig script (OP_CHECKMULTISIG or OP_CHECKMULTISIGVERIFY)
  * Returns { isMultisig: boolean, m: number, n: number } if it is multisig
  */
-export function parseMultisigScript(witnessScript: Buffer): { isMultisig: boolean; m: number; n: number; pubkeys: Buffer[] } {
+export function parseMultisigScript(witnessScript: Buffer | Uint8Array): { isMultisig: boolean; m: number; n: number; pubkeys: Buffer[] } {
   const OPS = bitcoin.script.OPS;
   const decompiled = bitcoin.script.decompile(witnessScript);
 
@@ -152,8 +152,8 @@ export function parseMultisigScript(witnessScript: Buffer): { isMultisig: boolea
   const pubkeys: Buffer[] = [];
   for (let i = 1; i < decompiled.length - 2; i++) {
     const item = decompiled[i];
-    if (Buffer.isBuffer(item) && (item.length === 33 || item.length === 65)) {
-      pubkeys.push(item);
+    if (typeof item !== 'number' && (item.length === 33 || item.length === 65)) {
+      pubkeys.push(Buffer.from(item));
     }
   }
 

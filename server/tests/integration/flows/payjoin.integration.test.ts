@@ -92,7 +92,7 @@ function createRealisticPsbt(options: {
           hash: Buffer.alloc(20, psbt.inputCount),
           network,
         }).output!,
-        value: input.value,
+        value: BigInt(input.value),
       },
     });
   }
@@ -103,7 +103,7 @@ function createRealisticPsbt(options: {
       try {
         psbt.addOutput({
           address: output.address,
-          value: output.value,
+          value: BigInt(output.value),
         });
       } catch {
         // If address parsing fails, use a script output
@@ -112,7 +112,7 @@ function createRealisticPsbt(options: {
             hash: Buffer.alloc(20, 0x10),
             network,
           }).output!,
-          value: output.value,
+          value: BigInt(output.value),
         });
       }
     } else {
@@ -121,7 +121,7 @@ function createRealisticPsbt(options: {
           hash: Buffer.alloc(20, psbt.txOutputs.length + 0x10),
           network,
         }).output!,
-        value: output.value,
+        value: BigInt(output.value),
       });
     }
   }
@@ -163,13 +163,13 @@ describe('Payjoin Integration Tests', () => {
             hash: Buffer.alloc(20, 1),
             network: TESTNET,
           }).output!,
-          value: 200000,
+          value: BigInt(200000),
         },
       });
 
       // Add outputs
-      originalPsbt.addOutput({ script: receiverOutputScript, value: 100000 }); // To receiver
-      originalPsbt.addOutput({ script: senderChangeScript, value: 90000 }); // Sender change
+      originalPsbt.addOutput({ script: receiverOutputScript, value: BigInt(100000) }); // To receiver
+      originalPsbt.addOutput({ script: senderChangeScript, value: BigInt(90000) }); // Sender change
 
       // Verify original PSBT structure
       const structureValidation = validatePsbtStructure(originalPsbt.toBase64());
@@ -193,7 +193,7 @@ describe('Payjoin Integration Tests', () => {
             hash: Buffer.alloc(20, 1),
             network: TESTNET,
           }).output!,
-          value: 200000,
+          value: BigInt(200000),
         },
       });
 
@@ -209,7 +209,7 @@ describe('Payjoin Integration Tests', () => {
             hash: Buffer.alloc(20, 0x99),
             network: TESTNET,
           }).output!,
-          value: 80000, // Receiver's contribution
+          value: BigInt(80000), // Receiver's contribution
         },
       });
 
@@ -218,8 +218,8 @@ describe('Payjoin Integration Tests', () => {
       // Total inputs = 200,000 + 80,000 = 280,000
       // Total outputs = 178,000 + 90,000 = 268,000
       // Fee = 12,000 (20% increase from 10,000, which is acceptable)
-      proposalPsbt.addOutput({ script: receiverOutputScript, value: 178000 }); // Increased receiver output
-      proposalPsbt.addOutput({ script: senderChangeScript, value: 90000 }); // Sender change preserved
+      proposalPsbt.addOutput({ script: receiverOutputScript, value: BigInt(178000) }); // Increased receiver output
+      proposalPsbt.addOutput({ script: senderChangeScript, value: BigInt(90000) }); // Sender change preserved
 
       // Step 3: Sender validates proposal
       const proposalValidation = validatePayjoinProposal(
@@ -276,7 +276,7 @@ describe('Payjoin Integration Tests', () => {
             hash: Buffer.alloc(20, 0x99),
             network: TESTNET,
           }).output!,
-          value: 50000,
+          value: BigInt(50000),
         },
       });
 
@@ -327,7 +327,7 @@ describe('Payjoin Integration Tests', () => {
             hash: Buffer.alloc(20, 0x99),
             network: TESTNET,
           }).output!,
-          value: 50000,
+          value: BigInt(50000),
         },
       });
 
@@ -452,7 +452,7 @@ describe('Payjoin Integration Tests', () => {
           hash: Buffer.alloc(20, 1),
           network: TESTNET,
         }).output!,
-        value: 50000,
+        value: BigInt(50000),
       });
 
       const validation = validatePsbtStructure(psbt.toBase64());
@@ -531,7 +531,7 @@ describe('Payjoin Integration Tests', () => {
             hash: Buffer.alloc(20, 1),
             network: TESTNET,
           }).output!,
-          value: 100000,
+          value: BigInt(100000),
         },
       });
       psbt.addOutput({
@@ -539,7 +539,7 @@ describe('Payjoin Integration Tests', () => {
           hash: Buffer.alloc(20, 2),
           network: TESTNET,
         }).output!,
-        value: 90000,
+        value: BigInt(90000),
       });
 
       expect(isRbfEnabled(psbt)).toBe(false);
@@ -626,7 +626,7 @@ describe('Payjoin Integration Tests', () => {
             hash: Buffer.alloc(20, 0x99),
             network: TESTNET,
           }).output!,
-          value: 30000,
+          value: BigInt(30000),
         },
       });
 
@@ -698,7 +698,7 @@ describe('Payjoin Integration Tests', () => {
             hash: Buffer.alloc(20, 1),
             network: TESTNET,
           }).output!,
-          value: 100000,
+          value: BigInt(100000),
         },
       });
       originalPsbt.addInput({
@@ -712,13 +712,13 @@ describe('Payjoin Integration Tests', () => {
             hash: Buffer.alloc(20, 2),
             network: TESTNET,
           }).output!,
-          value: 80000,
+          value: BigInt(80000),
         },
       });
 
       // Add outputs
-      originalPsbt.addOutput({ script: outputScript1, value: 100000 });
-      originalPsbt.addOutput({ script: outputScript2, value: 70000 });
+      originalPsbt.addOutput({ script: outputScript1, value: BigInt(100000) });
+      originalPsbt.addOutput({ script: outputScript2, value: BigInt(70000) });
 
       // Valid proposal: receiver adds input (50,000) and increases first output
       // New total: 230,000 inputs -> 140,000 + 70,000 + small fee increase = valid
@@ -736,7 +736,7 @@ describe('Payjoin Integration Tests', () => {
             hash: Buffer.alloc(20, 1),
             network: TESTNET,
           }).output!,
-          value: 100000,
+          value: BigInt(100000),
         },
       });
       proposalPsbt.addInput({
@@ -750,7 +750,7 @@ describe('Payjoin Integration Tests', () => {
             hash: Buffer.alloc(20, 2),
             network: TESTNET,
           }).output!,
-          value: 80000,
+          value: BigInt(80000),
         },
       });
 
@@ -766,14 +766,14 @@ describe('Payjoin Integration Tests', () => {
             hash: Buffer.alloc(20, 0x99),
             network: TESTNET,
           }).output!,
-          value: 50000,
+          value: BigInt(50000),
         },
       });
 
       // Receiver increases their output to absorb contribution
       // 230,000 inputs -> 148,000 + 70,000 = 218,000 outputs = 12,000 fee (20% increase, valid)
-      proposalPsbt.addOutput({ script: outputScript1, value: 148000 });
-      proposalPsbt.addOutput({ script: outputScript2, value: 70000 });
+      proposalPsbt.addOutput({ script: outputScript1, value: BigInt(148000) });
+      proposalPsbt.addOutput({ script: outputScript2, value: BigInt(70000) });
 
       const validation = validatePayjoinProposal(
         originalPsbt.toBase64(),

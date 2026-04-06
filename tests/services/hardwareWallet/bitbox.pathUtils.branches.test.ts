@@ -1,13 +1,6 @@
-import * as bitcoin from 'bitcoinjs-lib';
 import { beforeEach,describe,expect,it,vi } from 'vitest';
-import {
-extractAccountPath,
-getOutputType,
-getSimpleType,
-getXpubType,
-} from '../../../services/hardwareWallet/adapters/bitbox/pathUtils';
 
-const { mockedConstants } = vi.hoisted(() => ({
+const { mockedConstants, mockFromBech32, mockFromBase58Check } = vi.hoisted(() => ({
   mockedConstants: {
     messages: {
       BTCScriptConfig_SimpleType: {
@@ -36,11 +29,33 @@ const { mockedConstants } = vi.hoisted(() => ({
       },
     },
   },
+  mockFromBech32: vi.fn(),
+  mockFromBase58Check: vi.fn(),
 }));
 
 vi.mock('bitbox02-api', () => ({
   constants: mockedConstants,
 }));
+
+vi.mock('bitcoinjs-lib', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('bitcoinjs-lib')>();
+  return {
+    ...actual,
+    address: {
+      ...actual.address,
+      fromBech32: mockFromBech32,
+      fromBase58Check: mockFromBase58Check,
+    },
+  };
+});
+
+import * as bitcoin from 'bitcoinjs-lib';
+import {
+extractAccountPath,
+getOutputType,
+getSimpleType,
+getXpubType,
+} from '../../../services/hardwareWallet/adapters/bitbox/pathUtils';
 
 describe('bitbox pathUtils branch coverage', () => {
   beforeEach(() => {
@@ -62,7 +77,7 @@ describe('bitbox pathUtils branch coverage', () => {
   });
 
   it('returns P2WPKH for version 0 bech32 addresses with 20-byte programs', () => {
-    vi.spyOn(bitcoin.address, 'fromBech32').mockReturnValue({
+    mockFromBech32.mockReturnValue({
       version: 0,
       prefix: 'bc',
       data: Buffer.alloc(20),
@@ -74,12 +89,12 @@ describe('bitbox pathUtils branch coverage', () => {
   });
 
   it('falls back to default output type for unsupported bech32 and unknown base58 versions', () => {
-    vi.spyOn(bitcoin.address, 'fromBech32').mockReturnValue({
+    mockFromBech32.mockReturnValue({
       version: 2,
       prefix: 'bc',
       data: Buffer.alloc(32),
     });
-    vi.spyOn(bitcoin.address, 'fromBase58Check').mockReturnValue({
+    mockFromBase58Check.mockReturnValue({
       version: 250,
       hash: Buffer.alloc(20),
     });

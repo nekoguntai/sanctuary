@@ -59,7 +59,7 @@ function createMinimalPsbt(options: {
       sequence,
       witnessUtxo: {
         script: Buffer.from('0014' + 'bb'.repeat(20), 'hex'),
-        value: 100_000,
+        value: BigInt(100_000),
       },
     });
   }
@@ -68,7 +68,7 @@ function createMinimalPsbt(options: {
     const value = outputValues?.[i] ?? 50_000;
     psbt.addOutput({
       script: Buffer.from('0014' + 'cc'.repeat(20), 'hex'),
-      value,
+      value: BigInt(value),
     });
   }
 
@@ -112,7 +112,7 @@ describe('PSBT Industry Edge Cases', () => {
         sequence: 0xffffffff,
         witnessUtxo: {
           script: Buffer.from('0014' + 'bb'.repeat(20), 'hex'),
-          value: 100_000,
+          value: BigInt(100_000),
         },
       });
 
@@ -123,13 +123,13 @@ describe('PSBT Industry Edge Cases', () => {
         sequence: 0xfffffffd,
         witnessUtxo: {
           script: Buffer.from('0014' + 'bb'.repeat(20), 'hex'),
-          value: 100_000,
+          value: BigInt(100_000),
         },
       });
 
       psbt.addOutput({
         script: Buffer.from('0014' + 'cc'.repeat(20), 'hex'),
-        value: 150_000,
+        value: BigInt(150_000),
       });
 
       // Per BIP125, if ANY input signals RBF, the tx is replaceable
@@ -145,7 +145,7 @@ describe('PSBT Industry Edge Cases', () => {
       const psbt = new bitcoin.Psbt({ network: TESTNET });
       psbt.addOutput({
         script: Buffer.from('0014' + 'cc'.repeat(20), 'hex'),
-        value: 50_000,
+        value: BigInt(50_000),
       });
 
       const result = validatePsbtStructure(psbt.toBase64());
@@ -161,7 +161,7 @@ describe('PSBT Industry Edge Cases', () => {
         sequence: 0xfffffffd,
         witnessUtxo: {
           script: Buffer.from('0014' + 'bb'.repeat(20), 'hex'),
-          value: 100_000,
+          value: BigInt(100_000),
         },
       });
 
@@ -183,7 +183,7 @@ describe('PSBT Industry Edge Cases', () => {
 
       psbt.addOutput({
         script: Buffer.from('0014' + 'cc'.repeat(20), 'hex'),
-        value: 50_000,
+        value: BigInt(50_000),
       });
 
       const result = validatePsbtStructure(psbt.toBase64());

@@ -12,7 +12,7 @@
  */
 
 import { db as prisma } from '../repositories/db';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../generated/prisma/client';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 

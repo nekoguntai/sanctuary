@@ -5,7 +5,7 @@
  * Used by wallets, devices, and other entities that support user and group access.
  */
 
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '../generated/prisma/client';
 
 /**
  * Build the access control WHERE clause for wallet queries.

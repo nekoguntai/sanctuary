@@ -6,7 +6,7 @@
  * while type-specific helpers remain for backward compatibility.
  */
 
-import { DraftTransaction } from '@prisma/client';
+import { DraftTransaction } from '../generated/prisma/client';
 
 /**
  * Recursively convert BigInt values to numbers in any object/array.

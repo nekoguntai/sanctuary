@@ -7,7 +7,7 @@
  * - Raw transaction fetching for legacy inputs
  */
 
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../../generated/prisma/client';
 import { getNodeClient } from '../nodeClient';
 
 /**

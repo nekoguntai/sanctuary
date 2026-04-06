@@ -5,7 +5,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { UTXO, Prisma } from '@prisma/client';
+import type { UTXO, Prisma } from '../generated/prisma/client';
 
 /**
  * Get total unspent balance for a wallet

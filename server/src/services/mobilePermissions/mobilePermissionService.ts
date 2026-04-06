@@ -36,7 +36,7 @@ import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { ForbiddenError, NotFoundError } from '../../errors';
 import { mobilePermissionRepository } from '../../repositories';
-import type { MobilePermission } from '@prisma/client';
+import type { MobilePermission } from '../../generated/prisma/client';
 import {
   type MobileAction,
   type WalletRole,

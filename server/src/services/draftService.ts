@@ -5,7 +5,7 @@
  * Handles creation, updates, deletions, and UTXO locking.
  */
 
-import type { DraftTransaction, Prisma } from '@prisma/client';
+import type { DraftTransaction, Prisma } from '../generated/prisma/client';
 import * as bitcoin from 'bitcoinjs-lib';
 import { draftRepository, DraftStatus, systemSettingRepository } from '../repositories';
 import { lockUtxosForDraft, resolveUtxoIds } from './draftLockService';

@@ -5,7 +5,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { AuditLog, Prisma } from '@prisma/client';
+import type { AuditLog, Prisma } from '../generated/prisma/client';
 
 /**
  * Audit log category types

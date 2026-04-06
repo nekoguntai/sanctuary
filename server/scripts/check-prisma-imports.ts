@@ -72,7 +72,7 @@ const PRISMA_IMPORT_PATTERNS = [
   /from ['"]\.\/models\/prisma['"]/,
 
   // @prisma/client imports (type imports are OK in some files)
-  // We allow type imports: `import type { ... } from '@prisma/client'`
+  // We allow type imports: `import type { ... } from '../src/generated/prisma/client'`
   // We disallow value imports that aren't types
 ];
 

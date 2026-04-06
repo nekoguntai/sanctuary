@@ -5,7 +5,7 @@
  */
 
 import { Router } from 'express';
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '../../generated/prisma/client';
 import { asyncHandler } from '../../errors/errorHandler';
 import { NotFoundError } from '../../errors/ApiError';
 import { db as prisma } from '../../repositories/db';

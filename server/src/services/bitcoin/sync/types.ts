@@ -4,7 +4,7 @@
  * Type definitions for the modular wallet sync pipeline.
  */
 
-import type { Address, Wallet } from '@prisma/client';
+import type { Address, Wallet } from '../../../generated/prisma/client';
 import type { NodeClientInterface } from '../nodeClient';
 
 // ============================================

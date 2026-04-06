@@ -14,7 +14,7 @@
  * - Hooks: Extensible beforeEach/afterEach for custom setup
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../../src/generated/prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 let prisma: PrismaClient | null = null;

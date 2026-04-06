@@ -7,7 +7,7 @@ import { vi } from 'vitest';
  */
 
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../../src/generated/prisma/client';
 
 // Mock the Prisma client before importing the service
 vi.mock('../../../src/models/prisma', () => ({

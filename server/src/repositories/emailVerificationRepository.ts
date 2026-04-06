@@ -5,7 +5,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { EmailVerificationToken } from '@prisma/client';
+import type { EmailVerificationToken } from '../generated/prisma/client';
 
 /**
  * Create a new email verification token

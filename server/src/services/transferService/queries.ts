@@ -5,7 +5,7 @@
  */
 
 import { db as prisma } from '../../repositories/db';
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '../../generated/prisma/client';
 import { formatTransfer } from './helpers';
 import type { Transfer, TransferFilters, ResourceType } from './types';
 

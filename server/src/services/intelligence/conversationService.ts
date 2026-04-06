@@ -8,7 +8,7 @@ import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { getAIConfig, syncConfigToContainer, getContainerUrl } from '../ai/config';
 import { intelligenceRepository } from '../../repositories/intelligenceRepository';
-import type { AIConversation, AIMessage } from '@prisma/client';
+import type { AIConversation, AIMessage } from '../../generated/prisma/client';
 
 const log = createLogger('INTELLIGENCE:SVC_CHAT');
 

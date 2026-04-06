@@ -6,8 +6,8 @@
  */
 
 import prisma from '../models/prisma';
-import { Prisma } from '@prisma/client';
-import type { DraftTransaction } from '@prisma/client';
+import { Prisma } from '../generated/prisma/client';
+import type { DraftTransaction } from '../generated/prisma/client';
 
 /**
  * Draft status types

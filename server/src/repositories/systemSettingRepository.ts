@@ -5,7 +5,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { SystemSetting } from '@prisma/client';
+import type { SystemSetting } from '../generated/prisma/client';
 import { safeJsonParse, safeJsonParseUntyped } from '../utils/safeJson';
 import { createLogger } from '../utils/logger';
 import type { z } from 'zod';

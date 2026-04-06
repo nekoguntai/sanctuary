@@ -5,7 +5,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { PushDevice } from '@prisma/client';
+import type { PushDevice } from '../generated/prisma/client';
 
 /**
  * Platform types

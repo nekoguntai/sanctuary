@@ -5,7 +5,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { Transaction, Prisma } from '@prisma/client';
+import type { Transaction, Prisma } from '../generated/prisma/client';
 import type {
   TransactionPaginationOptions,
   TransactionPaginatedResult,

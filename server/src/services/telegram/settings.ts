@@ -4,7 +4,7 @@
  * Functions for managing per-wallet Telegram notification settings.
  */
 
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../generated/prisma/client';
 import { db as prisma } from '../../repositories/db';
 import type { TelegramConfig, WalletTelegramSettings } from './types';
 

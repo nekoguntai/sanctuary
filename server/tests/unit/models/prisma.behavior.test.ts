@@ -1,28 +1,33 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
+type QueryExtension = (args: {
+  operation: string;
+  model: string;
+  args: unknown;
+  query: (args: unknown) => Promise<unknown>;
+}) => Promise<unknown>;
+
 type LoadedPrismaModule = {
   mod: typeof import('../../../src/models/prisma');
   connectMock: Mock;
   disconnectMock: Mock;
   queryRawMock: Mock;
   observeMock: Mock;
-  prismaCtorOptions: any;
   logger: {
     info: Mock;
     warn: Mock;
     error: Mock;
     debug: Mock;
   };
-  middleware: ((params: any, next: (params: any) => Promise<any>) => Promise<any>) | null;
-  onHandlers: Record<string, (...args: any[]) => any>;
+  queryExtension: QueryExtension | null;
+  onHandlers: Record<string, (...args: unknown[]) => unknown>;
   processOnSpy: ReturnType<typeof vi.spyOn>;
 };
 
 async function loadPrismaModule(): Promise<LoadedPrismaModule> {
   vi.resetModules();
 
-  let middleware: ((params: any, next: (params: any) => Promise<any>) => Promise<any>) | null = null;
-  let prismaCtorOptions: any = null;
+  let queryExtension: QueryExtension | null = null;
   const connectMock = vi.fn();
   const disconnectMock = vi.fn();
   const queryRawMock = vi.fn();
@@ -33,19 +38,25 @@ async function loadPrismaModule(): Promise<LoadedPrismaModule> {
     error: vi.fn(),
     debug: vi.fn(),
   };
-  const onHandlers: Record<string, (...args: any[]) => any> = {};
+  const onHandlers: Record<string, (...args: unknown[]) => unknown> = {};
 
-  vi.doMock('@prisma/client', () => ({
+  vi.doMock('../../../src/generated/prisma/client', () => ({
     PrismaClient: class MockPrismaClient {
-      constructor(config: any) {
-        prismaCtorOptions = config;
-      }
-      $use(fn: (params: any, next: (params: any) => Promise<any>) => Promise<any>): void {
-        middleware = fn;
+      $extends(config: { query?: { $allModels?: { $allOperations?: QueryExtension } } }) {
+        if (config.query?.$allModels?.$allOperations) {
+          queryExtension = config.query.$allModels.$allOperations;
+        }
+        return this;
       }
       $connect = connectMock;
       $disconnect = disconnectMock;
       $queryRaw = queryRawMock;
+    },
+  }));
+
+  vi.doMock('@prisma/adapter-pg', () => ({
+    PrismaPg: class MockPrismaPg {
+      constructor() { /* no-op */ }
     },
   }));
 
@@ -68,10 +79,10 @@ async function loadPrismaModule(): Promise<LoadedPrismaModule> {
 
   const processOnSpy = vi
     .spyOn(process, 'on')
-    .mockImplementation(((event: string, handler: (...args: any[]) => any) => {
+    .mockImplementation(((event: string, handler: (...args: unknown[]) => unknown) => {
       onHandlers[event] = handler;
       return process;
-    }) as any);
+    }) as Parameters<typeof process.on>[1] as never);
 
   const mod = await import('../../../src/models/prisma');
 
@@ -81,9 +92,8 @@ async function loadPrismaModule(): Promise<LoadedPrismaModule> {
     disconnectMock,
     queryRawMock,
     observeMock,
-    prismaCtorOptions,
     logger,
-    middleware,
+    queryExtension,
     onHandlers,
     processOnSpy,
   };
@@ -106,17 +116,6 @@ describe('models/prisma behavior', () => {
     await expect(mod.connectWithRetry()).resolves.toBeUndefined();
     expect(connectMock).toHaveBeenCalledTimes(1);
     processOnSpy.mockRestore();
-  });
-
-  it('initializes PrismaClient with verbose logs in development', async () => {
-    process.env.NODE_ENV = 'development';
-    const { prismaCtorOptions, processOnSpy } = await loadPrismaModule();
-
-    expect(prismaCtorOptions).toEqual({
-      log: ['query', 'error', 'warn'],
-    });
-    processOnSpy.mockRestore();
-    delete process.env.NODE_ENV;
   });
 
   it('connectWithRetry retries and succeeds on a later attempt', async () => {
@@ -166,17 +165,19 @@ describe('models/prisma behavior', () => {
     processOnSpy.mockRestore();
   });
 
-  it('middleware records query metrics and slow-query warnings', async () => {
-    const { middleware, observeMock, logger, processOnSpy } = await loadPrismaModule();
-    expect(middleware).not.toBeNull();
+  it('query extension records metrics and slow-query warnings', async () => {
+    const { queryExtension, observeMock, logger, processOnSpy } = await loadPrismaModule();
+    expect(queryExtension).not.toBeNull();
 
     const nowSpy = vi.spyOn(Date, 'now').mockImplementationOnce(() => 0).mockImplementationOnce(() => 150);
 
     await expect(
-      middleware!(
-        { model: 'Wallet', action: 'findMany' },
-        async () => ({ ok: true })
-      )
+      queryExtension!({
+        operation: 'findMany',
+        model: 'Wallet',
+        args: {},
+        query: async () => ({ ok: true }),
+      })
     ).resolves.toEqual({ ok: true });
 
     expect(observeMock).toHaveBeenCalledWith({ operation: 'select' }, 0.15);
@@ -190,24 +191,31 @@ describe('models/prisma behavior', () => {
     processOnSpy.mockRestore();
   });
 
-  it('middleware falls back to unknown operation when action is missing', async () => {
-    const { middleware, observeMock, processOnSpy } = await loadPrismaModule();
-    expect(middleware).not.toBeNull();
+  it('query extension falls back to unknown operation when action is missing', async () => {
+    const { queryExtension, observeMock, processOnSpy } = await loadPrismaModule();
+    expect(queryExtension).not.toBeNull();
 
-    await middleware!(
-      { model: 'Wallet' },
-      async () => ({ ok: true })
-    );
+    await queryExtension!({
+      operation: 'customAction',
+      model: 'Wallet',
+      args: {},
+      query: async () => ({ ok: true }),
+    });
 
     expect(observeMock).toHaveBeenCalledWith({ operation: 'other' }, expect.any(Number));
     processOnSpy.mockRestore();
   });
 
   it('caps latency window at configured size', async () => {
-    const { mod, middleware, processOnSpy } = await loadPrismaModule();
+    const { mod, queryExtension, processOnSpy } = await loadPrismaModule();
 
     for (let i = 0; i < 101; i++) {
-      await middleware!({ model: 'Wallet', action: 'findMany' }, async () => ({ i }));
+      await queryExtension!({
+        operation: 'findMany',
+        model: 'Wallet',
+        args: {},
+        query: async () => ({ i }),
+      });
     }
 
     const metrics = mod.getPoolHealthMetrics();
@@ -216,7 +224,7 @@ describe('models/prisma behavior', () => {
   });
 
   it('pool health metrics report healthy/degraded/unhealthy and respect threshold config', async () => {
-    const { mod, middleware, processOnSpy } = await loadPrismaModule();
+    const { mod, queryExtension, processOnSpy } = await loadPrismaModule();
     expect(mod.getPoolHealthMetrics()).toEqual({
       avgLatencyMs: 0,
       maxLatencyMs: 0,
@@ -225,7 +233,12 @@ describe('models/prisma behavior', () => {
     });
 
     const nowSpy1 = vi.spyOn(Date, 'now').mockImplementationOnce(() => 0).mockImplementationOnce(() => 120);
-    await middleware!({ model: 'Wallet', action: 'findUnique' }, async () => ({ ok: true }));
+    await queryExtension!({
+      operation: 'findUnique',
+      model: 'Wallet',
+      args: {},
+      query: async () => ({ ok: true }),
+    });
     nowSpy1.mockRestore();
 
     mod.configurePoolHealthThresholds({ warningThresholdMs: 100, criticalThresholdMs: 500 });
@@ -247,18 +260,20 @@ describe('models/prisma behavior', () => {
     processOnSpy.mockRestore();
   });
 
-  it('disconnect waits for active middleware query to drain before disconnecting', async () => {
-    const { mod, middleware, disconnectMock, processOnSpy } = await loadPrismaModule();
+  it('disconnect waits for active query extension to drain before disconnecting', async () => {
+    const { mod, queryExtension, disconnectMock, processOnSpy } = await loadPrismaModule();
     disconnectMock.mockResolvedValue(undefined);
 
     let resolveQuery: ((value: unknown) => void) | undefined;
-    const inflight = middleware!(
-      { model: 'Wallet', action: 'findMany' },
-      async () =>
+    const inflight = queryExtension!({
+      operation: 'findMany',
+      model: 'Wallet',
+      args: {},
+      query: () =>
         new Promise((resolve) => {
           resolveQuery = resolve;
-        }) as any
-    );
+        }),
+    });
 
     const disconnectPromise = mod.disconnect();
     await vi.advanceTimersByTimeAsync(250);
@@ -272,13 +287,15 @@ describe('models/prisma behavior', () => {
   });
 
   it('disconnect force-closes when active queries do not drain before timeout', async () => {
-    const { mod, middleware, disconnectMock, logger, processOnSpy } = await loadPrismaModule();
+    const { mod, queryExtension, disconnectMock, logger, processOnSpy } = await loadPrismaModule();
     disconnectMock.mockResolvedValue(undefined);
 
-    void middleware!(
-      { model: 'Wallet', action: 'findMany' },
-      async () => new Promise(() => undefined) as any
-    );
+    void queryExtension!({
+      operation: 'findMany',
+      model: 'Wallet',
+      args: {},
+      query: () => new Promise(() => undefined),
+    });
 
     const disconnectPromise = mod.disconnect();
     await vi.advanceTimersByTimeAsync(10_250);
@@ -357,13 +374,12 @@ describe('models/prisma behavior', () => {
     );
 
     mod.startDatabaseHealthCheck(10);
-    await vi.advanceTimersByTimeAsync(20); // First unhealthy check -> starts reconnect
+    await vi.advanceTimersByTimeAsync(20);
     expect(disconnectMock).toHaveBeenCalledTimes(1);
 
-    // Restart monitor while reconnect promise is still pending
     mod.stopDatabaseHealthCheck();
     mod.startDatabaseHealthCheck(10);
-    await vi.advanceTimersByTimeAsync(20); // Should not trigger another reconnect
+    await vi.advanceTimersByTimeAsync(20);
     expect(disconnectMock).toHaveBeenCalledTimes(1);
 
     resolveConnect?.();
@@ -385,7 +401,7 @@ describe('models/prisma behavior', () => {
     disconnectMock.mockResolvedValue(undefined);
 
     mod.startDatabaseHealthCheck(100);
-    await onHandlers.beforeExit?.();
+    await (onHandlers.beforeExit as () => Promise<void>)?.();
 
     expect(disconnectMock).toHaveBeenCalled();
     processOnSpy.mockRestore();

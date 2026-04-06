@@ -1,5 +1,5 @@
 import prisma from '../models/prisma';
-import type { Group, GroupMember } from '@prisma/client';
+import type { Group, GroupMember } from '../generated/prisma/client';
 
 const membersInclude = {
   members: {

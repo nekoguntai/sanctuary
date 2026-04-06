@@ -6,7 +6,7 @@
  */
 
 import { Request, Response, NextFunction, RequestHandler } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../generated/prisma/client';
 import { ApiError, InternalError, ConflictError, NotFoundError, ValidationError, ErrorCodes } from './ApiError';
 import { createLogger } from '../utils/logger';
 import { requestContext } from '../utils/requestContext';

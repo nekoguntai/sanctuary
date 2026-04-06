@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { DraftTransaction } from '@prisma/client';
+import type { DraftTransaction } from '../../../src/generated/prisma/client';
 import {
   serializeDraftTransaction,
   serializeDraftTransactions,

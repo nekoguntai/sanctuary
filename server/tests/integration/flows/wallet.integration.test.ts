@@ -30,7 +30,7 @@ function uniqueUsername(role: string): string {
 function uniqueFingerprint(): string {
   return Math.random().toString(16).substring(2, 10).padEnd(8, '0');
 }
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../../src/generated/prisma/client';
 import { Express } from 'express';
 
 // Increase timeout for integration tests

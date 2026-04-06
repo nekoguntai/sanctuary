@@ -7,7 +7,7 @@
  */
 
 import { db as prisma } from '../../repositories/db';
-import type { OwnershipTransfer } from '@prisma/client';
+import type { OwnershipTransfer } from '../../generated/prisma/client';
 import { createLogger } from '../../utils/logger';
 import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError } from '../../errors';
 import { isExpired, formatTransfer } from './helpers';

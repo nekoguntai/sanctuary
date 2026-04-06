@@ -4,8 +4,8 @@
  * Business logic for policy CRUD, inheritance resolution, and validation.
  */
 
-import type { VaultPolicy } from '@prisma/client';
-import { Prisma } from '@prisma/client';
+import type { VaultPolicy } from '../../generated/prisma/client';
+import { Prisma } from '../../generated/prisma/client';
 import { policyRepository } from '../../repositories/policyRepository';
 import { NotFoundError, ForbiddenError, InvalidInputError } from '../../errors';
 import { createLogger } from '../../utils/logger';

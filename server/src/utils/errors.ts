@@ -8,7 +8,7 @@
  */
 
 import { Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../generated/prisma/client';
 import { createLogger } from './logger';
 
 // Import and re-export shared error utilities

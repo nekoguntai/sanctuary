@@ -6,7 +6,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { AIInsight, AIConversation, AIMessage, Prisma } from '@prisma/client';
+import type { AIInsight, AIConversation, AIMessage, Prisma } from '../generated/prisma/client';
 import type { InsightType, InsightSeverity, InsightStatus } from '../services/intelligence/types';
 
 // Re-export for consumers that import from this module

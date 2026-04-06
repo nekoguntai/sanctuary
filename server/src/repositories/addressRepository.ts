@@ -5,7 +5,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { Address, Prisma } from '@prisma/client';
+import type { Address, Prisma } from '../generated/prisma/client';
 import { buildWalletAccessWhere } from './accessControl';
 
 /**

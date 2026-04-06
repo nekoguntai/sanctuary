@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import request from 'supertest';
 import { Express } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../../src/generated/prisma/client';
 import {
   setupTestDatabase,
   cleanupTestData,

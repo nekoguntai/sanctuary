@@ -6,7 +6,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { Label } from '@prisma/client';
+import type { Label } from '../generated/prisma/client';
 
 /**
  * Label with usage counts

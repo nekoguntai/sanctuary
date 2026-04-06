@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../../src/generated/prisma/client';
 
 vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,

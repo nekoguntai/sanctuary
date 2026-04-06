@@ -5,7 +5,7 @@
  * Follows the same pattern as telegram/settings.ts.
  */
 
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../generated/prisma/client';
 import { db as prisma } from '../../repositories/db';
 import type { WalletAutopilotSettings, AutopilotConfig } from './types';
 import { DEFAULT_AUTOPILOT_SETTINGS } from './types';

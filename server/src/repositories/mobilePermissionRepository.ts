@@ -6,7 +6,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { MobilePermission, Prisma } from '@prisma/client';
+import type { MobilePermission, Prisma } from '../generated/prisma/client';
 
 /**
  * Mobile permission capability fields (boolean flags)

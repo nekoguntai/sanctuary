@@ -6,7 +6,7 @@
  * with a test schema.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../../src/generated/prisma/client';
 
 let prisma: PrismaClient | null = null;
 let isSetup = false;

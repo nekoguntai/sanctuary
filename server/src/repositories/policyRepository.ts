@@ -5,8 +5,8 @@
  */
 
 import prisma from '../models/prisma';
-import type { VaultPolicy, ApprovalRequest, ApprovalVote, PolicyEvent, PolicyAddress } from '@prisma/client';
-import { Prisma } from '@prisma/client';
+import type { VaultPolicy, ApprovalRequest, ApprovalVote, PolicyEvent, PolicyAddress } from '../generated/prisma/client';
+import { Prisma } from '../generated/prisma/client';
 import type {
   PolicyType,
   PolicySourceType,

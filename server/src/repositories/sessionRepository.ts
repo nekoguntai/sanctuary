@@ -6,7 +6,7 @@
 
 import prisma from '../models/prisma';
 import crypto from 'crypto';
-import type { RefreshToken, RevokedToken } from '@prisma/client';
+import type { RefreshToken, RevokedToken } from '../generated/prisma/client';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('SESSION:REPO');

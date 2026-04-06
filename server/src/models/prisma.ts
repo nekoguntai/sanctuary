@@ -4,22 +4,18 @@
  * Singleton instance of Prisma Client for database operations.
  *
  * Features:
+ * - PostgreSQL driver adapter (Prisma 7)
+ * - Query extension for slow query detection and metrics
  * - Connection retry logic for startup resilience
- * - Slow query detection middleware
  * - Graceful shutdown handling
  * - Periodic health check with auto-reconnection
  *
  * Connection pool and timeouts are configured via DATABASE_URL:
  * postgresql://user:pass@host:5432/db?connection_limit=30&pool_timeout=30&connect_timeout=10&statement_timeout=30000
- *
- * Timeout parameters:
- * - connection_limit: Max connections in pool (default: 30, configurable via DB_POOL_SIZE env var)
- * - pool_timeout: Wait time for connection from pool in seconds (default: 30)
- * - connect_timeout: Connection establishment timeout in seconds (default: 10)
- * - statement_timeout: Query execution timeout in milliseconds (default: 30000)
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../generated/prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 import { dbQueryDuration } from '../observability/metrics';
@@ -34,9 +30,9 @@ const MAX_RETRIES = 5;
 const INITIAL_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 30000;
 
-// Create Prisma client instance
-const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+// Create PostgreSQL adapter
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL || '',
 });
 
 /**
@@ -66,36 +62,42 @@ const latencyWindow: number[] = [];
 // Active query counter for connection draining on shutdown
 let activeQueries = 0;
 
-// Add slow query detection, metrics, pool health tracking, and active query counting
-prisma.$use(async (params, next) => {
-  activeQueries++;
-  const before = Date.now();
-  try {
-    const result = await next(params);
-    const duration = Date.now() - before;
+// Create Prisma client with query extension for metrics and slow query detection
+const prisma = new PrismaClient({ adapter }).$extends({
+  query: {
+    $allModels: {
+      async $allOperations({ operation, model, args, query }) {
+        activeQueries++;
+        const before = Date.now();
+        try {
+          const result = await query(args);
+          const duration = Date.now() - before;
 
-    // Record query duration metric
-    const operation = getOperationType(params.action || 'unknown');
-    dbQueryDuration.observe({ operation }, duration / 1000);
+          // Record query duration metric
+          const op = getOperationType(operation);
+          dbQueryDuration.observe({ operation: op }, duration / 1000);
 
-    // Record for pool health monitoring
-    latencyWindow.push(duration);
-    if (latencyWindow.length > LATENCY_WINDOW_SIZE) {
-      latencyWindow.shift();
-    }
+          // Record for pool health monitoring
+          latencyWindow.push(duration);
+          if (latencyWindow.length > LATENCY_WINDOW_SIZE) {
+            latencyWindow.shift();
+          }
 
-    if (duration > SLOW_QUERY_THRESHOLD_MS) {
-      log.warn(`Slow query (${duration}ms): ${params.model}.${params.action}`, {
-        model: params.model,
-        action: params.action,
-        duration,
-      });
-    }
+          if (duration > SLOW_QUERY_THRESHOLD_MS) {
+            log.warn(`Slow query (${duration}ms): ${model}.${operation}`, {
+              model,
+              action: operation,
+              duration,
+            });
+          }
 
-    return result;
-  } finally {
-    activeQueries--;
-  }
+          return result;
+        } finally {
+          activeQueries--;
+        }
+      },
+    },
+  },
 });
 
 /**

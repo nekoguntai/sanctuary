@@ -4,7 +4,7 @@
  * Shared interfaces and type definitions for the transfer service module.
  */
 
-import type { OwnershipTransfer } from '@prisma/client';
+import type { OwnershipTransfer } from '../../generated/prisma/client';
 import { db as prisma } from '../../repositories/db';
 
 /** Prisma transaction client type */

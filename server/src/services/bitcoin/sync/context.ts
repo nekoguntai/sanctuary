@@ -4,7 +4,7 @@
  * Creates and initializes the SyncContext for pipeline execution.
  */
 
-import type { Address, Wallet } from '@prisma/client';
+import type { Address, Wallet } from '../../../generated/prisma/client';
 import type { NodeClientInterface } from '../nodeClient';
 import type { SyncContext, SyncStats, BitcoinNetwork } from './types';
 

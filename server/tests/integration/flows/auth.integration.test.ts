@@ -18,7 +18,7 @@ import request from 'supertest';
 import { setupTestDatabase, cleanupTestData, teardownTestDatabase, canRunIntegrationTests } from '../setup/testDatabase';
 import { createTestApp, resetTestApp } from '../setup/testServer';
 import { getTestUser, getTestAdmin, createTestUser, loginTestUser } from '../setup/helpers';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../../src/generated/prisma/client';
 import { Express } from 'express';
 
 // Increase timeout for integration tests

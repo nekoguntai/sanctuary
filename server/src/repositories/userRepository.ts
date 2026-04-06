@@ -5,7 +5,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { User } from '@prisma/client';
+import type { User } from '../generated/prisma/client';
 
 /**
  * Find user by ID

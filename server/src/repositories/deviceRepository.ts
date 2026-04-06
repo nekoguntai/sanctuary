@@ -5,7 +5,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { Device, DeviceUser, WalletDevice } from '@prisma/client';
+import type { Device, DeviceUser, WalletDevice } from '../generated/prisma/client';
 
 /**
  * Device with user associations

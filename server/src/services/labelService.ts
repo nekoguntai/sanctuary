@@ -5,7 +5,7 @@
  * Handles labels, transaction labels, and address labels.
  */
 
-import type { Label } from '@prisma/client';
+import type { Label } from '../generated/prisma/client';
 import { labelRepository, LabelWithCounts, LabelWithAssociations } from '../repositories';
 import {
   requireTransactionAccess,

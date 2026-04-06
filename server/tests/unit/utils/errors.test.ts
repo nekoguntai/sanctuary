@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../../src/generated/prisma/client';
 
 // Mock logger
 vi.mock('../../../src/utils/logger', () => ({

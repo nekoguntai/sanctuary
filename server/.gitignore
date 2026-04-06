@@ -30,6 +30,7 @@ yarn-error.log*
 Thumbs.db
 
 # Prisma
+src/generated/
 .env.test
 
 # Test outputs

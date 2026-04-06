@@ -6,7 +6,7 @@ import { vi, Mock, Mock } from 'vitest';
  * Each model's methods are mocked and can be configured per test.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../src/generated/prisma/client';
 
 // Create mock implementations for all Prisma model methods
 const createModelMock = () => ({

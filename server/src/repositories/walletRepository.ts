@@ -6,7 +6,7 @@
  */
 
 import prisma from '../models/prisma';
-import type { Wallet, Prisma } from '@prisma/client';
+import type { Wallet, Prisma } from '../generated/prisma/client';
 import type {
   NetworkType,
   WalletWithAddresses,

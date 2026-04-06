@@ -9,7 +9,7 @@ import { vi, Mock } from 'vitest';
 import { mockPrismaClient, resetPrismaMocks } from '../../../mocks/prisma';
 import { sampleUtxos, sampleWallets, testnetAddresses, multisigKeyInfo } from '../../../fixtures/bitcoin';
 import * as bitcoin from 'bitcoinjs-lib';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../../../src/generated/prisma/client';
 
 // Hoist mock variables for use in vi.mock() factories
 const { mockParseDescriptor, mockNotifyNewTransactions, mockEmitTransactionSent, mockEmitTransactionReceived } = vi.hoisted(() => ({

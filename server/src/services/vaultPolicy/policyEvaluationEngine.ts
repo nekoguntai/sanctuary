@@ -10,7 +10,7 @@
  * - Preview evaluations skip event logging to avoid side effects.
  */
 
-import type { VaultPolicy } from '@prisma/client';
+import type { VaultPolicy } from '../../generated/prisma/client';
 import { policyRepository } from '../../repositories/policyRepository';
 import { walletRepository } from '../../repositories/walletRepository';
 import { createLogger } from '../../utils/logger';

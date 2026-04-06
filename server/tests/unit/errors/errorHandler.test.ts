@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { NextFunction, Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../../src/generated/prisma/client';
 
 const { mockLogWarn, mockLogError, mockGetRequestId } = vi.hoisted(() => ({
   mockLogWarn: vi.fn(),

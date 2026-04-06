@@ -29,6 +29,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package*.json ./
 COPY --from=deps /app/prisma ./prisma
+COPY --from=deps /app/prisma.config.ts ./
 
 # Copy shared directory first (needed for imports)
 COPY shared ../shared
@@ -67,6 +68,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
+COPY --from=deps /app/prisma.config.ts ./
 
 # Copy migration scripts
 COPY server/scripts ./scripts

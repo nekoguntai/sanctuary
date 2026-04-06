@@ -7,6 +7,7 @@
  */
 
 import { PrismaClient } from '../../../src/generated/prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
 let prisma: PrismaClient | null = null;
 let isSetup = false;
@@ -35,13 +36,8 @@ export async function setupTestDatabase(): Promise<PrismaClient> {
   }
 
   // Create Prisma client for test database
-  prisma = new PrismaClient({
-    datasources: {
-      db: {
-        url: databaseUrl,
-      },
-    },
-    log: process.env.DEBUG ? ['query', 'error', 'warn'] : ['error'],
+  const adapter = new PrismaPg({ connectionString: databaseUrl });
+  prisma = new PrismaClient({ adapter,
   });
 
   try {

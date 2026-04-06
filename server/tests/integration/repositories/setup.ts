@@ -15,6 +15,7 @@
  */
 
 import { PrismaClient } from '../../../src/generated/prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcryptjs';
 
 let prisma: PrismaClient | null = null;
@@ -51,14 +52,8 @@ export async function getTestPrisma(): Promise<PrismaClient> {
     );
   }
 
-  prisma = new PrismaClient({
-    datasources: {
-      db: {
-        url: databaseUrl,
-      },
-    },
-    log: process.env.DEBUG ? ['query', 'error', 'warn'] : ['error'],
-  });
+  const adapter = new PrismaPg({ connectionString: databaseUrl });
+  prisma = new PrismaClient({ adapter });
 
   await prisma.$connect();
   isSetup = true;

@@ -134,6 +134,7 @@ export const SyncConfigSchema = z.object({
   maxSyncDurationMs: z.number().int().min(1000),
   transactionBatchSize: z.number().int().min(1).max(10000),
   electrumSubscriptionsEnabled: z.boolean(),
+  workerHealthPollIntervalMs: z.number().int().min(1000).max(300000),
 });
 
 export const ElectrumClientConfigSchema = z.object({
@@ -202,8 +203,17 @@ export const FeatureFlagsSchema = z.object({
   priceAlerts: z.boolean(),
   aiAssistant: z.boolean(),
   telegramNotifications: z.boolean(),
+  treasuryAutopilot: z.boolean(),
+  treasuryIntelligence: z.boolean(),
   websocketV2Events: z.boolean(),
   experimental: ExperimentalFeaturesSchema,
+});
+
+export const MonitoringConfigSchema = z.object({
+  grafanaPort: z.number().int().min(1).max(65535),
+  prometheusPort: z.number().int().min(1).max(65535),
+  jaegerPort: z.number().int().min(1).max(65535),
+  tracingEnabled: z.boolean(),
 });
 
 // =============================================================================
@@ -228,6 +238,7 @@ export const AppConfigSchema = z.object({
   docker: DockerConfigSchema,
   worker: WorkerConfigSchema,
   logging: LoggingConfigSchema,
+  monitoring: MonitoringConfigSchema,
   features: FeatureFlagsSchema,
 });
 

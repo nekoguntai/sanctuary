@@ -102,6 +102,7 @@ function buildValidConfig() {
       maxSyncDurationMs: 1800000,
       transactionBatchSize: 100,
       electrumSubscriptionsEnabled: true,
+      workerHealthPollIntervalMs: 30000,
     },
     electrumClient: {
       requestTimeoutMs: 30000,
@@ -141,6 +142,12 @@ function buildValidConfig() {
     logging: {
       level: 'info',
     },
+    monitoring: {
+      grafanaPort: 3000,
+      prometheusPort: 9090,
+      jaegerPort: 16686,
+      tracingEnabled: false,
+    },
     features: {
       hardwareWalletSigning: true,
       qrCodeSigning: true,
@@ -152,6 +159,8 @@ function buildValidConfig() {
       priceAlerts: false,
       aiAssistant: false,
       telegramNotifications: false,
+      treasuryAutopilot: false,
+      treasuryIntelligence: false,
       websocketV2Events: false,
       experimental: {
         taprootAddresses: false,

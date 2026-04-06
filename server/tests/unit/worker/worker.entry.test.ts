@@ -58,6 +58,7 @@ const mocks = vi.hoisted(() => {
     sync: {
       intervalMs: 5 * 60 * 1000,
       confirmationUpdateIntervalMs: 2 * 60 * 1000,
+      syncStaggerDelayMs: 2000,
     },
     maintenance: {
       auditLogRetentionDays: 30,
@@ -386,10 +387,12 @@ describe('worker entrypoint', () => {
         expect.objectContaining({
           name: 'sync-wallet',
           data: { walletId: 'w1', reason: 'stale' },
+          options: expect.objectContaining({ delay: 0 }),
         }),
         expect.objectContaining({
           name: 'sync-wallet',
           data: { walletId: 'w2', reason: 'stale' },
+          options: expect.objectContaining({ delay: 2000 }),
         }),
       ])
     );

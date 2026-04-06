@@ -14,7 +14,7 @@ import { getErrorMessage } from '../../utils/errors';
 
 const router = Router();
 const log = createLogger('ADMIN_PROXY:ROUTE');
-type SocksProxyAgentConstructor = new (proxyUrl: string, ...args: unknown[]) => unknown;
+type SocksProxyAgentConstructor = new (proxyUrl: string) => https.Agent;
 
 /**
  * POST /api/v1/admin/proxy/test
@@ -68,26 +68,17 @@ router.post('/proxy/test', authenticate, requireAdmin, asyncHandler(async (req, 
   let isTorExit = false;
 
   try {
-    // Dynamic import for SOCKS proxy agent
-    const socksModule = await import('socks-proxy-agent') as {
-      SocksProxyAgent?: SocksProxyAgentConstructor;
-      default?: SocksProxyAgentConstructor | { SocksProxyAgent?: SocksProxyAgentConstructor };
+    // Keep dynamic import for ESM package compatibility in CommonJS output.
+    const socksProxyAgentModuleId = 'socks-proxy-agent';
+    const { SocksProxyAgent } = await import(socksProxyAgentModuleId) as {
+      SocksProxyAgent: SocksProxyAgentConstructor;
     };
-    const defaultExport = socksModule.default;
-    const SocksProxyAgent =
-      socksModule.SocksProxyAgent ??
-      (typeof defaultExport === 'function'
-        ? defaultExport
-        : defaultExport?.SocksProxyAgent);
 
     const proxyUrl = username && password
       ? `socks5://${username}:${password}@${host}:${proxyPort}`
       : `socks5://${host}:${proxyPort}`;
 
-    if (!SocksProxyAgent) {
-      throw new Error('Unable to resolve SocksProxyAgent constructor');
-    }
-    const agent = new SocksProxyAgent(proxyUrl) as https.Agent;
+    const agent = new SocksProxyAgent(proxyUrl);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);

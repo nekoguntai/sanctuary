@@ -117,8 +117,8 @@ async function loadPoolConfigFromDatabase(network: NetworkType = 'mainnet'): Pro
 function getEnvPoolConfig(): Partial<ElectrumPoolConfig> {
   return {
     enabled: process.env.ELECTRUM_POOL_ENABLED !== 'false',
-    minConnections: parseInt(process.env.ELECTRUM_POOL_MIN_CONNECTIONS || '1', 10),
-    maxConnections: parseInt(process.env.ELECTRUM_POOL_MAX_CONNECTIONS || '5', 10),
+    minConnections: parseInt(process.env.ELECTRUM_POOL_MIN_CONNECTIONS || '2', 10),
+    maxConnections: parseInt(process.env.ELECTRUM_POOL_MAX_CONNECTIONS || '10', 10),
     idleTimeoutMs: parseInt(process.env.ELECTRUM_POOL_IDLE_TIMEOUT_MS || '300000', 10),
     healthCheckIntervalMs: parseInt(
       process.env.ELECTRUM_POOL_HEALTH_CHECK_INTERVAL_MS || '30000',

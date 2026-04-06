@@ -530,20 +530,27 @@ describe('ElectrumPool', () => {
         const state1 = pool.getServerBackoffState('server-1');
         expect(state1).not.toBeNull();
         expect(state1!.consecutiveFailures).toBe(1);
-        expect(state1!.level).toBe(0); // Not in backoff yet (threshold is 2)
+        expect(state1!.level).toBe(0); // Not in backoff yet (threshold is 3)
 
         pool.recordServerFailure('server-1', 'error');
         const state2 = pool.getServerBackoffState('server-1');
         expect(state2).not.toBeNull();
         expect(state2!.consecutiveFailures).toBe(2);
-        expect(state2!.level).toBe(1); // Now in backoff
+        expect(state2!.level).toBe(0); // Still not in backoff (threshold is 3)
+
+        pool.recordServerFailure('server-1', 'error');
+        const state3 = pool.getServerBackoffState('server-1');
+        expect(state3).not.toBeNull();
+        expect(state3!.consecutiveFailures).toBe(3);
+        expect(state3!.level).toBe(1); // Now in backoff
       });
 
       it('should increase backoff level on continued failures', () => {
         pool = createPool();
         pool.setServers(servers);
 
-        // Trigger backoff (2 failures)
+        // Trigger backoff (3 failures)
+        pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
 
@@ -551,7 +558,7 @@ describe('ElectrumPool', () => {
         expect(state1).not.toBeNull();
         expect(state1!.level).toBe(1);
 
-        // Third failure increases level
+        // Fourth failure increases level
         pool.recordServerFailure('server-1', 'error');
         const state2 = pool.getServerBackoffState('server-1');
         expect(state2).not.toBeNull();
@@ -566,7 +573,8 @@ describe('ElectrumPool', () => {
         expect(initialState).not.toBeNull();
         expect(initialState!.weight).toBe(1.0);
 
-        // Trigger backoff
+        // Trigger backoff (3 failures needed)
+        pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
 
@@ -580,7 +588,8 @@ describe('ElectrumPool', () => {
         pool = createPool();
         pool.setServers(servers);
 
-        // Regular error
+        // Regular error (3 failures needed for backoff)
+        pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
         const errorState = pool.getServerBackoffState('server-1');
@@ -588,6 +597,7 @@ describe('ElectrumPool', () => {
 
         // Reset and test timeout
         pool.resetServerBackoff('server-1');
+        pool.recordServerFailure('server-1', 'timeout');
         pool.recordServerFailure('server-1', 'timeout');
         pool.recordServerFailure('server-1', 'timeout');
         const timeoutState = pool.getServerBackoffState('server-1');
@@ -604,7 +614,8 @@ describe('ElectrumPool', () => {
         // Before backoff - no cooldown
         expect(pool.isServerInCooldown('server-1')).toBe(false);
 
-        // Trigger backoff
+        // Trigger backoff (3 failures needed)
+        pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
 
@@ -643,6 +654,7 @@ describe('ElectrumPool', () => {
 
         pool.recordServerFailure('ghost-failure', 'error');
         pool.recordServerFailure('ghost-failure', 'error');
+        pool.recordServerFailure('ghost-failure', 'error');
 
         const state = pool.getServerBackoffState('ghost-failure');
         expect(state).not.toBeNull();
@@ -655,12 +667,13 @@ describe('ElectrumPool', () => {
         pool = createPool();
         pool.setServers(servers);
 
-        // Trigger backoff first (need 2 failures for backoff)
+        // Trigger backoff first (need 3 failures for backoff)
+        pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
         const inBackoff = pool.getServerBackoffState('server-1');
         expect(inBackoff).not.toBeNull();
-        expect(inBackoff!.consecutiveFailures).toBe(2);
+        expect(inBackoff!.consecutiveFailures).toBe(3);
         expect(inBackoff!.level).toBe(1);
 
         // Recovery threshold is 3 successes to reduce backoff level
@@ -703,7 +716,8 @@ describe('ElectrumPool', () => {
         pool = createPool();
         pool.setServers(servers);
 
-        // Trigger backoff with cooldown
+        // Trigger backoff with cooldown (3 failures needed)
+        pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
         expect(pool.isServerInCooldown('server-1')).toBe(true);
@@ -781,6 +795,7 @@ describe('ElectrumPool', () => {
 
         pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
 
         expect(pool.isServerInCooldown('server-1')).toBe(true);
       });
@@ -815,10 +830,11 @@ describe('ElectrumPool', () => {
 
         pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
 
         const state = pool.getServerBackoffState('server-1');
         expect(state).not.toBeNull();
-        expect(state!.consecutiveFailures).toBe(2);
+        expect(state!.consecutiveFailures).toBe(3);
         expect(state!.level).toBe(1);
         expect(state!.inCooldown).toBe(true);
         expect(state!.weight).toBeLessThan(1.0);
@@ -897,12 +913,13 @@ describe('ElectrumPool', () => {
 
         pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
 
         const stats = pool.getPoolStats();
         const server1Stats = stats.servers.find(s => s.serverId === 'server-1');
 
         expect(server1Stats).toBeDefined();
-        expect(server1Stats!.consecutiveFailures).toBe(2);
+        expect(server1Stats!.consecutiveFailures).toBe(3);
         expect(server1Stats!.backoffLevel).toBe(1);
         expect(server1Stats!.cooldownUntil).not.toBeNull();
         expect(server1Stats!.weight).toBeLessThan(1.0);
@@ -927,7 +944,8 @@ describe('ElectrumPool', () => {
         pool.setServers(servers);
         await pool.initialize();
 
-        // Put server-1 in cooldown
+        // Put server-1 in cooldown (3 failures needed)
+        pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
         pool.recordServerFailure('server-1', 'error');
 
@@ -988,7 +1006,7 @@ describe('ElectrumPool', () => {
       pool.on('circuitStateChange', stateChangeListener);
       (pool as any).isShuttingDown = true;
 
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 8; i++) {
         await expect(pool.acquire()).rejects.toThrow('Pool is shutting down');
       }
 

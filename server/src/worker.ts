@@ -489,12 +489,14 @@ function setupStaleWalletHandler(): void {
 
     log.info(`Queueing sync for ${result.staleWalletIds.length} stale wallets`);
 
-    await jobQueue!.addBulkJobs('sync', result.staleWalletIds.map(walletId => ({
+    const config = getConfig();
+    await jobQueue!.addBulkJobs('sync', result.staleWalletIds.map((walletId, index) => ({
       name: 'sync-wallet',
       data: { walletId, reason: 'stale' },
       options: {
         priority: 3, // Lower priority than real-time address activity
         jobId: `sync:stale:${walletId}:${Date.now()}`,
+        delay: index * config.sync.syncStaggerDelayMs,
       },
     })));
   });

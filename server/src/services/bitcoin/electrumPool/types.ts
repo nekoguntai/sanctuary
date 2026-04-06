@@ -106,7 +106,7 @@ export interface BackoffConfig {
 export const DEFAULT_BACKOFF_CONFIG: BackoffConfig = {
   baseDelayMs: 30000,        // 30 seconds initial backoff
   maxDelayMs: 300000,        // 5 minutes max backoff
-  failureThreshold: 2,       // 2 failures triggers backoff
+  failureThreshold: 3,       // 3 failures triggers backoff
   recoveryThreshold: 3,      // 3 successes for full recovery
   weightPenalty: 0.3,        // 30% weight reduction per level
   minWeight: 0.1,            // Never go below 10% weight
@@ -148,8 +148,8 @@ export interface ElectrumPoolConfig {
  */
 export const DEFAULT_POOL_CONFIG: ElectrumPoolConfig = {
   enabled: true, // Set to false for single-connection mode
-  minConnections: 1,
-  maxConnections: 5,
+  minConnections: 2,
+  maxConnections: 10,
   loadBalancing: 'round_robin',
   connectionTimeoutMs: 10000,
   idleTimeoutMs: 300000,

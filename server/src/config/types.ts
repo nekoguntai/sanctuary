@@ -134,7 +134,8 @@ export interface SyncConfig {
   intervalMs: number;                    // Full sync check interval (default: 5 minutes)
   confirmationUpdateIntervalMs: number;  // Confirmation update interval (default: 2 minutes)
   staleThresholdMs: number;              // Consider wallet stale after this time (default: 10 minutes)
-  maxConcurrentSyncs: number;            // Max wallets syncing at once (default: 3)
+  maxConcurrentSyncs: number;            // Max wallets syncing at once (default: 5)
+  syncStaggerDelayMs: number;            // Delay between stale wallet sync jobs (default: 2s)
   maxRetryAttempts: number;              // Max retries on failure (default: 3)
   retryDelaysMs: number[];               // Exponential backoff delays
   maxSyncDurationMs: number;             // Max time for a single wallet sync (default: 30 minutes)

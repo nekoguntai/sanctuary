@@ -143,8 +143,8 @@ export class ElectrumPool extends EventEmitter {
     // Initialize circuit breaker for pool acquisition
     this.circuitBreaker = createCircuitBreaker<PooledConnectionHandle>({
       name: 'electrum-pool',
-      failureThreshold: 5,
-      recoveryTimeout: 30000,
+      failureThreshold: 8,
+      recoveryTimeout: 15000,
       successThreshold: 2,
       onStateChange: (newState, oldState) => {
         log.info(`Electrum pool circuit breaker: ${oldState} → ${newState}`);

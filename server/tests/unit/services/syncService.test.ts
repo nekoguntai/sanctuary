@@ -106,7 +106,7 @@ vi.mock('../../../src/config', () => ({
       intervalMs: 60000,
       confirmationUpdateIntervalMs: 30000,
       staleThresholdMs: 300000,
-      maxConcurrentSyncs: 3,
+      maxConcurrentSyncs: 5,
       maxRetryAttempts: 3,
       retryDelaysMs: [1000, 5000, 15000],
       maxSyncDurationMs: 120000,
@@ -717,7 +717,7 @@ describe('SyncService', () => {
           intervalMs: 60000,
           confirmationUpdateIntervalMs: 30000,
           staleThresholdMs: 300000,
-          maxConcurrentSyncs: 3,
+          maxConcurrentSyncs: 5,
           maxRetryAttempts: 3,
           retryDelaysMs: [0, 2500],
           maxSyncDurationMs: 120000,
@@ -749,14 +749,16 @@ describe('SyncService', () => {
     it('should limit concurrent syncs', async () => {
       syncService['isRunning'] = true;
 
-      // Simulate 3 active syncs
+      // Simulate 5 active syncs (maxConcurrentSyncs is 5)
       syncService['activeSyncs'].add('wallet-1');
       syncService['activeSyncs'].add('wallet-2');
       syncService['activeSyncs'].add('wallet-3');
+      syncService['activeSyncs'].add('wallet-4');
+      syncService['activeSyncs'].add('wallet-5');
 
       // Add more to queue
-      syncService.queueSync('wallet-4');
-      syncService.queueSync('wallet-5');
+      syncService.queueSync('wallet-6');
+      syncService.queueSync('wallet-7');
 
       // Queue should have wallets waiting
       expect(syncService['syncQueue'].length).toBe(2);
@@ -1061,6 +1063,8 @@ describe('SyncService', () => {
       syncService['activeSyncs'].add('busy-1');
       syncService['activeSyncs'].add('busy-2');
       syncService['activeSyncs'].add('busy-3');
+      syncService['activeSyncs'].add('busy-4');
+      syncService['activeSyncs'].add('busy-5');
 
       const now = new Date();
       syncService['syncQueue'] = Array.from({ length: 1000 }, (_, i) => ({
@@ -1081,6 +1085,8 @@ describe('SyncService', () => {
       syncService['activeSyncs'].add('busy-1');
       syncService['activeSyncs'].add('busy-2');
       syncService['activeSyncs'].add('busy-3');
+      syncService['activeSyncs'].add('busy-4');
+      syncService['activeSyncs'].add('busy-5');
 
       const now = new Date();
       syncService['syncQueue'] = Array.from({ length: 1000 }, (_, i) => ({
@@ -1100,6 +1106,8 @@ describe('SyncService', () => {
       syncService['activeSyncs'].add('busy-1');
       syncService['activeSyncs'].add('busy-2');
       syncService['activeSyncs'].add('busy-3');
+      syncService['activeSyncs'].add('busy-4');
+      syncService['activeSyncs'].add('busy-5');
 
       const now = new Date();
       syncService['syncQueue'] = Array.from({ length: 1000 }, (_, i) => ({
@@ -1119,6 +1127,8 @@ describe('SyncService', () => {
       syncService['activeSyncs'].add('busy-1');
       syncService['activeSyncs'].add('busy-2');
       syncService['activeSyncs'].add('busy-3');
+      syncService['activeSyncs'].add('busy-4');
+      syncService['activeSyncs'].add('busy-5');
 
       const now = new Date();
       syncService['syncQueue'] = Array.from({ length: 1000 }, (_, i) => ({
@@ -1434,7 +1444,7 @@ describe('SyncService', () => {
           intervalMs: 60000,
           confirmationUpdateIntervalMs: 30000,
           staleThresholdMs: 300000,
-          maxConcurrentSyncs: 3,
+          maxConcurrentSyncs: 5,
           maxRetryAttempts: 3,
           retryDelaysMs: [1000, 5000, 15000],
           maxSyncDurationMs: 120000,

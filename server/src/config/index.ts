@@ -179,7 +179,8 @@ function loadConfig(): CombinedConfig {
       intervalMs: parseInt(process.env.SYNC_INTERVAL_MS || String(5 * 60 * 1000), 10),
       confirmationUpdateIntervalMs: parseInt(process.env.SYNC_CONFIRMATION_INTERVAL_MS || String(2 * 60 * 1000), 10),
       staleThresholdMs: parseInt(process.env.SYNC_STALE_THRESHOLD_MS || String(10 * 60 * 1000), 10),
-      maxConcurrentSyncs: parseInt(process.env.SYNC_MAX_CONCURRENT || '3', 10),
+      maxConcurrentSyncs: parseInt(process.env.SYNC_MAX_CONCURRENT || '5', 10),
+      syncStaggerDelayMs: parseInt(process.env.SYNC_STAGGER_DELAY_MS || '2000', 10),
       maxRetryAttempts: parseInt(process.env.SYNC_MAX_RETRIES || '3', 10),
       retryDelaysMs: (process.env.SYNC_RETRY_DELAYS_MS || '5000,15000,45000').split(',').map(s => parseInt(s.trim(), 10)),
       maxSyncDurationMs: parseInt(process.env.SYNC_MAX_DURATION_MS || String(30 * 60 * 1000), 10), // 30 minutes default

@@ -75,7 +75,7 @@ export const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
                 onClick={() => onTypeChange(value)}
                 className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all duration-150 ${
                   isActive
-                    ? 'bg-primary-600 text-white dark:bg-primary-300 dark:text-primary-50 shadow-sm'
+                    ? 'bg-primary-600 text-white dark:bg-primary-200 dark:text-primary-900 shadow-sm'
                     : 'text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-800 dark:hover:text-sanctuary-200 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-700'
                 }`}
               >

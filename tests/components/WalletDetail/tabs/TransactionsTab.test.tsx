@@ -146,6 +146,22 @@ describe('TransactionsTab', () => {
     expect(screen.getByText('Showing 1 of 2 transactions')).toBeInTheDocument();
   });
 
+  it('omits transactionStats when hasActiveFilters is true', () => {
+    render(
+      <TransactionsTab
+        {...baseProps}
+        hasActiveFilters={true}
+      />
+    );
+
+    expect(mockRefs.txListProps.transactionStats).toBeUndefined();
+  });
+
+  it('renders filter bar when there are transactions', () => {
+    render(<TransactionsTab {...baseProps} />);
+    expect(screen.getByTestId('filter-bar')).toBeInTheDocument();
+  });
+
   it('falls back transactionStats prop to undefined when no filter and stats are null', () => {
     render(
       <TransactionsTab

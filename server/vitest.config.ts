@@ -37,6 +37,8 @@ export default defineConfig({
         'src/services/bitcoin/sync/confirmations.ts',
         'src/services/bitcoin/sync/phases/processTransactions.ts',
         'src/services/telegram/telegramService.ts',
+        // BullMQ queue producer — requires live Redis, covered by integration tests
+        'src/services/workerSyncQueue.ts',
       ],
       thresholds: {
         // Coverage baseline locked to current observed total coverage (2026-03-04).

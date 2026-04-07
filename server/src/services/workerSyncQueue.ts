@@ -25,11 +25,13 @@ function toBullPriority(priority: 'high' | 'normal' | 'low'): number {
 }
 
 function buildConnectionKey(connection: ConnectionOptions): string {
+  // ConnectionOptions is a union; extract fields safely via type guard
+  const opts = connection as Record<string, unknown>;
   return [
-    connection.host ?? '',
-    connection.port ?? '',
-    connection.db ?? '',
-    connection.password ? 'auth' : 'no-auth',
+    (opts.host as string) ?? '',
+    (opts.port as string) ?? '',
+    (opts.db as string) ?? '',
+    opts.password ? 'auth' : 'no-auth',
   ].join(':');
 }
 

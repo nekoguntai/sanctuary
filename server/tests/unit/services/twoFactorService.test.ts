@@ -5,6 +5,7 @@
  */
 
 import * as bcrypt from 'bcryptjs';
+import { generateSync, generateSecret as otpGenerateSecret } from 'otplib';
 import { vi } from 'vitest';
 import * as encryption from '../../../src/utils/encryption';
 
@@ -114,6 +115,26 @@ describe('Two-Factor Authentication Service', () => {
       const legacyPlaintextSecret = 'JBSWY3DPEHPK3PXP';
       const result = verifyToken(legacyPlaintextSecret, '000000');
       expect(typeof result).toBe('boolean');
+    });
+
+    it('should accept token from adjacent time step (clock drift tolerance)', () => {
+      // Regression: otplib v13 migration silently dropped window=1 tolerance.
+      // verifyToken must tolerate ±1 time step (±30 seconds) of clock drift.
+      const TOTP_STEP_SECONDS = 30;
+      const secret = otpGenerateSecret();
+      const currentEpoch = Math.floor(Date.now() / 1000);
+
+      // Generate a token for 1 step in the past (30 seconds ago)
+      const pastToken = generateSync({ secret, epoch: currentEpoch - TOTP_STEP_SECONDS });
+      expect(verifyToken(secret, pastToken)).toBe(true);
+
+      // Generate a token for 1 step in the future (30 seconds ahead)
+      const futureToken = generateSync({ secret, epoch: currentEpoch + TOTP_STEP_SECONDS });
+      expect(verifyToken(secret, futureToken)).toBe(true);
+
+      // 3 steps away should fail (beyond ±1 step tolerance)
+      const farToken = generateSync({ secret, epoch: currentEpoch - TOTP_STEP_SECONDS * 3 });
+      expect(verifyToken(secret, farToken)).toBe(false);
     });
   });
 

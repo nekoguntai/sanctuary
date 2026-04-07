@@ -42,8 +42,8 @@ export function verifyToken(secret: string, token: string): boolean {
   try {
     // Decrypt the secret if it's encrypted, otherwise use as-is (backward compatibility)
     const plaintextSecret = decryptIfEncrypted(secret);
-    // @ts-expect-error otplib v13 types don't include window but it works at runtime
-    const result = verifySync({ token, secret: plaintextSecret, window: 1 });
+    // epochTolerance: 30 = ±1 time step (30s) for clock drift between server and authenticator app
+    const result = verifySync({ token, secret: plaintextSecret, epochTolerance: 30 });
     return result.valid;
   } catch {
     return false;

@@ -56,7 +56,7 @@ export const TabBar: React.FC<TabBarProps> = ({
       <nav ref={navRef} className="relative flex gap-1 p-1 surface-secondary rounded-lg" aria-label="Tabs">
         {/* Sliding indicator */}
         <div
-          className="absolute top-1 bottom-1 rounded-md bg-white dark:bg-sanctuary-700 shadow-sm transition-all duration-300 ease-out z-0"
+          className="absolute top-1 bottom-1 rounded-md bg-white dark:bg-sanctuary-600 shadow-sm transition-all duration-300 ease-out z-0"
           style={{ left: indicator.left, width: indicator.width }}
         />
         {tabs.map((tab) => (
@@ -66,8 +66,8 @@ export const TabBar: React.FC<TabBarProps> = ({
             onClick={() => onTabChange(tab)}
             className={`${
               activeTab === tab
-                ? 'text-primary-700 dark:text-primary-300'
-                : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'
+                ? 'text-primary-700 dark:text-primary-700'
+                : 'text-sanctuary-500 hover:text-sanctuary-700 dark:text-sanctuary-400 dark:hover:text-sanctuary-200'
             } whitespace-nowrap py-2 px-3.5 rounded-md font-medium text-sm capitalize transition-colors duration-200 relative z-10 focus-visible:ring-2 focus-visible:ring-primary-500`}
           >
             {tab === 'tx' ? 'Transactions' : tab === 'utxo' ? 'UTXOs' : tab}

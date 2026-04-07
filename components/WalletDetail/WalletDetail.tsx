@@ -33,6 +33,7 @@ import { useWalletData } from './hooks/useWalletData';
 import { useWalletSync } from './hooks/useWalletSync';
 import { useWalletSharing } from './hooks/useWalletSharing';
 import { useAITransactionFilter } from './hooks/useAITransactionFilter';
+import { useTransactionFilters } from './hooks/useTransactionFilters';
 import { useWalletWebSocket } from './hooks/useWalletWebSocket';
 import { useAddressLabels } from './hooks/useAddressLabels';
 import { useUtxoActions } from './hooks/useUtxoActions';
@@ -93,12 +94,26 @@ export const WalletDetail: React.FC = () => {
     onDataRefresh: () => fetchData(true),
   });
 
-  // AI transaction filtering
+  // Manual transaction filters (type, date, confirmations, label)
+  const {
+    filters: txFilters,
+    setTypeFilter, setConfirmationFilter, setDatePreset,
+    setCustomDateRange, setLabelFilter, clearAllFilters,
+    hasActiveFilters,
+    filteredTransactions: manuallyFiltered,
+  } = useTransactionFilters({
+    transactions,
+    walletAddresses: walletAddressStrings,
+    confirmationThreshold: bitcoinStatus?.confirmationThreshold,
+    deepConfirmationThreshold: bitcoinStatus?.deepConfirmationThreshold,
+  });
+
+  // AI transaction filtering (applied after manual filters)
   const {
     aiQueryFilter, setAiQueryFilter,
     filteredTransactions,
     aiAggregationResult,
-  } = useAITransactionFilter({ transactions });
+  } = useAITransactionFilter({ transactions: manuallyFiltered });
 
   // Sharing, group management, and device share prompt
   const {
@@ -353,6 +368,14 @@ export const WalletDetail: React.FC = () => {
             confirmationThreshold={bitcoinStatus?.confirmationThreshold}
             deepConfirmationThreshold={bitcoinStatus?.deepConfirmationThreshold}
             walletBalance={wallet.balance}
+            filters={txFilters}
+            onTypeFilterChange={setTypeFilter}
+            onConfirmationFilterChange={setConfirmationFilter}
+            onDatePresetChange={setDatePreset}
+            onCustomDateRangeChange={setCustomDateRange}
+            onLabelFilterChange={setLabelFilter}
+            onClearAllFilters={clearAllFilters}
+            hasActiveFilters={hasActiveFilters}
           />
         )}
 

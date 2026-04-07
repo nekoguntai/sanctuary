@@ -21,6 +21,14 @@ vi.mock('../../../../components/AIQueryInput', () => ({
   ),
 }));
 
+vi.mock('../../../../src/api/labels', () => ({
+  getLabels: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('../../../../components/WalletDetail/tabs/TransactionFilterBar', () => ({
+  TransactionFilterBar: () => <div data-testid="filter-bar" />,
+}));
+
 describe('TransactionsTab', () => {
   const baseProps = {
     walletId: 'wallet-1',
@@ -47,6 +55,14 @@ describe('TransactionsTab', () => {
     confirmationThreshold: 1,
     deepConfirmationThreshold: 6,
     walletBalance: 1000,
+    filters: { type: 'all' as const, confirmations: 'all' as const, datePreset: 'all' as const, dateFrom: null, dateTo: null, labelId: null },
+    onTypeFilterChange: vi.fn(),
+    onConfirmationFilterChange: vi.fn(),
+    onDatePresetChange: vi.fn(),
+    onCustomDateRangeChange: vi.fn(),
+    onLabelFilterChange: vi.fn(),
+    onClearAllFilters: vi.fn(),
+    hasActiveFilters: false,
   };
 
   it('renders export/load-more and passes stats when no AI filter is active', () => {

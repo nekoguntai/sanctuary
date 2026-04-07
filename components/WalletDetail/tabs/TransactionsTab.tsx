@@ -5,13 +5,19 @@
  * query filtering, aggregation results, and load-more pagination.
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Download, X } from 'lucide-react';
 import { TransactionList } from '../../TransactionList';
 import { AIQueryInput } from '../../AIQueryInput';
-import type { Transaction } from '../../../types';
+import { TransactionFilterBar } from './TransactionFilterBar';
+import * as labelsApi from '../../../src/api/labels';
+import { createLogger } from '../../../utils/logger';
+import type { Transaction, Label } from '../../../types';
 import type { NaturalQueryResult } from '../../../src/api/ai';
 import type { TransactionStats } from '../../../src/api/transactions';
+import type { TransactionFilters, TxTypeFilter, ConfirmationFilter, DatePreset } from '../hooks/useTransactionFilters';
+
+const log = createLogger('TransactionsTab');
 
 interface TransactionsTabProps {
   walletId: string;
@@ -33,6 +39,15 @@ interface TransactionsTabProps {
   confirmationThreshold?: number;
   deepConfirmationThreshold?: number;
   walletBalance: number;
+  // Manual filter props
+  filters: TransactionFilters;
+  onTypeFilterChange: (type: TxTypeFilter) => void;
+  onConfirmationFilterChange: (status: ConfirmationFilter) => void;
+  onDatePresetChange: (preset: DatePreset) => void;
+  onCustomDateRangeChange: (from: number | null, to: number | null) => void;
+  onLabelFilterChange: (labelId: string | null) => void;
+  onClearAllFilters: () => void;
+  hasActiveFilters: boolean;
 }
 
 export const TransactionsTab: React.FC<TransactionsTabProps> = ({
@@ -55,7 +70,27 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   confirmationThreshold,
   deepConfirmationThreshold,
   walletBalance,
+  filters,
+  onTypeFilterChange,
+  onConfirmationFilterChange,
+  onDatePresetChange,
+  onCustomDateRangeChange,
+  onLabelFilterChange,
+  onClearAllFilters,
+  hasActiveFilters,
 }) => {
+  // Fetch wallet labels for the label filter dropdown
+  const [walletLabels, setWalletLabels] = useState<Label[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    labelsApi.getLabels(walletId).then(labels => {
+      if (!cancelled) setWalletLabels(labels);
+    }).catch(err => {
+      log.debug('Failed to fetch labels for filter', { error: err });
+    });
+    return () => { cancelled = true; };
+  }, [walletId]);
+
   return (
     <div className="surface-elevated rounded-xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
       {/* Header with Export Button and AI Query */}
@@ -80,6 +115,21 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
           </button>
         )}
       </div>
+
+      {/* Manual Filter Bar */}
+      {transactions.length > 0 && (
+        <TransactionFilterBar
+          filters={filters}
+          onTypeChange={onTypeFilterChange}
+          onConfirmationChange={onConfirmationFilterChange}
+          onDatePresetChange={onDatePresetChange}
+          onCustomDateRangeChange={onCustomDateRangeChange}
+          onLabelChange={onLabelFilterChange}
+          onClearAll={onClearAllFilters}
+          hasActiveFilters={hasActiveFilters}
+          labels={walletLabels}
+        />
+      )}
 
       {/* AI Filter Results Summary */}
       {aiQueryFilter && (
@@ -117,7 +167,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
         confirmationThreshold={confirmationThreshold}
         deepConfirmationThreshold={deepConfirmationThreshold}
         walletBalance={walletBalance}
-        transactionStats={aiQueryFilter ? undefined : (transactionStats || undefined)}
+        transactionStats={aiQueryFilter || hasActiveFilters ? undefined : (transactionStats || undefined)}
       />
       {hasMoreTx && transactions.length > 0 && (
         <div className="mt-4 text-center">

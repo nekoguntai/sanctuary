@@ -31,6 +31,9 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 
+# Install dumb-init for proper signal handling and zombie reaping
+RUN apk add --no-cache dumb-init
+
 # Add non-root user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 gateway
@@ -51,6 +54,9 @@ EXPOSE 4000
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1
+
+# Use dumb-init to handle signals properly and reap zombie processes
+ENTRYPOINT ["dumb-init", "--"]
 
 # Start server
 CMD ["node", "dist/app/src/index.js"]

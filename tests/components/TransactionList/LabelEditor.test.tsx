@@ -83,6 +83,85 @@ describe('TransactionList LabelEditor', () => {
     expect(onAISuggestion).toHaveBeenCalledWith('Groceries,Savings');
   });
 
+  it('renders label toggle buttons in edit mode with available labels', async () => {
+    const user = userEvent.setup();
+    const onToggleLabel = vi.fn();
+
+    render(
+      <LabelEditor
+        selectedTx={selectedTx}
+        editingLabels={true}
+        availableLabels={labels}
+        selectedLabelIds={['l1']}
+        savingLabels={false}
+        canEdit={true}
+        aiEnabled={false}
+        onEditLabels={vi.fn()}
+        onSaveLabels={vi.fn()}
+        onCancelEdit={vi.fn()}
+        onToggleLabel={onToggleLabel}
+        onAISuggestion={vi.fn()}
+      />
+    );
+
+    // Both labels should be rendered as toggle buttons
+    expect(screen.getByText('Groceries')).toBeInTheDocument();
+    expect(screen.getByText('Savings')).toBeInTheDocument();
+
+    // Click an unselected label
+    await user.click(screen.getByText('Savings'));
+    expect(onToggleLabel).toHaveBeenCalledWith('l2');
+  });
+
+  it('shows empty state when editing with no available labels', () => {
+    render(
+      <LabelEditor
+        selectedTx={selectedTx}
+        editingLabels={true}
+        availableLabels={[]}
+        selectedLabelIds={[]}
+        savingLabels={false}
+        canEdit={true}
+        aiEnabled={false}
+        onEditLabels={vi.fn()}
+        onSaveLabels={vi.fn()}
+        onCancelEdit={vi.fn()}
+        onToggleLabel={vi.fn()}
+        onAISuggestion={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('No labels available. Create labels in wallet settings.')).toBeInTheDocument();
+  });
+
+  it('renders label badges in read-only mode when transaction has labels', () => {
+    const txWithLabels: Transaction = {
+      ...selectedTx,
+      labels: [
+        { id: 'l1', walletId: 'wallet-1', name: 'Groceries', color: '#22c55e' },
+      ],
+    };
+
+    render(
+      <LabelEditor
+        selectedTx={txWithLabels}
+        editingLabels={false}
+        availableLabels={labels}
+        selectedLabelIds={[]}
+        savingLabels={false}
+        canEdit={false}
+        aiEnabled={false}
+        onEditLabels={vi.fn()}
+        onSaveLabels={vi.fn()}
+        onCancelEdit={vi.fn()}
+        onToggleLabel={vi.fn()}
+        onAISuggestion={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Groceries')).toBeInTheDocument();
+  });
+
   it('renders legacy single label fallback when labels array is empty', () => {
     render(
       <LabelEditor

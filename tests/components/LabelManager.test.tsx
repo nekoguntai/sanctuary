@@ -575,6 +575,27 @@ describe('LabelManager', () => {
     });
   });
 
+  describe('saving state', () => {
+    it('should show spinner instead of check icon while saving', async () => {
+      mockCreateMutationReturn = { ...mockCreateMutationReturn, isPending: true };
+
+      render(<LabelManager walletId={walletId} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('New Label')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('New Label'));
+
+      const nameInput = screen.getByPlaceholderText('e.g., Exchange, Donation, Business');
+      fireEvent.change(nameInput, { target: { value: 'Test' } });
+
+      // The save button area should contain a spinner, not a check icon
+      const saveButton = screen.getByText('Create Label').closest('button')!;
+      expect(saveButton.querySelector('.animate-spin')).not.toBeNull();
+    });
+  });
+
   describe('wallet change', () => {
     it('should use the new walletId when component re-renders', async () => {
       // useWalletLabels is called with the walletId prop — React Query handles

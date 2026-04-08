@@ -343,6 +343,22 @@ describe('LabelSelector', () => {
         });
       });
 
+      it('shows spinner while creating a label', async () => {
+        mockCreateMutationReturn = { ...mockCreateMutationReturn, isPending: true };
+
+        render(<LabelSelector {...defaultProps} />);
+
+        fireEvent.click(screen.getByText('Select labels...'));
+        fireEvent.click(screen.getByText('Create new label'));
+
+        const input = screen.getByPlaceholderText('New label name...');
+        fireEvent.change(input, { target: { value: 'Creating...' } });
+
+        // The confirm button area should contain a spinner
+        const actionButtons = input.parentElement?.querySelectorAll('button');
+        expect(actionButtons![0].querySelector('.animate-spin')).not.toBeNull();
+      });
+
       it('keeps state unchanged when label creation fails and mutation returns no result', async () => {
         const onChange = vi.fn();
         mockCreateMutateAsync.mockRejectedValueOnce(new Error('create failed'));

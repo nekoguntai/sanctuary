@@ -6,13 +6,9 @@
 # One-liner installation (GitHub):
 #   curl -fsSL https://raw.githubusercontent.com/nekoguntai/sanctuary/main/install.sh | bash
 #
-# One-liner installation (GitLab):
-#   curl -fsSL https://gitlab.com/narusegawa-nekoworks/sanctuary/-/raw/main/install.sh | bash
-#
 # Or download and run:
-#   ./install.sh                    # Auto-detect source from git remote
-#   ./install.sh --source github    # Force GitHub
-#   ./install.sh --source gitlab    # Force GitLab
+#   ./install.sh
+#   ./install.sh --source github
 #
 # This script handles repository management (clone/update/version checkout),
 # then delegates to scripts/setup.sh for configuration and startup.

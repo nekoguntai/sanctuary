@@ -99,10 +99,6 @@
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nekoguntai/sanctuary/main/install.sh | bash
 ```
-**GitLab mirror (one-liner):**
-```bash
-curl -fsSL https://gitlab.com/narusegawa-nekoworks/sanctuary/-/raw/main/install.sh | bash
-```
 This installs the **latest release** to `~/sanctuary` by default. Set `SANCTUARY_DIR` to customize the location.
 
 **Option 2: Clone first** (if you want to choose the directory)
@@ -111,7 +107,6 @@ git clone https://github.com/nekoguntai/sanctuary.git
 cd sanctuary
 ./install.sh
 ```
-To force a source platform: `./install.sh --source github` or `./install.sh --source gitlab`.
 
 Open **https://localhost:8443** and accept the certificate warning.
 
@@ -121,7 +116,7 @@ Open **https://localhost:8443** and accept the certificate warning.
 <summary><strong>What the install script does</strong></summary>
 
 1. Checks for Docker and Git
-2. Fetches the latest release tag from GitHub or GitLab
+2. Fetches the latest release tag from GitHub
 3. Clones the repository and checks out the release
 4. Delegates to `scripts/setup.sh` for configuration and startup
 5. Generates self-signed SSL certificates (for hardware wallet support)
@@ -250,10 +245,12 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **UTXO control** — Coin selection for privacy-conscious transactions
 - **Transaction building** — Create PSBTs for hardware wallet signing
 - **Replace-By-Fee (RBF)** — Bump fees on pending transactions to speed up confirmation
+- **Transaction drafts** — Save unsigned transactions, lock selected UTXOs, and coordinate shared signing flows
 - **Multi-user access** — Share wallet visibility with family or team members
 - **Role-based permissions** — Fine-grained access control (owner, signer, viewer)
 - **Group permissions** — Organize users into groups with shared wallet access
 - **Admin controls** — Configure public registration and system settings
+- **Feature flags** — Toggle optional capabilities like AI, Payjoin, and treasury tooling without a restart
 - **Dark mode** — Easy on the eyes, day or night
 - **14 color themes** — Sanctuary, Serenity, Forest, Cyber, Sunrise, Ocean, Sakura, Midnight, Bamboo, Copper, Desert, and more
 - **Seasonal theme** — Automatically changes colors based on the time of year (spring, summer, autumn, winter)
@@ -264,8 +261,11 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Notification sounds** — Configurable audio alerts for transactions and confirmations
 - **Update notifications** — Dashboard alerts when new versions are available
 - **Audit logging** — Track security-relevant events and user actions (including gateway/mobile API events)
+- **Monitoring & diagnostics** — Optional Grafana/Prometheus/Jaeger dashboards plus downloadable anonymized support packages
 - **Mobile API gateway** — Secure API for iOS/Android apps with push notifications
 - **AI Assistant** — Optional AI-powered transaction labeling and natural language queries (see [AI Assistant](#ai-assistant-optional) below)
+- **Treasury Intelligence** — Optional wallet-specific insights and chat when AI feature flags are enabled
+- **Treasury Autopilot** — Optional UTXO-health and consolidation controls when treasury features are enabled
 - **Backup & restore** — Export/import all data via the web UI
 
 ## Architecture
@@ -357,7 +357,7 @@ Sanctuary uses HTTPS by default for hardware wallet compatibility:
 | **Mobile API** | HTTPS (4000) | Gateway handles TLS directly for secure mobile connections |
 | **File import / SD card** | Any | No special browser API required |
 
-**Note:** Always use HTTPS (port 8443) for full hardware wallet support. HTTP access is limited to file-based workflows only. The gateway uses HTTPS by default (`GATEWAY_TLS_ENABLED=true`).
+**Note:** Always use HTTPS (port 8443) for full hardware wallet support. HTTP access is limited to file-based workflows only. The setup script writes `GATEWAY_TLS_ENABLED=true`; if you maintain `.env` manually, set it explicitly for HTTPS on the mobile gateway.
 
 ## Requirements
 
@@ -615,7 +615,7 @@ BITCOIN_NETWORK=mainnet
 # Electrum server (optional - uses public servers by default)
 ELECTRUM_HOST=your-electrum-server.com
 ELECTRUM_PORT=50002
-ELECTRUM_SSL=true
+ELECTRUM_PROTOCOL=ssl
 
 # Logging level (debug, info, warn, error)
 LOG_LEVEL=info
@@ -687,6 +687,8 @@ HTTPS is required for WebUSB to work directly in the browser (for hardware walle
 - **All content is served exclusively over HTTPS**
 - **HTTP requests are automatically redirected to HTTPS**
 
+The default `docker-compose.yml` stack is already HTTPS-only. The only thing you need is a certificate pair in `docker/nginx/ssl/` (generated automatically by `./scripts/setup.sh` or manually with the steps below).
+
 **Option 1: Self-Signed Certificates (Development)**
 
 ```bash
@@ -697,14 +699,14 @@ chmod +x generate-certs.sh
 cd ../../..
 
 # Run with HTTPS (port 8443) + HTTP redirect (port 8080)
-HTTPS_PORT=8443 JWT_SECRET=your-secret docker compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
+HTTPS_PORT=8443 HTTP_PORT=8080 docker compose up -d --build
 ```
 
 Access at `https://localhost:8443` (or `http://localhost:8080` which redirects to HTTPS). Your browser will warn about the self-signed certificate—click "Advanced" and proceed.
 
 For standard ports (requires root/admin):
 ```bash
-HTTPS_PORT=443 HTTP_PORT=80 JWT_SECRET=your-secret docker compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
+HTTPS_PORT=443 HTTP_PORT=80 docker compose up -d --build
 ```
 
 **Option 2: mkcert (Locally-Trusted Certificates)**
@@ -724,7 +726,7 @@ mkcert -install
 mkcert -key-file docker/nginx/ssl/privkey.pem -cert-file docker/nginx/ssl/fullchain.pem localhost 127.0.0.1
 
 # Run with HTTPS
-HTTPS_PORT=8443 JWT_SECRET=your-secret docker compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
+HTTPS_PORT=8443 HTTP_PORT=8080 docker compose up -d --build
 ```
 
 **Option 3: Let's Encrypt (Production)**
@@ -741,14 +743,14 @@ For maximum privacy, connect Sanctuary to your own Electrum server infrastructur
 ```bash
 ELECTRUM_HOST=192.168.1.100
 ELECTRUM_PORT=50002
-ELECTRUM_SSL=true
+ELECTRUM_PROTOCOL=ssl
 ```
 
 **Fulcrum/ElectrumX (Local)**
 ```bash
 ELECTRUM_HOST=fulcrum.local
 ELECTRUM_PORT=50002
-ELECTRUM_SSL=false
+ELECTRUM_PROTOCOL=tcp
 ```
 
 Supported Electrum server implementations: [Fulcrum](https://github.com/cculianu/Fulcrum), [electrs](https://github.com/romanz/electrs), [ElectrumX](https://github.com/spesmilo/electrumx).
@@ -927,6 +929,10 @@ When sharing a wallet with a group, you can set a default role for all group mem
 Administrators can configure system-wide settings under **Administration → System Settings**:
 
 - **Public Registration** — Enable/disable self-service account creation. When disabled (default), only administrators can create new user accounts.
+- **Users & Groups** — Manage shared access for families and teams.
+- **Feature Flags** — Enable optional modules like AI Assistant, Treasury Intelligence, Payjoin, and Autopilot.
+- **Monitoring** — Open Grafana, Prometheus, and Jaeger when the monitoring stack is enabled.
+- **Support Package** — Download an anonymized diagnostic bundle for troubleshooting.
 
 ### Two-Factor Authentication
 
@@ -1044,15 +1050,15 @@ Sanctuary provides multiple ways to backup and restore your data.
 The easiest way to backup is through the web interface:
 
 1. Go to **Administration → Backup & Restore**
-2. Click **Create Backup** to generate an encrypted backup file
-3. Enter a password to encrypt the backup
-4. Download the `.sanctuary-backup` file and store it securely
+2. Click **Create Backup** to generate a backup JSON file
+3. Download the `sanctuary-backup-*.json` file and store it securely
+4. If you may restore onto a different instance later, also save your `ENCRYPTION_KEY` and `ENCRYPTION_SALT`
 
 To restore:
 1. Go to **Administration → Backup & Restore**
 2. Click **Restore from Backup**
-3. Upload your backup file and enter the decryption password
-4. Choose whether to merge with existing data or replace entirely
+3. Upload the backup JSON file and review validation warnings
+4. Confirm the destructive restore. Existing data is fully replaced and Sanctuary reloads when the restore finishes.
 
 **What's included in UI backups:**
 - All wallets, devices, and their configurations
@@ -1189,7 +1195,8 @@ docker compose up -d
 ### Port already in use
 ```bash
 # Change the port in .env
-FRONTEND_PORT=8081
+HTTPS_PORT=9443
+HTTP_PORT=9080
 docker compose up -d
 ```
 
@@ -1198,16 +1205,21 @@ docker compose up -d
 ### Running in Development Mode
 
 ```bash
-# Start backend services
-docker compose up -d postgres
+# Start backend dependencies
+docker compose up -d postgres redis
 
-# Run backend with hot reload
+# Run backend with hot reload (Node.js 22.x)
 cd server
 npm install
 npm run dev
 
 # Run frontend with hot reload
 cd ..
+npm install
+npm run dev
+
+# Optional: run the mobile gateway locally
+cd gateway
 npm install
 npm run dev
 ```
@@ -1265,11 +1277,7 @@ Sanctuary includes an optional AI assistant that can help with:
 
 ### Setting Up AI
 
-1. **Enable AI Features**
-   - Go to **Administration → AI Assistant**
-   - Toggle "Enable AI Features"
-
-2. **Configure AI Provider**
+1. **Start or point Sanctuary at an AI runtime**
 
    **Option A: Bundled Local AI with Ollama (Recommended - Most Private)**
    ```bash
@@ -1289,6 +1297,17 @@ Sanctuary includes an optional AI assistant that can help with:
    **Option C: Cloud AI (Less Private)**
    - Enter an OpenAI-compatible endpoint URL
    - Note: Sanitized transaction metadata will be sent to external servers
+
+2. **Enable the feature flags you want**
+   - Go to **Administration → Feature Flags**
+   - Enable `aiAssistant` for AI label suggestions and admin AI configuration
+   - Enable `treasuryIntelligence` as well if you want the **Intelligence** page with wallet insights and chat
+
+3. **Configure the provider in Sanctuary**
+   - Go to **Administration → AI Assistant**
+   - Toggle **Enable AI Features**
+   - Use **Detect** for bundled Ollama or enter an Ollama/OpenAI-compatible endpoint manually
+   - Pick a model and save the settings
 
 ### Security
 

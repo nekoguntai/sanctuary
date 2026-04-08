@@ -24,3 +24,4 @@ import './jobQueue';
 import './auditLog';
 import './cache';
 import './push';
+import './container';

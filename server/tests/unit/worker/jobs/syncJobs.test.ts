@@ -163,6 +163,72 @@ describe('Sync Jobs', () => {
         },
       });
     });
+
+    it('should safety-net reset syncInProgress when catch block DB update fails', async () => {
+      vi.mocked(syncWallet).mockRejectedValueOnce(new Error('Sync failed'));
+      // First call: set syncInProgress=true (succeeds)
+      // Second call: catch block's error update (fails)
+      // Third call: finally block's safety-net reset (succeeds)
+      vi.mocked(prisma.wallet.update)
+        .mockResolvedValueOnce({} as any)   // syncInProgress: true
+        .mockRejectedValueOnce(new Error('DB connection lost'))  // catch block fails
+        .mockResolvedValueOnce({} as any);  // finally safety-net
+
+      const mockJob = {
+        id: 'job-1',
+        data: { walletId: 'wallet-1' },
+        attemptsMade: 0,
+        opts: { attempts: 3 },
+      } as unknown as Job;
+
+      const result = await syncWalletJob.handler(mockJob);
+
+      expect(result.success).toBe(false);
+
+      // Verify the finally block's safety-net reset was called
+      expect(prisma.wallet.update).toHaveBeenCalledTimes(3);
+      expect(prisma.wallet.update).toHaveBeenNthCalledWith(3, {
+        where: { id: 'wallet-1' },
+        data: { syncInProgress: false },
+      });
+    });
+
+    it('should handle finally block safety-net DB failure gracefully', async () => {
+      vi.mocked(syncWallet).mockRejectedValueOnce(new Error('Sync failed'));
+      vi.mocked(prisma.wallet.update)
+        .mockResolvedValueOnce({} as any)            // syncInProgress: true
+        .mockRejectedValueOnce(new Error('DB down'))  // catch block fails
+        .mockRejectedValueOnce(new Error('DB still down')); // finally safety-net also fails
+
+      const mockJob = {
+        id: 'job-1',
+        data: { walletId: 'wallet-1' },
+        attemptsMade: 0,
+        opts: { attempts: 3 },
+      } as unknown as Job;
+
+      // Should not throw — the finally block catches its own errors
+      const result = await syncWalletJob.handler(mockJob);
+
+      expect(result.success).toBe(false);
+      expect(prisma.wallet.update).toHaveBeenCalledTimes(3);
+    });
+
+    it('should not double-reset flag when catch block succeeds', async () => {
+      vi.mocked(syncWallet).mockRejectedValueOnce(new Error('Sync failed'));
+
+      const mockJob = {
+        id: 'job-1',
+        data: { walletId: 'wallet-1' },
+        attemptsMade: 0,
+        opts: { attempts: 3 },
+      } as unknown as Job;
+
+      await syncWalletJob.handler(mockJob);
+
+      // Only 2 calls: set true + catch block set false. No finally safety-net call.
+      expect(prisma.wallet.update).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('checkStaleWalletsJob', () => {
@@ -177,7 +243,9 @@ describe('Sync Jobs', () => {
         { id: 'wallet-2', name: 'Wallet 2', lastSyncedAt: new Date('2020-01-01') },
       ];
 
-      vi.mocked(prisma.wallet.findMany).mockResolvedValueOnce(staleWallets);
+      vi.mocked(prisma.wallet.findMany)
+        .mockResolvedValueOnce([])           // stuck wallets query
+        .mockResolvedValueOnce(staleWallets); // stale wallets query
 
       const mockJob = {
         id: 'job-1',
@@ -193,7 +261,9 @@ describe('Sync Jobs', () => {
     });
 
     it('should return empty array when no stale wallets', async () => {
-      vi.mocked(prisma.wallet.findMany).mockResolvedValueOnce([]);
+      vi.mocked(prisma.wallet.findMany)
+        .mockResolvedValueOnce([])  // stuck wallets
+        .mockResolvedValueOnce([]); // stale wallets
 
       const mockJob = {
         id: 'job-1',
@@ -209,7 +279,9 @@ describe('Sync Jobs', () => {
     });
 
     it('should limit results to configured stale batch size by default', async () => {
-      vi.mocked(prisma.wallet.findMany).mockResolvedValueOnce([]);
+      vi.mocked(prisma.wallet.findMany)
+        .mockResolvedValueOnce([])   // stuck wallets
+        .mockResolvedValueOnce([]);  // stale wallets
 
       const mockJob = {
         id: 'job-1',
@@ -220,7 +292,8 @@ describe('Sync Jobs', () => {
 
       await checkStaleWalletsJob.handler(mockJob);
 
-      expect(prisma.wallet.findMany).toHaveBeenCalledWith(
+      // Second findMany call (stale wallets) should have take limit
+      expect(prisma.wallet.findMany).toHaveBeenNthCalledWith(2,
         expect.objectContaining({
           take: 75,
         })
@@ -228,7 +301,9 @@ describe('Sync Jobs', () => {
     });
 
     it('should use a per-job maxWallets override when provided', async () => {
-      vi.mocked(prisma.wallet.findMany).mockResolvedValueOnce([]);
+      vi.mocked(prisma.wallet.findMany)
+        .mockResolvedValueOnce([])   // stuck wallets
+        .mockResolvedValueOnce([]);  // stale wallets
 
       const mockJob = {
         id: 'job-override',
@@ -239,7 +314,7 @@ describe('Sync Jobs', () => {
 
       await checkStaleWalletsJob.handler(mockJob);
 
-      expect(prisma.wallet.findMany).toHaveBeenCalledWith(
+      expect(prisma.wallet.findMany).toHaveBeenNthCalledWith(2,
         expect.objectContaining({
           take: 12,
         })
@@ -247,7 +322,9 @@ describe('Sync Jobs', () => {
     });
 
     it('should use custom stale threshold if provided', async () => {
-      vi.mocked(prisma.wallet.findMany).mockResolvedValueOnce([]);
+      vi.mocked(prisma.wallet.findMany)
+        .mockResolvedValueOnce([])   // stuck wallets
+        .mockResolvedValueOnce([]);  // stale wallets
 
       const mockJob = {
         id: 'job-1',
@@ -258,8 +335,8 @@ describe('Sync Jobs', () => {
 
       await checkStaleWalletsJob.handler(mockJob);
 
-      // Verify the cutoff time was calculated correctly
-      expect(prisma.wallet.findMany).toHaveBeenCalledWith(
+      // Verify the stale wallets query (second call) used correct cutoff
+      expect(prisma.wallet.findMany).toHaveBeenNthCalledWith(2,
         expect.objectContaining({
           where: expect.objectContaining({
             OR: expect.arrayContaining([
@@ -267,6 +344,64 @@ describe('Sync Jobs', () => {
               { lastSyncedAt: { lt: expect.any(Date) } },
             ]),
           }),
+        })
+      );
+    });
+
+    it('should reset stuck syncInProgress flags for wallets exceeding maxSyncDurationMs', async () => {
+      const stuckWallets = [
+        { id: 'wallet-stuck-1', name: 'Stuck Wallet 1', lastSyncedAt: new Date('2026-04-08T05:07:00Z') },
+        { id: 'wallet-stuck-2', name: 'Stuck Wallet 2', lastSyncedAt: new Date('2026-04-08T05:08:00Z') },
+      ];
+
+      vi.mocked(prisma.wallet.findMany)
+        .mockResolvedValueOnce(stuckWallets)  // stuck wallets query
+        .mockResolvedValueOnce([]);           // stale wallets query
+
+      const mockJob = {
+        id: 'job-stuck-reset',
+        data: {},
+        attemptsMade: 0,
+        opts: { attempts: 2 },
+      } as unknown as Job;
+
+      await checkStaleWalletsJob.handler(mockJob);
+
+      // Should have reset both stuck wallets
+      expect(prisma.wallet.update).toHaveBeenCalledWith({
+        where: { id: 'wallet-stuck-1' },
+        data: { syncInProgress: false },
+      });
+      expect(prisma.wallet.update).toHaveBeenCalledWith({
+        where: { id: 'wallet-stuck-2' },
+        data: { syncInProgress: false },
+      });
+    });
+
+    it('should query stuck wallets using maxSyncDurationMs cutoff', async () => {
+      vi.mocked(prisma.wallet.findMany)
+        .mockResolvedValueOnce([])   // stuck wallets
+        .mockResolvedValueOnce([]);  // stale wallets
+
+      const mockJob = {
+        id: 'job-cutoff-check',
+        data: {},
+        attemptsMade: 0,
+        opts: { attempts: 2 },
+      } as unknown as Job;
+
+      await checkStaleWalletsJob.handler(mockJob);
+
+      // First findMany call is for stuck wallets with syncInProgress: true
+      expect(prisma.wallet.findMany).toHaveBeenNthCalledWith(1,
+        expect.objectContaining({
+          where: {
+            syncInProgress: true,
+            OR: [
+              { lastSyncedAt: { lt: expect.any(Date) } },
+              { lastSyncedAt: null },
+            ],
+          },
         })
       );
     });

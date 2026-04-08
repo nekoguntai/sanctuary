@@ -83,6 +83,7 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
       data: { syncInProgress: true },
     });
 
+    let flagCleared = false;
     try {
       // Execute sync
       const result = await syncWallet(walletId);
@@ -105,6 +106,7 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
           lastSyncError: null,
         },
       });
+      flagCleared = true;
 
       const duration = Date.now() - startTime;
 
@@ -125,15 +127,23 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
       const duration = Date.now() - startTime;
       const errorMsg = getErrorMessage(error);
 
-      // Update wallet with error status
-      await prisma.wallet.update({
-        where: { id: walletId },
-        data: {
-          syncInProgress: false,
-          lastSyncStatus: 'failed',
-          lastSyncError: errorMsg,
-        },
-      });
+      try {
+        // Update wallet with error status
+        await prisma.wallet.update({
+          where: { id: walletId },
+          data: {
+            syncInProgress: false,
+            lastSyncStatus: 'failed',
+            lastSyncError: errorMsg,
+          },
+        });
+        flagCleared = true;
+      } catch (updateError) {
+        log.error(`Failed to update wallet ${walletId} error status`, {
+          error: getErrorMessage(updateError),
+          originalError: errorMsg,
+        });
+      }
 
       log.error(`Wallet ${walletId} sync failed`, {
         error: errorMsg,
@@ -147,6 +157,22 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
         duration,
         error: errorMsg,
       };
+    } finally {
+      // Safety net: if neither try nor catch managed to clear the flag,
+      // force-reset it so the wallet doesn't stay stuck forever.
+      if (!flagCleared) {
+        try {
+          await prisma.wallet.update({
+            where: { id: walletId },
+            data: { syncInProgress: false },
+          });
+          log.warn(`Safety-net reset syncInProgress for wallet ${walletId}`);
+        } catch (cleanupError) {
+          log.error(`Failed to safety-net reset syncInProgress for wallet ${walletId}`, {
+            error: getErrorMessage(cleanupError),
+          });
+        }
+      }
     }
   },
 };
@@ -186,6 +212,35 @@ export const checkStaleWalletsJob: WorkerJobHandler<CheckStaleWalletsJobData, Ch
       staggerDelayMs,
       reason,
     });
+
+    // Reset stuck sync flags: wallets marked as syncing longer than maxSyncDurationMs.
+    // This recovers from scenarios where the worker crashed or the catch block's DB
+    // update failed, leaving syncInProgress=true permanently.
+    const stuckCutoff = new Date(Date.now() - config.sync.maxSyncDurationMs);
+    const stuckWallets = await prisma.wallet.findMany({
+      where: {
+        syncInProgress: true,
+        OR: [
+          { lastSyncedAt: { lt: stuckCutoff } },
+          { lastSyncedAt: null },
+        ],
+      },
+      select: { id: true, name: true, lastSyncedAt: true },
+    });
+
+    if (stuckWallets.length > 0) {
+      for (const wallet of stuckWallets) {
+        await prisma.wallet.update({
+          where: { id: wallet.id },
+          data: { syncInProgress: false },
+        });
+        log.warn(`Reset stuck syncInProgress flag for wallet ${wallet.name || wallet.id}`, {
+          lastSyncedAt: wallet.lastSyncedAt,
+          stuckForMs: wallet.lastSyncedAt ? Date.now() - wallet.lastSyncedAt.getTime() : 'unknown',
+        });
+      }
+      log.info(`Reset ${stuckWallets.length} stuck sync flags`);
+    }
 
     // Find stale wallets, prioritizing those never synced, then oldest first
     // Limited to prevent queue flooding

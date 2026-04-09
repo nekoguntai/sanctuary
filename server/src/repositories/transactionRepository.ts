@@ -451,6 +451,372 @@ export async function findBlockTimesByTxids(
   return new Map(transactions.map(t => [t.txid, t.blockTime]));
 }
 
+// ============================================================================
+// Sync pipeline methods (bulk operations for performance-critical sync code)
+// ============================================================================
+
+/**
+ * Find transactions by wallet and txids with custom select
+ * Used by sync pipeline for existence checks, I/O population, and label application
+ */
+export async function findByWalletIdAndTxids<T extends Prisma.TransactionSelect>(
+  walletId: string,
+  txids: string[],
+  select: T
+) {
+  return prisma.transaction.findMany({
+    where: { walletId, txid: { in: txids } },
+    select,
+  });
+}
+
+/**
+ * Find pending transactions with their stored inputs (for RBF cleanup)
+ */
+export async function findPendingWithInputs(walletId: string) {
+  return prisma.transaction.findMany({
+    where: {
+      walletId,
+      confirmations: 0,
+      rbfStatus: 'active',
+      inputs: { some: {} },
+    },
+    select: {
+      id: true,
+      txid: true,
+      inputs: { select: { txid: true, vout: true } },
+    },
+  });
+}
+
+/**
+ * Find confirmed transactions sharing any of the given inputs (for RBF cleanup)
+ */
+export async function findConfirmedWithSharedInputs(
+  walletId: string,
+  inputPatterns: Array<{ txid: string; vout: number }>
+) {
+  return prisma.transaction.findMany({
+    where: {
+      walletId,
+      confirmations: { gt: 0 },
+      inputs: {
+        some: {
+          OR: inputPatterns.map(i => ({ txid: i.txid, vout: i.vout })),
+        },
+      },
+    },
+    select: {
+      txid: true,
+      inputs: { select: { txid: true, vout: true } },
+    },
+  });
+}
+
+/**
+ * Update RBF status fields on a single transaction
+ */
+export async function updateRbfStatus(
+  id: string,
+  data: { rbfStatus?: string; replacedByTxid?: string | null }
+): Promise<void> {
+  await prisma.transaction.update({
+    where: { id },
+    data,
+  });
+}
+
+/**
+ * Find pending (unconfirmed, active RBF) transactions sharing specific inputs (for RBF detection)
+ */
+export async function findPendingWithSharedInputs(
+  walletId: string,
+  inputPatterns: Array<{ txid: string; vout: number }>
+) {
+  return prisma.transaction.findMany({
+    where: {
+      walletId,
+      confirmations: 0,
+      rbfStatus: 'active',
+      inputs: {
+        some: {
+          OR: inputPatterns.map(p => ({ txid: p.txid, vout: p.vout })),
+        },
+      },
+    },
+    select: {
+      id: true,
+      txid: true,
+      inputs: { select: { txid: true, vout: true } },
+    },
+  });
+}
+
+/**
+ * Find replaced transactions missing the replacedByTxid link (for retroactive RBF linking)
+ */
+export async function findUnlinkedReplaced(walletId: string) {
+  return prisma.transaction.findMany({
+    where: {
+      walletId,
+      rbfStatus: 'replaced',
+      replacedByTxid: null,
+    },
+    select: {
+      id: true,
+      txid: true,
+      inputs: { select: { txid: true, vout: true } },
+    },
+  });
+}
+
+/**
+ * Bulk create transactions (sync pipeline batch insert)
+ */
+export async function createMany(
+  data: Array<Record<string, unknown>>,
+  options?: { skipDuplicates?: boolean }
+): Promise<{ count: number }> {
+  return prisma.transaction.createMany({
+    data: data as Prisma.TransactionCreateManyInput[],
+    skipDuplicates: options?.skipDuplicates,
+  });
+}
+
+/**
+ * Create a single transaction record (using unchecked input for direct scalar IDs)
+ */
+export async function create(
+  data: Prisma.TransactionUncheckedCreateInput
+) {
+  return prisma.transaction.create({ data });
+}
+
+/**
+ * Bulk create transaction inputs
+ */
+export async function createManyInputs(
+  data: Array<Record<string, unknown>>,
+  options?: { skipDuplicates?: boolean }
+): Promise<{ count: number }> {
+  return prisma.transactionInput.createMany({
+    data: data as Prisma.TransactionInputCreateManyInput[],
+    skipDuplicates: options?.skipDuplicates,
+  });
+}
+
+/**
+ * Bulk create transaction outputs
+ */
+export async function createManyOutputs(
+  data: Array<Record<string, unknown>>,
+  options?: { skipDuplicates?: boolean }
+): Promise<{ count: number }> {
+  return prisma.transactionOutput.createMany({
+    data: data as Prisma.TransactionOutputCreateManyInput[],
+    skipDuplicates: options?.skipDuplicates,
+  });
+}
+
+/**
+ * Bulk create transaction labels
+ */
+export async function createManyTransactionLabels(
+  data: Array<{ transactionId: string; labelId: string }>,
+  options?: { skipDuplicates?: boolean }
+): Promise<{ count: number }> {
+  return prisma.transactionLabel.createMany({
+    data,
+    skipDuplicates: options?.skipDuplicates,
+  });
+}
+
+/**
+ * Find address labels by address IDs
+ */
+export async function findAddressLabelsByAddressIds(addressIds: string[]) {
+  return prisma.addressLabel.findMany({
+    where: { addressId: { in: addressIds } },
+  });
+}
+
+/**
+ * Find transactions without inputs/outputs (for post-sync I/O population)
+ */
+export async function findWithoutIO(
+  walletId: string,
+  txids: string[]
+) {
+  return prisma.transaction.findMany({
+    where: {
+      walletId,
+      txid: { in: txids },
+      inputs: { none: {} },
+      outputs: { none: {} },
+    },
+    select: { id: true, txid: true, type: true },
+  });
+}
+
+/**
+ * Batch update RBF status using a $transaction block
+ * Used by RBF detection to atomically mark multiple pending txs as replaced
+ */
+export async function batchUpdateRbfStatus(
+  updates: Array<{ id: string; rbfStatus: string; replacedByTxid: string }>
+): Promise<void> {
+  if (updates.length === 0) return;
+  await prisma.$transaction(
+    updates.map(u =>
+      prisma.transaction.update({
+        where: { id: u.id },
+        data: { rbfStatus: u.rbfStatus, replacedByTxid: u.replacedByTxid },
+      })
+    )
+  );
+}
+
+/**
+ * Find sent transactions with their outputs for consolidation detection
+ */
+export async function findSentWithOutputs(walletId: string) {
+  return prisma.transaction.findMany({
+    where: { walletId, type: 'sent' },
+    include: {
+      outputs: {
+        select: { id: true, address: true, isOurs: true },
+      },
+    },
+  });
+}
+
+/**
+ * Update a transaction's type and amount (for consolidation correction)
+ */
+export async function updateTypeAndAmount(
+  id: string,
+  data: { type: string; amount: bigint }
+): Promise<void> {
+  await prisma.transaction.update({
+    where: { id },
+    data,
+  });
+}
+
+/**
+ * Bulk update isOurs flag and outputType on transaction outputs
+ */
+export async function updateOutputsIsOurs(
+  ids: string[],
+  data: { isOurs: boolean; outputType: string }
+): Promise<void> {
+  if (ids.length === 0) return;
+  await prisma.transactionOutput.updateMany({
+    where: { id: { in: ids } },
+    data,
+  });
+}
+
+/**
+ * Find all transactions for balance recalculation, sorted by block time
+ */
+export async function findForBalanceRecalculation(walletId: string) {
+  return prisma.transaction.findMany({
+    where: { walletId },
+    orderBy: [
+      { blockTime: 'asc' },
+      { createdAt: 'asc' },
+    ],
+    select: { id: true, amount: true },
+  });
+}
+
+/**
+ * Batch update balanceAfter for multiple transactions in chunked $transactions.
+ * Preserves atomicity within each chunk to avoid long-running locks.
+ */
+export async function batchUpdateBalances(
+  updates: Array<{ id: string; balanceAfter: bigint }>,
+  batchSize: number = 500
+): Promise<void> {
+  await batchUpdateByIds(
+    updates.map(u => ({ id: u.id, data: { balanceAfter: u.balanceAfter } })),
+    batchSize
+  );
+}
+
+/**
+ * Find transactions below a confirmation threshold (for confirmation updates)
+ */
+export async function findBelowConfirmationThreshold(
+  walletId: string,
+  threshold: number
+) {
+  return prisma.transaction.findMany({
+    where: {
+      walletId,
+      confirmations: { lt: threshold },
+      blockHeight: { not: null },
+    },
+    select: { id: true, txid: true, blockHeight: true, confirmations: true },
+  });
+}
+
+/**
+ * Find transactions with missing fields (for field population during sync)
+ */
+export async function findWithMissingFields(walletId: string) {
+  return prisma.transaction.findMany({
+    where: {
+      walletId,
+      OR: [
+        { blockHeight: null },
+        { addressId: null },
+        { blockTime: null },
+        { fee: null },
+        { counterpartyAddress: null },
+      ],
+    },
+    select: {
+      id: true,
+      txid: true,
+      type: true,
+      amount: true,
+      fee: true,
+      blockHeight: true,
+      blockTime: true,
+      confirmations: true,
+      addressId: true,
+      counterpartyAddress: true,
+    },
+  });
+}
+
+/**
+ * Batch update transactions by ID in chunked $transactions.
+ * Used by sync pipeline for performance-critical bulk updates.
+ * Each chunk runs as an atomic $transaction to avoid long-running locks.
+ *
+ * @param updates - Array of { id, data } pairs
+ * @param batchSize - Number of updates per chunk
+ */
+export async function batchUpdateByIds(
+  updates: Array<{ id: string; data: Record<string, unknown> }>,
+  batchSize: number
+): Promise<void> {
+  for (let i = 0; i < updates.length; i += batchSize) {
+    const chunk = updates.slice(i, i + batchSize);
+    await prisma.$transaction(
+      chunk.map(u =>
+        prisma.transaction.update({
+          where: { id: u.id },
+          data: u.data,
+        })
+      )
+    );
+  }
+}
+
 // Export as namespace
 export const transactionRepository = {
   deleteByWalletId,
@@ -472,6 +838,29 @@ export const transactionRepository = {
   aggregateSpending,
   findForExport,
   findBlockTimesByTxids,
+  // Sync pipeline methods
+  findByWalletIdAndTxids,
+  findPendingWithInputs,
+  findConfirmedWithSharedInputs,
+  updateRbfStatus,
+  findPendingWithSharedInputs,
+  findUnlinkedReplaced,
+  createMany,
+  create,
+  createManyInputs,
+  createManyOutputs,
+  createManyTransactionLabels,
+  findAddressLabelsByAddressIds,
+  findWithoutIO,
+  batchUpdateRbfStatus,
+  findSentWithOutputs,
+  updateTypeAndAmount,
+  updateOutputsIsOurs,
+  findForBalanceRecalculation,
+  batchUpdateBalances,
+  findBelowConfirmationThreshold,
+  findWithMissingFields,
+  batchUpdateByIds,
 };
 
 export default transactionRepository;

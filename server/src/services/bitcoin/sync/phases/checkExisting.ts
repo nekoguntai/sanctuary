@@ -5,7 +5,7 @@
  * re-processing them. Populates existingTxMap, existingTxidSet, and newTxids.
  */
 
-import { db as prisma } from '../../../../repositories/db';
+import { transactionRepository } from '../../../../repositories';
 import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext } from '../types';
@@ -24,13 +24,11 @@ export async function checkExistingPhase(ctx: SyncContext): Promise<SyncContext>
   walletLog(walletId, 'debug', 'SYNC', `Checking ${allTxids.size} transactions against database...`);
 
   // Batch check which transactions already exist
-  const existingTxs = await prisma.transaction.findMany({
-    where: {
-      walletId,
-      txid: { in: Array.from(allTxids) },
-    },
-    select: { txid: true, type: true },
-  });
+  const existingTxs = await transactionRepository.findByWalletIdAndTxids(
+    walletId,
+    Array.from(allTxids),
+    { txid: true, type: true }
+  );
 
   // Build lookup maps
   ctx.existingTxMap = new Map(existingTxs.map(tx => [`${tx.txid}:${tx.type}`, true]));

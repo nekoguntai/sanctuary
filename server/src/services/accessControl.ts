@@ -5,7 +5,7 @@
  * Provides consistent authorization patterns across the application.
  */
 
-import { db as prisma } from '../repositories/db';
+import { walletSharingRepository, walletRepository, transactionRepository, addressRepository } from '../repositories';
 import { NotFoundError, ForbiddenError, WalletNotFoundError } from '../errors';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
@@ -131,9 +131,7 @@ export async function getUserWalletRole(walletId: string, userId: string): Promi
   }
 
   // Check direct user access first
-  const walletUser = await prisma.walletUser.findFirst({
-    where: { walletId, userId },
-  });
+  const walletUser = await walletSharingRepository.findWalletUser(walletId, userId);
 
   let role: WalletRole = null;
 
@@ -141,16 +139,10 @@ export async function getUserWalletRole(walletId: string, userId: string): Promi
     role = walletUser.role as WalletRole;
   } else {
     // Check group access
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        group: { members: { some: { userId } } },
-      },
-      select: { groupRole: true },
-    });
+    const groupRole = await walletRepository.findGroupRoleByMembership(walletId, userId);
 
-    if (wallet) {
-      role = wallet.groupRole as WalletRole;
+    if (groupRole) {
+      role = groupRole as WalletRole;
     }
   }
 
@@ -267,11 +259,7 @@ export async function checkTransactionAccess(
   transactionId: string,
   userId: string
 ): Promise<{ hasAccess: boolean; canEdit: boolean; walletId: string | null }> {
-  const transaction = await prisma.transaction.findFirst({
-    where: {
-      id: transactionId,
-      wallet: buildWalletAccessWhere(userId),
-    },
+  const transaction = await transactionRepository.findByIdWithAccess(transactionId, userId, {
     select: { walletId: true },
   });
 
@@ -328,13 +316,7 @@ export async function checkAddressAccess(
   addressId: string,
   userId: string
 ): Promise<{ hasAccess: boolean; canEdit: boolean; walletId: string | null }> {
-  const address = await prisma.address.findFirst({
-    where: {
-      id: addressId,
-      wallet: buildWalletAccessWhere(userId),
-    },
-    select: { walletId: true },
-  });
+  const address = await addressRepository.findByIdWithAccess(addressId, userId);
 
   if (!address) {
     return { hasAccess: false, canEdit: false, walletId: null };

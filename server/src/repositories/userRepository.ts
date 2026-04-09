@@ -5,7 +5,8 @@
  */
 
 import prisma from '../models/prisma';
-import type { User, Prisma } from '../generated/prisma/client';
+import { Prisma } from '../generated/prisma/client';
+import type { User } from '../generated/prisma/client';
 
 /**
  * Find user by ID
@@ -258,6 +259,83 @@ export async function emailExists(email: string): Promise<boolean> {
   return count > 0;
 }
 
+/**
+ * Find all users with access to a wallet (direct or via group)
+ * with preferences included. Used by notification services.
+ */
+export async function findByWalletAccess(
+  walletId: string,
+  options?: { includePushDeviceCount?: boolean }
+) {
+  return prisma.user.findMany({
+    where: {
+      OR: [
+        { wallets: { some: { walletId } } },
+        { groupMemberships: { some: { group: { wallets: { some: { id: walletId } } } } } },
+      ],
+    },
+    select: {
+      id: true,
+      username: true,
+      preferences: true,
+      ...(options?.includePushDeviceCount
+        ? { _count: { select: { pushDevices: true } } }
+        : {}),
+    },
+  });
+}
+
+/**
+ * Find all users with their wallet associations and preferences.
+ * Used by intelligence/autopilot settings scan.
+ */
+export async function findAllWithWalletAssociations() {
+  return prisma.user.findMany({
+    select: {
+      id: true,
+      preferences: true,
+      wallets: {
+        select: {
+          wallet: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Find all users with autopilot preferences set, including wallet and group memberships.
+ * Used by autopilot settings scan.
+ */
+export async function findWithAutopilotPreferences() {
+  return prisma.user.findMany({
+    where: {
+      preferences: {
+        path: ['autopilot'],
+        not: Prisma.DbNull,
+      },
+    },
+    select: {
+      id: true,
+      preferences: true,
+      wallets: {
+        select: {
+          wallet: { select: { id: true, name: true } },
+        },
+      },
+      groupMemberships: {
+        select: {
+          group: {
+            select: {
+              wallets: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
 // Export as namespace
 export const userRepository = {
   findById,
@@ -279,6 +357,9 @@ export const userRepository = {
   searchByUsername,
   update2FA,
   emailExists,
+  findByWalletAccess,
+  findAllWithWalletAssociations,
+  findWithAutopilotPreferences,
 };
 
 export default userRepository;

@@ -10,7 +10,7 @@
 
 import * as bitcoin from 'bitcoinjs-lib';
 import bip32 from '../bip32';
-import { db as prisma } from '../../../repositories/db';
+import { addressRepository } from '../../../repositories';
 import { parseDescriptor, convertToStandardXpub, MultisigKeyInfo } from '../addressDerivation';
 import { createLogger } from '../../../utils/logger';
 import { mapWithConcurrency } from '../../../utils/async';
@@ -218,16 +218,7 @@ export async function fetchAddressDerivationPaths(
   walletId: string,
   utxoAddresses: string[]
 ): Promise<Map<string, string>> {
-  const addressRecords = await prisma.address.findMany({
-    where: {
-      walletId,
-      address: { in: utxoAddresses },
-    },
-    select: {
-      address: true,
-      derivationPath: true,
-    },
-  });
+  const addressRecords = await addressRepository.findDerivationPathsByAddresses(walletId, utxoAddresses);
   return new Map(addressRecords.map(a => [a.address, a.derivationPath]));
 }
 

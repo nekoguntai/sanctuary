@@ -12,16 +12,6 @@
 import { vi, Mock } from 'vitest';
 
 // Mock dependencies before imports
-vi.mock('../../../../src/models/prisma', () => ({
-  __esModule: true,
-  default: {
-    walletUser: {
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
-    },
-  },
-}));
-
 vi.mock('../../../../src/repositories', () => ({
   mobilePermissionRepository: {
     findByWalletAndUser: vi.fn(),
@@ -30,6 +20,10 @@ vi.mock('../../../../src/repositories', () => ({
     upsert: vi.fn(),
     updateByWalletAndUser: vi.fn(),
     deleteByWalletAndUser: vi.fn(),
+  },
+  walletSharingRepository: {
+    findWalletUserByCompositeKey: vi.fn(),
+    findWalletUsersWithUsername: vi.fn(),
   },
 }));
 
@@ -42,8 +36,7 @@ vi.mock('../../../../src/utils/logger', () => ({
   }),
 }));
 
-import prisma from '../../../../src/models/prisma';
-import { mobilePermissionRepository } from '../../../../src/repositories';
+import { mobilePermissionRepository, walletSharingRepository } from '../../../../src/repositories';
 import { mobilePermissionService } from '../../../../src/services/mobilePermissions';
 import { ForbiddenError, NotFoundError } from '../../../../src/errors';
 
@@ -81,20 +74,17 @@ describe('MobilePermissionService', () => {
 
   describe('canPerformAction', () => {
     it('should return true when role and permissions allow action', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue(null);
 
       const result = await mobilePermissionService.canPerformAction(walletId, userId, 'broadcast');
 
       expect(result).toBe(true);
-      expect(prisma.walletUser.findUnique).toHaveBeenCalledWith({
-        where: { walletId_userId: { walletId, userId } },
-        select: { role: true },
-      });
+      expect(walletSharingRepository.findWalletUserByCompositeKey).toHaveBeenCalledWith(walletId, userId);
     });
 
     it('should return false when role does not allow action', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'viewer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'viewer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue(null);
 
       const result = await mobilePermissionService.canPerformAction(walletId, userId, 'broadcast');
@@ -103,7 +93,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should return false when user has no wallet access', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue(null);
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue(null);
 
       const result = await mobilePermissionService.canPerformAction(walletId, userId, 'viewBalance');
 
@@ -111,7 +101,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should return false when user self-restricted the action', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue({
         ...mockPermission,
         canBroadcast: false,
@@ -123,7 +113,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should return false when owner has restricted the action', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue({
         ...mockPermission,
         ownerMaxPermissions: { broadcast: false },
@@ -137,7 +127,7 @@ describe('MobilePermissionService', () => {
 
   describe('assertCanPerformAction', () => {
     it('should not throw when action is allowed', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue(null);
 
       await expect(
@@ -146,7 +136,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should throw ForbiddenError when action is denied', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'viewer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'viewer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue(null);
 
       await expect(
@@ -157,7 +147,7 @@ describe('MobilePermissionService', () => {
 
   describe('getEffectivePermissions', () => {
     it('should return effective permissions for user with access', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue(null);
 
       const result = await mobilePermissionService.getEffectivePermissions(walletId, userId);
@@ -173,7 +163,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should throw ForbiddenError when user has no access', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue(null);
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue(null);
 
       await expect(
         mobilePermissionService.getEffectivePermissions(walletId, userId)
@@ -181,7 +171,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should indicate custom restrictions when permission record exists', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue({
         ...mockPermission,
         canBroadcast: false,
@@ -194,7 +184,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should indicate owner restrictions when ownerMaxPermissions is set', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue({
         ...mockPermission,
         ownerMaxPermissions: { broadcast: false },
@@ -208,7 +198,7 @@ describe('MobilePermissionService', () => {
 
   describe('updateOwnPermissions', () => {
     it('should update user permissions successfully', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue(null);
       (mobilePermissionRepository.upsert as Mock).mockResolvedValue(mockPermission);
 
@@ -227,7 +217,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should throw ForbiddenError when user has no access', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue(null);
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue(null);
 
       await expect(
         mobilePermissionService.updateOwnPermissions(walletId, userId, { broadcast: false })
@@ -235,7 +225,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should throw ForbiddenError when trying to exceed owner max', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue({
         ...mockPermission,
         ownerMaxPermissions: { broadcast: false },
@@ -247,7 +237,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should allow disabling a permission under owner max and default lastModifiedBy to userId', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue({
         ...mockPermission,
         ownerMaxPermissions: { broadcast: false },
@@ -263,7 +253,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should ignore undefined permission fields in input', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue(null);
       (mobilePermissionRepository.upsert as Mock).mockResolvedValue(mockPermission);
 
@@ -282,7 +272,7 @@ describe('MobilePermissionService', () => {
   describe('setMaxPermissions', () => {
     it('should set max permissions when called by owner', async () => {
       // First call for owner check, second for target check, third for getEffectivePermissions
-      (prisma.walletUser.findUnique as Mock)
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock)
         .mockResolvedValueOnce({ role: 'owner' })
         .mockResolvedValueOnce({ role: 'signer' })
         .mockResolvedValueOnce({ role: 'signer' });
@@ -307,7 +297,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should throw ForbiddenError when caller is not owner', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
 
       await expect(
         mobilePermissionService.setMaxPermissions(walletId, targetUserId, userId, { broadcast: false })
@@ -315,7 +305,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should throw ForbiddenError when target user has no access', async () => {
-      (prisma.walletUser.findUnique as Mock)
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock)
         .mockResolvedValueOnce({ role: 'owner' })
         .mockResolvedValueOnce(null);
 
@@ -325,7 +315,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should throw ForbiddenError when trying to restrict another owner', async () => {
-      (prisma.walletUser.findUnique as Mock)
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock)
         .mockResolvedValueOnce({ role: 'owner' })
         .mockResolvedValueOnce({ role: 'owner' });
 
@@ -337,7 +327,7 @@ describe('MobilePermissionService', () => {
 
   describe('clearMaxPermissions', () => {
     it('should clear max permissions when called by owner', async () => {
-      (prisma.walletUser.findUnique as Mock)
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock)
         .mockResolvedValueOnce({ role: 'owner' })
         .mockResolvedValueOnce({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue({
@@ -361,7 +351,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should throw ForbiddenError when caller is not owner', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
 
       await expect(
         mobilePermissionService.clearMaxPermissions(walletId, targetUserId, userId)
@@ -369,7 +359,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should throw NotFoundError when no permission record exists', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'owner' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'owner' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue(null);
 
       await expect(
@@ -445,8 +435,8 @@ describe('MobilePermissionService', () => {
 
   describe('getWalletPermissions', () => {
     it('should return permissions for all wallet users', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'owner' });
-      (prisma.walletUser.findMany as Mock).mockResolvedValue([
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'owner' });
+      (walletSharingRepository.findWalletUsersWithUsername as Mock).mockResolvedValue([
         { userId: 'user-1', role: 'owner', user: { id: 'user-1', username: 'alice' } },
         { userId: 'user-2', role: 'signer', user: { id: 'user-2', username: 'bob' } },
       ]);
@@ -467,8 +457,8 @@ describe('MobilePermissionService', () => {
     });
 
     it('should include custom permissions from batch query', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'owner' });
-      (prisma.walletUser.findMany as Mock).mockResolvedValue([
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'owner' });
+      (walletSharingRepository.findWalletUsersWithUsername as Mock).mockResolvedValue([
         { userId: 'user-1', role: 'owner', user: { id: 'user-1', username: 'alice' } },
         { userId: 'user-2', role: 'signer', user: { id: 'user-2', username: 'bob' } },
       ]);
@@ -487,7 +477,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should throw ForbiddenError when requester has no access', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue(null);
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue(null);
 
       await expect(
         mobilePermissionService.getWalletPermissions(walletId, userId)
@@ -497,7 +487,7 @@ describe('MobilePermissionService', () => {
 
   describe('checkForGateway', () => {
     it('should return allowed: true when action is permitted', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'signer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue(null);
 
       const result = await mobilePermissionService.checkForGateway(walletId, userId, 'broadcast');
@@ -507,7 +497,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should return allowed: false when action is denied', async () => {
-      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'viewer' });
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockResolvedValue({ role: 'viewer' });
       (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue(null);
 
       const result = await mobilePermissionService.checkForGateway(walletId, userId, 'broadcast');
@@ -517,7 +507,7 @@ describe('MobilePermissionService', () => {
     });
 
     it('should return allowed: false with reason on error', async () => {
-      (prisma.walletUser.findUnique as Mock).mockRejectedValue(new Error('DB error'));
+      (walletSharingRepository.findWalletUserByCompositeKey as Mock).mockRejectedValue(new Error('DB error'));
 
       const result = await mobilePermissionService.checkForGateway(walletId, userId, 'broadcast');
 

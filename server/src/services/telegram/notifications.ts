@@ -4,7 +4,7 @@
  * Functions for sending transaction and draft notifications to eligible users.
  */
 
-import { db as prisma } from '../../repositories/db';
+import { walletRepository, userRepository, nodeConfigRepository } from '../../repositories';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { walletLog } from '../../websocket/notifications';
@@ -25,16 +25,13 @@ export async function notifyNewTransactions(
 
   try {
     // Get wallet info
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-      select: { id: true, name: true },
-    });
+    const wallet = await walletRepository.findNameById(walletId);
     if (!wallet) return;
 
     // Get explorer URL from node config
     let explorerUrl = 'https://mempool.space';
     try {
-      const nodeConfig = await prisma.nodeConfig.findFirst();
+      const nodeConfig = await nodeConfigRepository.findDefault();
       if (nodeConfig?.explorerUrl) {
         explorerUrl = nodeConfig.explorerUrl;
       }
@@ -110,17 +107,11 @@ export async function notifyNewDraft(
 ): Promise<void> {
   try {
     // Get wallet info
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-      select: { id: true, name: true },
-    });
+    const wallet = await walletRepository.findNameById(walletId);
     if (!wallet) return;
 
     // Get creator's username
-    const creator = await prisma.user.findUnique({
-      where: { id: createdByUserId },
-      select: { username: true },
-    });
+    const creator = await userRepository.findByIdWithSelect(createdByUserId, { username: true });
     const createdBy = creator?.username || 'Unknown';
 
     // Get all users with access to this wallet

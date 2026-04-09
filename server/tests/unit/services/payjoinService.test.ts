@@ -976,7 +976,7 @@ describe('Payjoin Service', () => {
       expect(mockPrismaClient.uTXO.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            confirmations: { gt: 0 },
+            confirmations: { gte: 1 },
           }),
         })
       );

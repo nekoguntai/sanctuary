@@ -1,18 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
-const { mockPrisma, mockLogger } = vi.hoisted(() => ({
-  mockPrisma: {
-    user: {
-      findMany: vi.fn(),
-      findUnique: vi.fn(),
-      update: vi.fn(),
-    },
-    wallet: {
-      findUnique: vi.fn(),
-    },
-    nodeConfig: {
-      findFirst: vi.fn(),
-    },
+const { mockUserRepo, mockWalletRepo, mockNodeConfigRepo, mockLogger } = vi.hoisted(() => ({
+  mockUserRepo: {
+    findByWalletAccess: vi.fn(),
+    findByIdWithSelect: vi.fn(),
+    updatePreferences: vi.fn(),
+  },
+  mockWalletRepo: {
+    findNameById: vi.fn(),
+  },
+  mockNodeConfigRepo: {
+    findDefault: vi.fn(),
   },
   mockLogger: {
     info: vi.fn(),
@@ -22,8 +20,10 @@ const { mockPrisma, mockLogger } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../../../../src/repositories/db', () => ({
-  db: mockPrisma,
+vi.mock('../../../../src/repositories', () => ({
+  userRepository: mockUserRepo,
+  walletRepository: mockWalletRepo,
+  nodeConfigRepository: mockNodeConfigRepo,
 }));
 
 vi.mock('../../../../src/utils/logger', () => ({
@@ -45,11 +45,11 @@ describe('telegramService', () => {
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    (mockPrisma.user.findMany as Mock).mockResolvedValue([]);
-    (mockPrisma.user.findUnique as Mock).mockResolvedValue({ username: 'alice', preferences: {} });
-    (mockPrisma.user.update as Mock).mockResolvedValue({});
-    (mockPrisma.wallet.findUnique as Mock).mockResolvedValue({ id: 'w1', name: 'Treasury' });
-    (mockPrisma.nodeConfig.findFirst as Mock).mockResolvedValue(null);
+    (mockUserRepo.findByWalletAccess as Mock).mockResolvedValue([]);
+    (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValue({ username: 'alice', preferences: {} });
+    (mockUserRepo.updatePreferences as Mock).mockResolvedValue({});
+    (mockWalletRepo.findNameById as Mock).mockResolvedValue({ id: 'w1', name: 'Treasury' });
+    (mockNodeConfigRepo.findDefault as Mock).mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -275,28 +275,20 @@ describe('telegramService', () => {
 
   it('getWalletUsers queries direct and group wallet access', async () => {
     const users = [{ id: 'u1', username: 'alice', preferences: {} }];
-    (mockPrisma.user.findMany as Mock).mockResolvedValueOnce(users);
+    (mockUserRepo.findByWalletAccess as Mock).mockResolvedValueOnce(users);
     const { getWalletUsers } = await loadService();
 
     await expect(getWalletUsers('wallet-1')).resolves.toEqual(users);
-    expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          OR: expect.arrayContaining([
-            { wallets: { some: { walletId: 'wallet-1' } } },
-          ]),
-        }),
-      })
-    );
+    expect(mockUserRepo.findByWalletAccess).toHaveBeenCalledWith('wallet-1');
   });
 
   it('notifyNewTransactions returns early for empty inputs and missing wallets', async () => {
     const { notifyNewTransactions } = await loadService();
 
     await notifyNewTransactions('w1', []);
-    expect(mockPrisma.wallet.findUnique).not.toHaveBeenCalled();
+    expect(mockWalletRepo.findNameById).not.toHaveBeenCalled();
 
-    (mockPrisma.wallet.findUnique as Mock).mockResolvedValueOnce(null);
+    (mockWalletRepo.findNameById as Mock).mockResolvedValueOnce(null);
     await notifyNewTransactions('w1', [
       { txid: 'txid1', type: 'received', amount: BigInt(10_000) },
     ]);
@@ -305,8 +297,8 @@ describe('telegramService', () => {
 
   it('notifyNewTransactions sends sent and consolidation messages and skips unsupported types', async () => {
     const { notifyNewTransactions } = await loadService();
-    (mockPrisma.nodeConfig.findFirst as Mock).mockResolvedValueOnce({ explorerUrl: 'https://explorer.example' });
-    (mockPrisma.user.findMany as Mock).mockResolvedValueOnce([
+    (mockNodeConfigRepo.findDefault as Mock).mockResolvedValueOnce({ explorerUrl: 'https://explorer.example' });
+    (mockUserRepo.findByWalletAccess as Mock).mockResolvedValueOnce([
       {
         id: 'u1',
         username: 'alice',
@@ -350,8 +342,8 @@ describe('telegramService', () => {
 
   it('notifyNewTransactions falls back to the default explorer URL when node config lookup fails', async () => {
     const { notifyNewTransactions } = await loadService();
-    (mockPrisma.nodeConfig.findFirst as Mock).mockRejectedValueOnce(new Error('node config unavailable'));
-    (mockPrisma.user.findMany as Mock).mockResolvedValueOnce([
+    (mockNodeConfigRepo.findDefault as Mock).mockRejectedValueOnce(new Error('node config unavailable'));
+    (mockUserRepo.findByWalletAccess as Mock).mockResolvedValueOnce([
       {
         id: 'u1',
         username: 'alice',
@@ -389,7 +381,7 @@ describe('telegramService', () => {
 
   it('notifyNewTransactions logs failed deliveries and catches unexpected errors', async () => {
     const { notifyNewTransactions } = await loadService();
-    (mockPrisma.user.findMany as Mock).mockResolvedValue([
+    (mockUserRepo.findByWalletAccess as Mock).mockResolvedValue([
       {
         id: 'u1',
         username: 'alice',
@@ -423,7 +415,7 @@ describe('telegramService', () => {
 
     expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to send Telegram to alice'));
 
-    (mockPrisma.wallet.findUnique as Mock).mockRejectedValueOnce(new Error('db offline'));
+    (mockWalletRepo.findNameById as Mock).mockRejectedValueOnce(new Error('db offline'));
     await notifyNewTransactions('w1', [
       { txid: 'deadbeef', type: 'sent', amount: BigInt(1000) },
     ]);
@@ -432,7 +424,7 @@ describe('telegramService', () => {
 
   it('notifyNewDraft skips ineligible users, warns on send failure, and catches errors', async () => {
     const { notifyNewDraft } = await loadService();
-    (mockPrisma.user.findMany as Mock).mockResolvedValue([
+    (mockUserRepo.findByWalletAccess as Mock).mockResolvedValue([
       {
         id: 'creator-id',
         username: 'creator',
@@ -505,7 +497,7 @@ describe('telegramService', () => {
       expect.stringContaining('Failed to send draft notification to eligible')
     );
 
-    (mockPrisma.wallet.findUnique as Mock).mockRejectedValueOnce(new Error('wallet lookup failed'));
+    (mockWalletRepo.findNameById as Mock).mockRejectedValueOnce(new Error('wallet lookup failed'));
     await notifyNewDraft(
       'w1',
       {
@@ -522,7 +514,7 @@ describe('telegramService', () => {
   it('notifyNewDraft exits when wallet is missing and falls back to Unknown creator name', async () => {
     const { notifyNewDraft } = await loadService();
 
-    (mockPrisma.wallet.findUnique as Mock).mockResolvedValueOnce(null);
+    (mockWalletRepo.findNameById as Mock).mockResolvedValueOnce(null);
     await notifyNewDraft(
       'w1',
       {
@@ -533,11 +525,11 @@ describe('telegramService', () => {
       },
       'creator-id'
     );
-    expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+    expect(mockUserRepo.findByIdWithSelect).not.toHaveBeenCalled();
 
-    (mockPrisma.wallet.findUnique as Mock).mockResolvedValueOnce({ id: 'w1', name: 'Treasury' });
-    (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce(null);
-    (mockPrisma.user.findMany as Mock).mockResolvedValueOnce([
+    (mockWalletRepo.findNameById as Mock).mockResolvedValueOnce({ id: 'w1', name: 'Treasury' });
+    (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce(null);
+    (mockUserRepo.findByWalletAccess as Mock).mockResolvedValueOnce([
       {
         id: 'u-eligible',
         username: 'eligible',
@@ -582,7 +574,7 @@ describe('telegramService', () => {
 
   it('updateWalletTelegramSettings initializes defaults when preferences are missing', async () => {
     const { updateWalletTelegramSettings } = await loadService();
-    (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({ preferences: null });
+    (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce({ preferences: null });
 
     await updateWalletTelegramSettings('user-1', 'wallet-1', {
       enabled: true,
@@ -592,32 +584,30 @@ describe('telegramService', () => {
       notifyConsolidation: false,
     });
 
-    expect(mockPrisma.user.update).toHaveBeenCalledWith({
-      where: { id: 'user-1' },
-      data: {
-        preferences: {
-          telegram: {
-            botToken: '',
-            chatId: '',
-            enabled: false,
-            wallets: {
-              'wallet-1': {
-                enabled: true,
-                notifyDraft: true,
-                notifyReceived: true,
-                notifySent: false,
-                notifyConsolidation: false,
-              },
+    expect(mockUserRepo.updatePreferences).toHaveBeenCalledWith(
+      'user-1',
+      {
+        telegram: {
+          botToken: '',
+          chatId: '',
+          enabled: false,
+          wallets: {
+            'wallet-1': {
+              enabled: true,
+              notifyDraft: true,
+              notifyReceived: true,
+              notifySent: false,
+              notifyConsolidation: false,
             },
           },
         },
       },
-    });
+    );
   });
 
   it('updateWalletTelegramSettings preserves telegram config and creates wallet map when missing', async () => {
     const { updateWalletTelegramSettings } = await loadService();
-    (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({
+    (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce({
       preferences: {
         locale: 'en',
         telegram: {
@@ -636,42 +626,40 @@ describe('telegramService', () => {
       notifyConsolidation: true,
     });
 
-    expect(mockPrisma.user.update).toHaveBeenCalledWith({
-      where: { id: 'user-2' },
-      data: {
-        preferences: {
-          locale: 'en',
-          telegram: {
-            botToken: 'bot-token',
-            chatId: 'chat-id',
-            enabled: true,
-            wallets: {
-              'wallet-2': {
-                enabled: true,
-                notifyDraft: false,
-                notifyReceived: false,
-                notifySent: true,
-                notifyConsolidation: true,
-              },
+    expect(mockUserRepo.updatePreferences).toHaveBeenCalledWith(
+      'user-2',
+      {
+        locale: 'en',
+        telegram: {
+          botToken: 'bot-token',
+          chatId: 'chat-id',
+          enabled: true,
+          wallets: {
+            'wallet-2': {
+              enabled: true,
+              notifyDraft: false,
+              notifyReceived: false,
+              notifySent: true,
+              notifyConsolidation: true,
             },
           },
         },
       },
-    });
+    );
   });
 
   it('getWalletTelegramSettings returns null for missing users and missing wallet settings', async () => {
     const { getWalletTelegramSettings } = await loadService();
-    (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce(null);
+    (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce(null);
     await expect(getWalletTelegramSettings('missing', 'wallet-1')).resolves.toBeNull();
 
-    (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({ preferences: {} });
+    (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce({ preferences: {} });
     await expect(getWalletTelegramSettings('user-1', 'wallet-1')).resolves.toBeNull();
   });
 
   it('getWalletTelegramSettings returns wallet-specific settings when configured', async () => {
     const { getWalletTelegramSettings } = await loadService();
-    (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({
+    (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce({
       preferences: {
         telegram: {
           botToken: 'bot',
@@ -701,7 +689,7 @@ describe('telegramService', () => {
 
   it('updateWalletTelegramSettings throws when user is not found', async () => {
     const { updateWalletTelegramSettings } = await loadService();
-    (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce(null);
+    (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce(null);
 
     await expect(
       updateWalletTelegramSettings('missing-user', 'w1', {

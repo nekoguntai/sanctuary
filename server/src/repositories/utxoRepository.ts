@@ -342,6 +342,255 @@ export async function countByIdsInWallet(
   });
 }
 
+/**
+ * Find available (unspent, unfrozen) UTXOs for transaction building.
+ * Supports confirmation threshold filtering and draft lock exclusion.
+ */
+export async function findAvailableForSpending(
+  walletId: string,
+  options?: {
+    minConfirmations?: number;
+    excludeDraftLocked?: boolean;
+  }
+): Promise<UTXO[]> {
+  const where: Prisma.UTXOWhereInput = {
+    walletId,
+    spent: false,
+    frozen: false,
+  };
+
+  if (options?.minConfirmations !== undefined) {
+    where.confirmations = { gte: options.minConfirmations };
+  }
+
+  if (options?.excludeDraftLocked) {
+    where.draftLock = null;
+  }
+
+  return prisma.uTXO.findMany({
+    where,
+    orderBy: { amount: 'desc' },
+  });
+}
+
+/**
+ * Find UTXOs by wallet with custom select (for reconciliation)
+ */
+export async function findByWalletIdWithSelect<T extends Prisma.UTXOSelect>(
+  walletId: string,
+  select: T
+) {
+  return prisma.uTXO.findMany({
+    where: { walletId },
+    select,
+  });
+}
+
+/**
+ * Bulk mark UTXOs as spent by IDs
+ */
+export async function markManyAsSpent(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const result = await prisma.uTXO.updateMany({
+    where: { id: { in: ids } },
+    data: { spent: true },
+  });
+  return result.count;
+}
+
+/**
+ * Batch update UTXOs by ID in chunked $transaction blocks
+ * Used by sync pipeline for performance-critical bulk updates (e.g., confirmations).
+ */
+export async function batchUpdateByIds(
+  updates: Array<{ id: string; data: Record<string, unknown> }>,
+  batchSize: number
+): Promise<void> {
+  for (let i = 0; i < updates.length; i += batchSize) {
+    const chunk = updates.slice(i, i + batchSize);
+    await prisma.$transaction(
+      chunk.map(u =>
+        prisma.uTXO.update({
+          where: { id: u.id },
+          data: u.data,
+        })
+      )
+    );
+  }
+}
+
+/**
+ * Find existing UTXOs by outpoints (txid:vout) for a wallet, in chunks.
+ * Returns a Set of "txid:vout" keys that already exist.
+ */
+export async function findExistingByOutpoints(
+  walletId: string,
+  outpoints: Array<{ txid: string; vout: number }>,
+  chunkSize: number = 500
+): Promise<Set<string>> {
+  const existingSet = new Set<string>();
+  for (let i = 0; i < outpoints.length; i += chunkSize) {
+    const chunk = outpoints.slice(i, i + chunkSize);
+    const existing = await prisma.uTXO.findMany({
+      where: {
+        walletId,
+        OR: chunk.map(k => ({ txid: k.txid, vout: k.vout })),
+      },
+      select: { txid: true, vout: true },
+    });
+    for (const u of existing) {
+      existingSet.add(`${u.txid}:${u.vout}`);
+    }
+  }
+  return existingSet;
+}
+
+/**
+ * Find existing UTXOs by outpoints (txid:vout) without wallet filter.
+ * Used by single-address sync.
+ */
+export async function findExistingByOutpointsGlobal(
+  outpoints: Array<{ txid: string; vout: number }>
+): Promise<Set<string>> {
+  if (outpoints.length === 0) return new Set();
+  const existing = await prisma.uTXO.findMany({
+    where: {
+      OR: outpoints.map(o => ({ txid: o.txid, vout: o.vout })),
+    },
+    select: { txid: true, vout: true },
+  });
+  return new Set(existing.map(u => `${u.txid}:${u.vout}`));
+}
+
+/**
+ * Bulk create UTXOs
+ */
+export async function createMany(
+  data: Array<{
+    walletId: string;
+    txid: string;
+    vout: number;
+    address: string;
+    amount: bigint;
+    scriptPubKey: string;
+    confirmations: number;
+    blockHeight: number | null;
+    spent: boolean;
+  }>,
+  options?: { skipDuplicates?: boolean }
+): Promise<{ count: number }> {
+  return prisma.uTXO.createMany({
+    data,
+    skipDuplicates: options?.skipDuplicates,
+  });
+}
+
+/**
+ * Find a UTXO by ID with wallet info
+ */
+export async function findByIdWithWallet(utxoId: string) {
+  return prisma.uTXO.findUnique({
+    where: { id: utxoId },
+    include: {
+      wallet: { select: { id: true } },
+    },
+  });
+}
+
+/**
+ * Count unspent UTXOs at a specific address in a wallet
+ */
+export async function countUnspentByAddress(
+  walletId: string,
+  address: string
+): Promise<number> {
+  return prisma.uTXO.count({
+    where: { walletId, address, spent: false },
+  });
+}
+
+/**
+ * Count unspent UTXOs from the same transaction in a wallet (excluding a specific UTXO)
+ */
+export async function countUnspentByTxid(
+  walletId: string,
+  txid: string,
+  excludeId?: string
+): Promise<number> {
+  return prisma.uTXO.count({
+    where: {
+      walletId,
+      txid,
+      spent: false,
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+  });
+}
+
+/**
+ * Count unspent UTXOs at a specific block height from different transactions
+ */
+export async function countUnspentByBlockHeight(
+  walletId: string,
+  blockHeight: number,
+  excludeId: string,
+  excludeTxid: string
+): Promise<number> {
+  return prisma.uTXO.count({
+    where: {
+      walletId,
+      blockHeight,
+      spent: false,
+      id: { not: excludeId },
+      txid: { not: excludeTxid },
+    },
+  });
+}
+
+/**
+ * Find unspent UTXOs with only amount field (for aggregate calculations)
+ */
+export async function findUnspentAmounts(
+  walletId: string
+): Promise<Array<{ amount: bigint }>> {
+  return prisma.uTXO.findMany({
+    where: { walletId, spent: false },
+    select: { amount: true },
+  });
+}
+
+/**
+ * Find unspent, unfrozen UTXOs for privacy scoring
+ */
+export async function findUnspentForPrivacy(walletId: string) {
+  return prisma.uTXO.findMany({
+    where: { walletId, spent: false, frozen: false },
+    select: {
+      id: true,
+      txid: true,
+      vout: true,
+      amount: true,
+      address: true,
+      blockHeight: true,
+    },
+    orderBy: { amount: 'desc' },
+  });
+}
+
+/**
+ * Find UTXOs by IDs with selected fields for spend privacy analysis
+ */
+export async function findByIdsForPrivacy(utxoIds: string[]) {
+  return prisma.uTXO.findMany({
+    where: { id: { in: utxoIds } },
+    select: {
+      address: true,
+      txid: true,
+      amount: true,
+    },
+  });
+}
+
 // Export as namespace
 export const utxoRepository = {
   getUnspentBalance,
@@ -363,6 +612,22 @@ export const utxoRepository = {
   findByTxidsUnspent,
   aggregateByDateWindow,
   countByIdsInWallet,
+  findAvailableForSpending,
+  // Sync pipeline methods
+  findByWalletIdWithSelect,
+  markManyAsSpent,
+  batchUpdateByIds,
+  findExistingByOutpoints,
+  findExistingByOutpointsGlobal,
+  createMany,
+  // Privacy methods
+  findByIdWithWallet,
+  countUnspentByAddress,
+  countUnspentByTxid,
+  countUnspentByBlockHeight,
+  findUnspentAmounts,
+  findUnspentForPrivacy,
+  findByIdsForPrivacy,
 };
 
 export default utxoRepository;

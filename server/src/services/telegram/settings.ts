@@ -4,8 +4,8 @@
  * Functions for managing per-wallet Telegram notification settings.
  */
 
-import { Prisma } from '../../generated/prisma/client';
-import { db as prisma } from '../../repositories/db';
+import type { Prisma } from '../../generated/prisma/client';
+import { userRepository } from '../../repositories';
 import type { TelegramConfig, WalletTelegramSettings } from './types';
 
 /**
@@ -16,10 +16,7 @@ export async function updateWalletTelegramSettings(
   walletId: string,
   settings: WalletTelegramSettings
 ): Promise<void> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { preferences: true },
-  });
+  const user = await userRepository.findByIdWithSelect(userId, { preferences: true });
 
   if (!user) {
     throw new Error('User not found');
@@ -48,12 +45,7 @@ export async function updateWalletTelegramSettings(
     },
   };
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      preferences: updatedPrefs as unknown as Prisma.InputJsonValue,
-    },
-  });
+  await userRepository.updatePreferences(userId, updatedPrefs as unknown as Prisma.InputJsonValue);
 }
 
 /**
@@ -63,10 +55,7 @@ export async function getWalletTelegramSettings(
   userId: string,
   walletId: string
 ): Promise<WalletTelegramSettings | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { preferences: true },
-  });
+  const user = await userRepository.findByIdWithSelect(userId, { preferences: true });
 
   if (!user) return null;
 

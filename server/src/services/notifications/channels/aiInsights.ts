@@ -7,7 +7,7 @@
 
 import { createLogger } from '../../../utils/logger';
 import { getErrorMessage } from '../../../utils/errors';
-import { db as prisma } from '../../../repositories/db';
+import { walletSharingRepository } from '../../../repositories';
 import * as telegramApi from '../../telegram/api';
 import type {
   NotificationChannelHandler,
@@ -67,10 +67,7 @@ export const aiInsightsChannelHandler: NotificationChannelHandler = {
 
     try {
       // Get all users with access to this wallet
-      const walletUsers = await prisma.walletUser.findMany({
-        where: { walletId },
-        include: { user: { select: { id: true, preferences: true } } },
-      });
+      const walletUsers = await walletSharingRepository.findWalletUsersWithPreferences(walletId);
 
       for (const wu of walletUsers) {
         const prefs = wu.user.preferences as Record<string, any> | null;

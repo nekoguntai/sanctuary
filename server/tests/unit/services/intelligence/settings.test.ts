@@ -7,18 +7,16 @@
 
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
-const { mockPrisma } = vi.hoisted(() => ({
-  mockPrisma: {
-    user: {
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
-      update: vi.fn(),
-    },
+const { mockUserRepo } = vi.hoisted(() => ({
+  mockUserRepo: {
+    findByIdWithSelect: vi.fn(),
+    findAllWithWalletAssociations: vi.fn(),
+    updatePreferences: vi.fn(),
   },
 }));
 
-vi.mock('../../../../src/repositories/db', () => ({
-  db: mockPrisma,
+vi.mock('../../../../src/repositories', () => ({
+  userRepository: mockUserRepo,
 }));
 
 vi.mock('../../../../src/utils/logger', () => ({
@@ -44,9 +42,9 @@ import { DEFAULT_INTELLIGENCE_SETTINGS } from '../../../../src/services/intellig
 describe('Treasury Intelligence Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (mockPrisma.user.findUnique as Mock).mockReset();
-    (mockPrisma.user.update as Mock).mockReset();
-    (mockPrisma.user.findMany as Mock).mockReset();
+    (mockUserRepo.findByIdWithSelect as Mock).mockReset();
+    (mockUserRepo.updatePreferences as Mock).mockReset();
+    (mockUserRepo.findAllWithWalletAssociations as Mock).mockReset();
   });
 
   // ========================================
@@ -55,7 +53,7 @@ describe('Treasury Intelligence Settings', () => {
 
   describe('getWalletIntelligenceSettings', () => {
     it('should return default settings when user has no preferences', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValue({ preferences: null });
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValue({ preferences: null });
 
       const result = await getWalletIntelligenceSettings('user-1', 'wallet-1');
 
@@ -63,7 +61,7 @@ describe('Treasury Intelligence Settings', () => {
     });
 
     it('should return default settings when user has no intelligence config', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValue({
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValue({
         preferences: { theme: 'dark' },
       });
 
@@ -73,7 +71,7 @@ describe('Treasury Intelligence Settings', () => {
     });
 
     it('should return default settings when wallet has no intelligence settings', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValue({
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValue({
         preferences: {
           intelligence: {
             wallets: {
@@ -89,7 +87,7 @@ describe('Treasury Intelligence Settings', () => {
     });
 
     it('should return wallet-specific intelligence settings', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValue({
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValue({
         preferences: {
           intelligence: {
             wallets: {
@@ -117,7 +115,7 @@ describe('Treasury Intelligence Settings', () => {
     });
 
     it('should fill in defaults for missing fields in wallet settings', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValue({
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValue({
         preferences: {
           intelligence: {
             wallets: {
@@ -140,7 +138,7 @@ describe('Treasury Intelligence Settings', () => {
     });
 
     it('should return default settings when findUnique throws', async () => {
-      (mockPrisma.user.findUnique as Mock).mockRejectedValue(new Error('DB error'));
+      (mockUserRepo.findByIdWithSelect as Mock).mockRejectedValue(new Error('DB error'));
 
       const result = await getWalletIntelligenceSettings('user-1', 'wallet-1');
 
@@ -154,7 +152,7 @@ describe('Treasury Intelligence Settings', () => {
 
   describe('updateWalletIntelligenceSettings', () => {
     it('should merge settings into existing intelligence config', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValue({
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValue({
         preferences: {
           intelligence: {
             wallets: {
@@ -169,7 +167,7 @@ describe('Treasury Intelligence Settings', () => {
           },
         },
       });
-      (mockPrisma.user.update as Mock).mockResolvedValue({});
+      (mockUserRepo.updatePreferences as Mock).mockResolvedValue({});
 
       const result = await updateWalletIntelligenceSettings('user-1', 'wallet-1', {
         notifyTelegram: false,
@@ -184,29 +182,27 @@ describe('Treasury Intelligence Settings', () => {
         typeFilter: ['utxo_health'],
       });
 
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-1' },
-        data: {
-          preferences: {
-            intelligence: {
-              wallets: {
-                'wallet-1': {
-                  enabled: true,
-                  notifyTelegram: false,
-                  notifyPush: true,
-                  severityFilter: 'warning',
-                  typeFilter: ['utxo_health'],
-                },
+      expect(mockUserRepo.updatePreferences).toHaveBeenCalledWith(
+        'user-1',
+        {
+          intelligence: {
+            wallets: {
+              'wallet-1': {
+                enabled: true,
+                notifyTelegram: false,
+                notifyPush: true,
+                severityFilter: 'warning',
+                typeFilter: ['utxo_health'],
               },
             },
           },
         },
-      });
+      );
     });
 
     it('should create intelligence config when user has no preferences', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValue(null);
-      (mockPrisma.user.update as Mock).mockResolvedValue({});
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValue(null);
+      (mockUserRepo.updatePreferences as Mock).mockResolvedValue({});
 
       const result = await updateWalletIntelligenceSettings('user-1', 'wallet-1', {
         enabled: true,
@@ -216,27 +212,25 @@ describe('Treasury Intelligence Settings', () => {
       expect(result.notifyTelegram).toBe(DEFAULT_INTELLIGENCE_SETTINGS.notifyTelegram);
       expect(result.notifyPush).toBe(DEFAULT_INTELLIGENCE_SETTINGS.notifyPush);
 
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-1' },
-        data: {
-          preferences: expect.objectContaining({
-            intelligence: expect.objectContaining({
-              wallets: expect.objectContaining({
-                'wallet-1': expect.objectContaining({
-                  enabled: true,
-                }),
+      expect(mockUserRepo.updatePreferences).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          intelligence: expect.objectContaining({
+            wallets: expect.objectContaining({
+              'wallet-1': expect.objectContaining({
+                enabled: true,
               }),
             }),
           }),
-        },
-      });
+        }),
+      );
     });
 
     it('should create intelligence config when preferences exist but no intelligence key', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValue({
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValue({
         preferences: { theme: 'dark' },
       });
-      (mockPrisma.user.update as Mock).mockResolvedValue({});
+      (mockUserRepo.updatePreferences as Mock).mockResolvedValue({});
 
       const result = await updateWalletIntelligenceSettings('user-1', 'wallet-1', {
         enabled: true,
@@ -246,15 +240,13 @@ describe('Treasury Intelligence Settings', () => {
       expect(result.enabled).toBe(true);
       expect(result.typeFilter).toEqual(['fee_timing', 'anomaly']);
 
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-1' },
-        data: {
-          preferences: expect.objectContaining({
-            theme: 'dark',
-            intelligence: expect.any(Object),
-          }),
-        },
-      });
+      expect(mockUserRepo.updatePreferences).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          theme: 'dark',
+          intelligence: expect.any(Object),
+        }),
+      );
     });
   });
 
@@ -264,7 +256,7 @@ describe('Treasury Intelligence Settings', () => {
 
   describe('getEnabledIntelligenceWallets', () => {
     it('should return wallets with intelligence enabled', async () => {
-      (mockPrisma.user.findMany as Mock).mockResolvedValue([
+      (mockUserRepo.findAllWithWalletAssociations as Mock).mockResolvedValue([
         {
           id: 'user-1',
           preferences: {
@@ -305,7 +297,7 @@ describe('Treasury Intelligence Settings', () => {
     });
 
     it('should skip wallets with intelligence disabled', async () => {
-      (mockPrisma.user.findMany as Mock).mockResolvedValue([
+      (mockUserRepo.findAllWithWalletAssociations as Mock).mockResolvedValue([
         {
           id: 'user-1',
           preferences: {
@@ -327,7 +319,7 @@ describe('Treasury Intelligence Settings', () => {
     });
 
     it('should skip wallets not in user wallet list', async () => {
-      (mockPrisma.user.findMany as Mock).mockResolvedValue([
+      (mockUserRepo.findAllWithWalletAssociations as Mock).mockResolvedValue([
         {
           id: 'user-1',
           preferences: {
@@ -349,7 +341,7 @@ describe('Treasury Intelligence Settings', () => {
     });
 
     it('should skip users without intelligence preferences', async () => {
-      (mockPrisma.user.findMany as Mock).mockResolvedValue([
+      (mockUserRepo.findAllWithWalletAssociations as Mock).mockResolvedValue([
         {
           id: 'user-1',
           preferences: { theme: 'dark' },
@@ -363,7 +355,7 @@ describe('Treasury Intelligence Settings', () => {
     });
 
     it('should handle multiple users and wallets', async () => {
-      (mockPrisma.user.findMany as Mock).mockResolvedValue([
+      (mockUserRepo.findAllWithWalletAssociations as Mock).mockResolvedValue([
         {
           id: 'user-1',
           preferences: {
@@ -404,7 +396,7 @@ describe('Treasury Intelligence Settings', () => {
     });
 
     it('should return empty array when findMany throws', async () => {
-      (mockPrisma.user.findMany as Mock).mockRejectedValue(new Error('DB error'));
+      (mockUserRepo.findAllWithWalletAssociations as Mock).mockRejectedValue(new Error('DB error'));
 
       const result = await getEnabledIntelligenceWallets();
 

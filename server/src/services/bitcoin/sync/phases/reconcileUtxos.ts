@@ -8,7 +8,7 @@
  */
 
 import { getConfig } from '../../../../config';
-import { db as prisma } from '../../../../repositories/db';
+import { utxoRepository, draftLockRepository, draftRepository } from '../../../../repositories';
 import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext } from '../types';
@@ -29,17 +29,14 @@ export async function reconcileUtxosPhase(ctx: SyncContext): Promise<SyncContext
   walletLog(walletId, 'info', 'SYNC', `Reconciling ${allUtxoKeys.size} UTXOs with database...`);
 
   // Get all UTXOs from DB (both spent and unspent)
-  const existingUtxos = await prisma.uTXO.findMany({
-    where: { walletId },
-    select: {
-      id: true,
-      txid: true,
-      vout: true,
-      spent: true,
-      confirmations: true,
-      blockHeight: true,
-      address: true,
-    },
+  const existingUtxos = await utxoRepository.findByWalletIdWithSelect(walletId, {
+    id: true,
+    txid: true,
+    vout: true,
+    spent: true,
+    confirmations: true,
+    blockHeight: true,
+    address: true,
   });
 
   const existingUtxoMap = new Map(existingUtxos.map(u => [`${u.txid}:${u.vout}`, u]));
@@ -76,22 +73,13 @@ export async function reconcileUtxosPhase(ctx: SyncContext): Promise<SyncContext
 
   // Batch mark spent UTXOs
   if (utxosToMarkSpent.length > 0) {
-    await prisma.uTXO.updateMany({
-      where: { id: { in: utxosToMarkSpent } },
-      data: { spent: true },
-    });
+    await utxoRepository.markManyAsSpent(utxosToMarkSpent);
 
     ctx.stats.utxosMarkedSpent = utxosToMarkSpent.length;
     walletLog(walletId, 'info', 'UTXO', `Marked ${utxosToMarkSpent.length} UTXOs as spent (no longer on blockchain)`);
 
     // Find and invalidate draft transactions using these spent UTXOs
-    const affectedLocks = await prisma.draftUtxoLock.findMany({
-      where: { utxoId: { in: utxosToMarkSpent } },
-      select: {
-        draftId: true,
-        draft: { select: { id: true, label: true, recipient: true } },
-      },
-    });
+    const affectedLocks = await draftLockRepository.findLocksByUtxoIdsWithDraftInfo(utxosToMarkSpent);
 
     if (affectedLocks.length > 0) {
       const uniqueDraftIds = [...new Set(affectedLocks.map(lock => lock.draftId))];
@@ -101,9 +89,7 @@ export async function reconcileUtxosPhase(ctx: SyncContext): Promise<SyncContext
         .filter((label, idx, arr) => arr.indexOf(label) === idx);
 
       // Delete the invalidated drafts (UTXO locks cascade delete)
-      await prisma.draftTransaction.deleteMany({
-        where: { id: { in: uniqueDraftIds } },
-      });
+      await draftRepository.deleteManyByIds(uniqueDraftIds);
 
       walletLog(
         walletId,
@@ -117,17 +103,13 @@ export async function reconcileUtxosPhase(ctx: SyncContext): Promise<SyncContext
   // Batch update UTXO confirmations in chunks to avoid long-held locks
   if (utxosToUpdate.length > 0) {
     const batchSize = getConfig().sync.transactionBatchSize;
-    for (let i = 0; i < utxosToUpdate.length; i += batchSize) {
-      const chunk = utxosToUpdate.slice(i, i + batchSize);
-      await prisma.$transaction(
-        chunk.map(u =>
-          prisma.uTXO.update({
-            where: { id: u.id },
-            data: { confirmations: u.confirmations, blockHeight: u.blockHeight },
-          })
-        )
-      );
-    }
+    await utxoRepository.batchUpdateByIds(
+      utxosToUpdate.map(u => ({
+        id: u.id,
+        data: { confirmations: u.confirmations, blockHeight: u.blockHeight },
+      })),
+      batchSize
+    );
     log.debug(`[SYNC] Updated confirmations for ${utxosToUpdate.length} UTXOs`);
   }
 

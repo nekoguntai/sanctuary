@@ -9,7 +9,7 @@
  * OPTIMIZED with batch fetching and batch updates.
  */
 
-import { db as prisma } from '../../../../repositories/db';
+import { walletRepository, transactionRepository, addressRepository } from '../../../../repositories';
 import { createLogger } from '../../../../utils/logger';
 import { getBlockHeight } from '../../utils/blockHeight';
 import { getNodeClient } from '../../nodeClient';
@@ -42,50 +42,21 @@ const POPULATE_CHUNK_SIZE = 50;
  */
 export async function populateMissingTransactionFields(walletId: string): Promise<PopulateFieldsResult> {
   // Get wallet to determine network for correct block height
-  const wallet = await prisma.wallet.findUnique({
-    where: { id: walletId },
-    select: { network: true },
-  });
-  if (!wallet) {
+  const network = await walletRepository.findNetwork(walletId);
+  if (network === null) {
     return { updated: 0, confirmationUpdates: [] };
   }
 
   // Acquire semaphore to limit concurrent populate operations
   return populateSemaphore.run(async () => {
-    const network = (wallet.network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
-    const client = await getNodeClient(network);
+    const castNetwork = (network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
+    const client = await getNodeClient(castNetwork);
 
     // Find transactions with missing fields
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        walletId,
-        OR: [
-          { blockHeight: null },
-          { addressId: null },
-          { blockTime: null },
-          { fee: null },
-          { counterpartyAddress: null },
-        ],
-      },
-      select: {
-        id: true,
-        txid: true,
-        type: true,
-        amount: true,
-        fee: true,
-        blockHeight: true,
-        blockTime: true,
-        confirmations: true,
-        addressId: true,
-        counterpartyAddress: true,
-      },
-    });
+    const transactions = await transactionRepository.findWithMissingFields(walletId);
 
     // Fetch wallet addresses separately with only needed fields (more memory efficient)
-    const walletAddresses = await prisma.address.findMany({
-      where: { walletId },
-      select: { id: true, address: true },
-    });
+    const walletAddresses = await addressRepository.findIdAndAddressByWalletId(walletId);
 
     const walletAddressLookup = new Map(walletAddresses.map(a => [a.address, a.id]));
     const walletAddressSet = new Set(walletAddresses.map(a => a.address));
@@ -106,7 +77,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
       },
     });
 
-    const currentHeight = await getBlockHeight(network);
+    const currentHeight = await getBlockHeight(castNetwork);
 
     // PHASE 0: Get block heights from address history (runs once — small Map<txid, number>)
     const txHeightFromHistory = await fetchBlockHeightsFromHistory(
@@ -139,18 +110,11 @@ export async function populateMissingTransactionFields(walletId: string): Promis
 
       const { pendingUpdates, stats } = await processTransactionUpdates(
         walletId, chunk, txDetailsCache, prevTxCache, txHeightFromHistory,
-        walletAddresses, walletAddressLookup, walletAddressSet, currentHeight, network
+        walletAddresses, walletAddressLookup, walletAddressSet, currentHeight, castNetwork
       );
 
       if (pendingUpdates.length > 0) {
-        await executeInChunks(
-          pendingUpdates,
-          (u) => prisma.transaction.update({
-            where: { id: u.id },
-            data: u.data,
-          }),
-          walletId
-        );
+        await executeInChunks(pendingUpdates, walletId);
         if (pendingUpdates.some(u => u.data.amount !== undefined)) {
           hasAmountUpdates = true;
         }

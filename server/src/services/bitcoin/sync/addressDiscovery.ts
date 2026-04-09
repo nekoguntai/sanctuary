@@ -5,7 +5,7 @@
  * sufficient unused addresses at the end of both receive and change chains.
  */
 
-import { db as prisma } from '../../../repositories/db';
+import { walletRepository, addressRepository } from '../../../repositories';
 import { createLogger } from '../../../utils/logger';
 import { getErrorMessage } from '../../../utils/errors';
 import { walletLog } from '../../../websocket/notifications';
@@ -25,9 +25,8 @@ const log = createLogger('BITCOIN:SVC_ADDR_DISCOVERY');
  * @returns Array of newly generated addresses that should be scanned
  */
 export async function ensureGapLimit(walletId: string): Promise<Array<{ address: string; derivationPath: string }>> {
-  const wallet = await prisma.wallet.findUnique({
-    where: { id: walletId },
-    select: { id: true, descriptor: true, network: true },
+  const wallet = await walletRepository.findByIdWithSelect(walletId, {
+    id: true, descriptor: true, network: true,
   });
 
   if (!wallet?.descriptor) {
@@ -36,11 +35,7 @@ export async function ensureGapLimit(walletId: string): Promise<Array<{ address:
   }
 
   // Get all addresses with their used status
-  const addresses = await prisma.address.findMany({
-    where: { walletId },
-    select: { derivationPath: true, index: true, used: true },
-    orderBy: { index: 'asc' },
-  });
+  const addresses = await addressRepository.findByWalletId(walletId);
 
   // Separate into receive (/0/) and change (/1/) addresses
   const receiveAddrs = addresses.filter(a => a.derivationPath?.includes('/0/'));
@@ -108,10 +103,7 @@ export async function ensureGapLimit(walletId: string): Promise<Array<{ address:
       used: false,
     }));
 
-    await prisma.address.createMany({
-      data: addressesToCreate,
-      skipDuplicates: true,
-    });
+    await addressRepository.createMany(addressesToCreate, { skipDuplicates: true });
 
     walletLog(walletId, 'info', 'ADDRESS', `Generated ${newAddresses.length} new addresses to maintain gap limit`);
   }

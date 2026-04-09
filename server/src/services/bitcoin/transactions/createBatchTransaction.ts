@@ -12,8 +12,7 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import { getNetwork, estimateTransactionSize, calculateFee } from '../utils';
 import { RBF_SEQUENCE } from '../advancedTx';
-import { db as prisma } from '../../../repositories/db';
-import { systemSettingRepository } from '../../../repositories';
+import { walletRepository, utxoRepository, systemSettingRepository } from '../../../repositories';
 import { DEFAULT_CONFIRMATION_THRESHOLD } from '../../../constants';
 import { createLogger } from '../../../utils/logger';
 import { SystemSettingSchemas } from '../../../utils/safeJson';
@@ -26,6 +25,7 @@ import {
   fetchAddressDerivationPaths,
   addInputsWithBip32,
 } from './psbtConstruction';
+import { findChangeAddress } from './outputBuilder';
 import type { TransactionOutput, CreateBatchTransactionResult } from './types';
 
 const log = createLogger('BITCOIN:SVC_TX_BATCH');
@@ -50,16 +50,7 @@ export async function createBatchTransaction(
   const dustThreshold = await getDustThreshold();
 
   // Get wallet info including devices (for fingerprint)
-  const wallet = await prisma.wallet.findUnique({
-    where: { id: walletId },
-    include: {
-      devices: {
-        include: {
-          device: true,
-        },
-      },
-    },
-  });
+  const wallet = await walletRepository.findByIdWithSigningDevices(walletId);
 
   if (!wallet) {
     throw new Error('Wallet not found');
@@ -168,7 +159,7 @@ export async function createBatchTransaction(
   let changeAddress: string | undefined;
 
   if (!hasSendMax && changeAmount >= dustThreshold) {
-    changeAddress = await findBatchChangeAddress(walletId);
+    changeAddress = await findChangeAddress(walletId);
 
     psbt.addOutput({
       address: changeAddress,
@@ -194,9 +185,9 @@ export async function createBatchTransaction(
 }
 
 /**
- * UTXO record shape from Prisma query
+ * UTXO record shape from repository query
  */
-type UtxoRecord = Awaited<ReturnType<typeof prisma.uTXO.findMany>>[number];
+type UtxoRecord = Awaited<ReturnType<typeof utxoRepository.findAvailableForSpending>>[number];
 
 /**
  * Get available UTXOs for batch transaction, respecting confirmation threshold and draft locks.
@@ -208,22 +199,16 @@ async function getAvailableUtxos(
   // Get confirmation threshold setting
   const confirmationThreshold = await systemSettingRepository.getParsed('confirmationThreshold', SystemSettingSchemas.number, DEFAULT_CONFIRMATION_THRESHOLD);
 
-  let utxos = await prisma.uTXO.findMany({
-    where: {
-      walletId,
-      spent: false,
-      frozen: false,
-      confirmations: { gte: confirmationThreshold },
-      // Exclude UTXOs locked by other drafts (unless user explicitly selected them)
-      ...(selectedUtxoIds && selectedUtxoIds.length > 0
-        ? {} // Don't filter locks if user selected specific UTXOs
-        : { draftLock: null }), // Auto-selection: exclude locked UTXOs
-    },
-    orderBy: { amount: 'desc' },
+  const hasUserSelection = selectedUtxoIds && selectedUtxoIds.length > 0;
+
+  let utxos = await utxoRepository.findAvailableForSpending(walletId, {
+    minConfirmations: confirmationThreshold,
+    // Exclude UTXOs locked by other drafts (unless user explicitly selected them)
+    excludeDraftLocked: !hasUserSelection,
   });
 
   // Filter by selected UTXOs if provided
-  if (selectedUtxoIds && selectedUtxoIds.length > 0) {
+  if (hasUserSelection) {
     utxos = utxos.filter((utxo) =>
       selectedUtxoIds.includes(`${utxo.txid}:${utxo.vout}`)
     );
@@ -325,31 +310,3 @@ function calculateBatchAmounts(
   };
 }
 
-/**
- * Find a change address for a batch transaction.
- */
-async function findBatchChangeAddress(walletId: string): Promise<string> {
-  const existingChangeAddress = await prisma.address.findFirst({
-    where: {
-      walletId,
-      used: false,
-      derivationPath: { contains: '/1/' },
-    },
-    orderBy: { index: 'asc' },
-  });
-
-  if (existingChangeAddress) {
-    return existingChangeAddress.address;
-  }
-
-  const receivingAddress = await prisma.address.findFirst({
-    where: { walletId, used: false },
-    orderBy: { index: 'asc' },
-  });
-
-  if (!receivingAddress) {
-    throw new Error('No change address available');
-  }
-
-  return receivingAddress.address;
-}

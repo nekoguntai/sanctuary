@@ -5,7 +5,7 @@
  * and correction of misclassified transactions.
  */
 
-import { db as prisma } from '../../../repositories/db';
+import { transactionRepository, addressRepository } from '../../../repositories';
 import { createLogger } from '../../../utils/logger';
 
 const log = createLogger('BITCOIN:SVC_BALANCE');
@@ -25,21 +25,11 @@ const log = createLogger('BITCOIN:SVC_BALANCE');
  */
 export async function correctMisclassifiedConsolidations(walletId: string): Promise<number> {
   // Get all wallet addresses
-  const walletAddresses = await prisma.address.findMany({
-    where: { walletId },
-    select: { address: true },
-  });
-  const walletAddressSet = new Set(walletAddresses.map(a => a.address));
+  const walletAddressStrings = await addressRepository.findAddressStrings(walletId);
+  const walletAddressSet = new Set(walletAddressStrings);
 
   // Find all "sent" transactions with their outputs
-  const sentTransactions = await prisma.transaction.findMany({
-    where: { walletId, type: 'sent' },
-    include: {
-      outputs: {
-        select: { id: true, address: true, isOurs: true },
-      },
-    },
-  });
+  const sentTransactions = await transactionRepository.findSentWithOutputs(walletId);
 
   let corrected = 0;
 
@@ -73,20 +63,17 @@ export async function correctMisclassifiedConsolidations(walletId: string): Prom
       log.info(`Correcting misclassified consolidation: ${tx.txid}`);
 
       // Update transaction type and amount
-      await prisma.transaction.update({
-        where: { id: tx.id },
-        data: {
-          type: 'consolidation',
-          // Amount for consolidation is -fee (only fee is lost)
-          amount: tx.fee !== null ? -tx.fee : BigInt(0),
-        },
+      await transactionRepository.updateTypeAndAmount(tx.id, {
+        type: 'consolidation',
+        // Amount for consolidation is -fee (only fee is lost)
+        amount: tx.fee !== null ? -tx.fee : BigInt(0),
       });
 
       // Fix isOurs flag on outputs
       if (outputsToFix.length > 0) {
-        await prisma.transactionOutput.updateMany({
-          where: { id: { in: outputsToFix } },
-          data: { isOurs: true, outputType: 'consolidation' },
+        await transactionRepository.updateOutputsIsOurs(outputsToFix, {
+          isOurs: true,
+          outputType: 'consolidation',
         });
       }
 
@@ -108,14 +95,7 @@ export async function correctMisclassifiedConsolidations(walletId: string): Prom
  */
 export async function recalculateWalletBalances(walletId: string): Promise<void> {
   // Get all transactions sorted by block time (oldest first)
-  const transactions = await prisma.transaction.findMany({
-    where: { walletId },
-    orderBy: [
-      { blockTime: 'asc' },
-      { createdAt: 'asc' },
-    ],
-    select: { id: true, amount: true },
-  });
+  const transactions = await transactionRepository.findForBalanceRecalculation(walletId);
 
   if (transactions.length === 0) {
     return;
@@ -131,18 +111,7 @@ export async function recalculateWalletBalances(walletId: string): Promise<void>
   }
 
   // Batch update in chunks of 500 to avoid overwhelming the database
-  const BATCH_SIZE = 500;
-  for (let i = 0; i < updates.length; i += BATCH_SIZE) {
-    const batch = updates.slice(i, i + BATCH_SIZE);
-    await prisma.$transaction(
-      batch.map(u =>
-        prisma.transaction.update({
-          where: { id: u.id },
-          data: { balanceAfter: u.balanceAfter },
-        })
-      )
-    );
-  }
+  await transactionRepository.batchUpdateBalances(updates);
 
   log.debug(`Recalculated balances for ${transactions.length} transactions in wallet ${walletId}`);
 }

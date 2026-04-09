@@ -4,7 +4,7 @@
  * Pure functions for formatting transaction and draft messages for Telegram.
  */
 
-import { db as prisma } from '../../repositories/db';
+import { userRepository } from '../../repositories';
 import type { TransactionData } from './types';
 
 /**
@@ -12,15 +12,7 @@ import type { TransactionData } from './types';
  * Exported for use by other notification services (e.g., push notifications)
  */
 export async function getWalletUsers(walletId: string) {
-  return prisma.user.findMany({
-    where: {
-      OR: [
-        { wallets: { some: { walletId } } },
-        { groupMemberships: { some: { group: { wallets: { some: { id: walletId } } } } } },
-      ],
-    },
-    select: { id: true, username: true, preferences: true },
-  });
+  return userRepository.findByWalletAccess(walletId);
 }
 
 /**

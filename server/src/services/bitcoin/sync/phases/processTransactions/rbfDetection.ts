@@ -6,7 +6,7 @@
  * See: https://github.com/bitcoin/bips/blob/master/bip-0125.mediawiki
  */
 
-import { db as prisma } from '../../../../../repositories/db';
+import { transactionRepository } from '../../../../../repositories';
 import { walletLog } from '../../../../../websocket/notifications';
 import type { TransactionCreateData, TxInputCreateData } from '../../types';
 
@@ -40,26 +40,10 @@ export async function detectRBFReplacements(
 
   if (confirmedInputPatterns.length === 0) return;
 
-  const pendingTxsWithMatchingInputs = await prisma.transaction.findMany({
-    where: {
-      walletId,
-      confirmations: 0,
-      rbfStatus: 'active',
-      inputs: {
-        some: {
-          OR: confirmedInputPatterns.map(p => ({
-            txid: p.inputTxid,
-            vout: p.inputVout,
-          })),
-        },
-      },
-    },
-    select: {
-      id: true,
-      txid: true,
-      inputs: { select: { txid: true, vout: true } },
-    },
-  });
+  const pendingTxsWithMatchingInputs = await transactionRepository.findPendingWithSharedInputs(
+    walletId,
+    confirmedInputPatterns.map(p => ({ txid: p.inputTxid, vout: p.inputVout }))
+  );
 
   const rbfUpdates: Array<{ id: string; txid: string; replacementTxid: string }> = [];
 
@@ -75,16 +59,12 @@ export async function detectRBFReplacements(
   }
 
   if (rbfUpdates.length > 0) {
-    await prisma.$transaction(
-      rbfUpdates.map(update =>
-        prisma.transaction.update({
-          where: { id: update.id },
-          data: {
-            rbfStatus: 'replaced',
-            replacedByTxid: update.replacementTxid,
-          },
-        })
-      )
+    await transactionRepository.batchUpdateRbfStatus(
+      rbfUpdates.map(u => ({
+        id: u.id,
+        rbfStatus: 'replaced',
+        replacedByTxid: u.replacementTxid,
+      }))
     );
 
     for (const update of rbfUpdates) {

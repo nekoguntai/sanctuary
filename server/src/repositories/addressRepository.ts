@@ -82,6 +82,78 @@ export async function findNextUnused(
 }
 
 /**
+ * Find next unused change address (BIP44 derivation path containing /1/)
+ */
+export async function findNextUnusedChange(
+  walletId: string
+): Promise<Address | null> {
+  return prisma.address.findFirst({
+    where: {
+      walletId,
+      used: false,
+      derivationPath: { contains: '/1/' },
+    },
+    orderBy: { index: 'asc' },
+  });
+}
+
+/**
+ * Find multiple unused change addresses for decoy output generation
+ */
+export async function findUnusedChangeAddresses(
+  walletId: string,
+  take: number
+): Promise<Address[]> {
+  return prisma.address.findMany({
+    where: {
+      walletId,
+      used: false,
+      derivationPath: { contains: '/1/' },
+    },
+    orderBy: { index: 'asc' },
+    take,
+  });
+}
+
+/**
+ * Find unused addresses excluding specific addresses
+ */
+export async function findUnusedExcluding(
+  walletId: string,
+  excludeAddresses: string[],
+  take: number
+): Promise<Address[]> {
+  return prisma.address.findMany({
+    where: {
+      walletId,
+      used: false,
+      address: { notIn: excludeAddresses },
+    },
+    orderBy: { index: 'asc' },
+    take,
+  });
+}
+
+/**
+ * Find derivation paths for specific addresses in a wallet
+ */
+export async function findDerivationPathsByAddresses(
+  walletId: string,
+  addresses: string[]
+): Promise<Array<{ address: string; derivationPath: string }>> {
+  return prisma.address.findMany({
+    where: {
+      walletId,
+      address: { in: addresses },
+    },
+    select: {
+      address: true,
+      derivationPath: true,
+    },
+  });
+}
+
+/**
  * Count addresses by wallet
  */
 export async function countByWalletId(
@@ -267,6 +339,72 @@ export async function findByAddressesForUser(
   });
 }
 
+/**
+ * Find address strings for a wallet (lean query for sync operations)
+ */
+export async function findAddressStrings(walletId: string): Promise<string[]> {
+  const addresses = await prisma.address.findMany({
+    where: { walletId },
+    select: { address: true },
+  });
+  return addresses.map(a => a.address);
+}
+
+/**
+ * Find address id/string pairs for a wallet (for field population during sync)
+ */
+export async function findIdAndAddressByWalletId(
+  walletId: string
+): Promise<Array<{ id: string; address: string }>> {
+  return prisma.address.findMany({
+    where: { walletId },
+    select: { id: true, address: true },
+  });
+}
+
+/**
+ * Bulk mark addresses as used by address string (for sync update addresses phase)
+ */
+export async function markManyAsUsedByAddress(
+  walletId: string,
+  addresses: string[]
+): Promise<number> {
+  if (addresses.length === 0) return 0;
+  const result = await prisma.address.updateMany({
+    where: {
+      walletId,
+      address: { in: addresses },
+      used: false,
+    },
+    data: { used: true },
+  });
+  return result.count;
+}
+
+/**
+ * Find an address by ID with its wallet included (for single-address sync)
+ */
+export async function findByIdWithWallet(addressId: string) {
+  return prisma.address.findUnique({
+    where: { id: addressId },
+    include: { wallet: true },
+  });
+}
+
+/**
+ * Find recently created unused addresses for a wallet (for gap limit expansion sync)
+ */
+export async function findRecentUnused(
+  walletId: string,
+  take: number
+): Promise<Address[]> {
+  return prisma.address.findMany({
+    where: { walletId, used: false },
+    orderBy: { createdAt: 'desc' },
+    take,
+  });
+}
+
 // Export as namespace
 export const addressRepository = {
   resetUsedFlags,
@@ -274,6 +412,10 @@ export const addressRepository = {
   findByWalletId,
   markAsUsed,
   findNextUnused,
+  findNextUnusedChange,
+  findUnusedChangeAddresses,
+  findUnusedExcluding,
+  findDerivationPathsByAddresses,
   countByWalletId,
   findWithLabels,
   findByIdWithAccess,
@@ -283,6 +425,12 @@ export const addressRepository = {
   getAddressSummary,
   findUtxoBalancesByAddresses,
   findByAddressesForUser,
+  findAddressStrings,
+  findIdAndAddressByWalletId,
+  // Sync pipeline methods
+  markManyAsUsedByAddress,
+  findByIdWithWallet,
+  findRecentUnused,
 };
 
 export default addressRepository;

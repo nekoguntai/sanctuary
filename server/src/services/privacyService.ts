@@ -9,7 +9,7 @@
  * - Change output identification: Obvious change outputs reduce privacy
  */
 
-import { db as prisma } from '../repositories/db';
+import { utxoRepository } from '../repositories';
 import { getPrivacyGrade } from '../utils/privacy';
 
 /**
@@ -124,16 +124,7 @@ function isRoundAmount(satoshis: bigint): boolean {
 export async function calculateUtxoPrivacy(
   utxoId: string
 ): Promise<PrivacyScore> {
-  const utxo = await prisma.uTXO.findUnique({
-    where: { id: utxoId },
-    include: {
-      wallet: {
-        select: {
-          id: true,
-        },
-      },
-    },
-  });
+  const utxo = await utxoRepository.findByIdWithWallet(utxoId);
 
   if (!utxo) {
     throw new Error('UTXO not found');
@@ -144,13 +135,7 @@ export async function calculateUtxoPrivacy(
   let score = 100; // Start with perfect score
 
   // Check address reuse
-  const addressCount = await prisma.uTXO.count({
-    where: {
-      walletId: utxo.walletId,
-      address: utxo.address,
-      spent: false,
-    },
-  });
+  const addressCount = await utxoRepository.countUnspentByAddress(utxo.walletId, utxo.address);
 
   if (addressCount > 1) {
     const impact = WEIGHTS.ADDRESS_REUSE;
@@ -164,14 +149,7 @@ export async function calculateUtxoPrivacy(
   }
 
   // Check cluster linkage (same transaction outputs)
-  const sameTransactionUtxos = await prisma.uTXO.count({
-    where: {
-      walletId: utxo.walletId,
-      txid: utxo.txid,
-      spent: false,
-      id: { not: utxo.id },
-    },
-  });
+  const sameTransactionUtxos = await utxoRepository.countUnspentByTxid(utxo.walletId, utxo.txid, utxo.id);
 
   if (sameTransactionUtxos > 0) {
     const impact = WEIGHTS.CLUSTER_LINKAGE * sameTransactionUtxos;
@@ -196,15 +174,9 @@ export async function calculateUtxoPrivacy(
 
   // Check timing correlation (same block height)
   if (utxo.blockHeight) {
-    const sameBlockUtxos = await prisma.uTXO.count({
-      where: {
-        walletId: utxo.walletId,
-        blockHeight: utxo.blockHeight,
-        spent: false,
-        id: { not: utxo.id },
-        txid: { not: utxo.txid }, // Different transaction
-      },
-    });
+    const sameBlockUtxos = await utxoRepository.countUnspentByBlockHeight(
+      utxo.walletId, utxo.blockHeight, utxo.id, utxo.txid
+    );
 
     if (sameBlockUtxos > 0) {
       const impact = WEIGHTS.TIMING_CORRELATION;
@@ -218,13 +190,7 @@ export async function calculateUtxoPrivacy(
   }
 
   // Check relative size (very small or very large)
-  const walletUtxos = await prisma.uTXO.findMany({
-    where: {
-      walletId: utxo.walletId,
-      spent: false,
-    },
-    select: { amount: true },
-  });
+  const walletUtxos = await utxoRepository.findUnspentAmounts(utxo.walletId);
 
   const totalAmount = walletUtxos.reduce((sum, u) => sum + u.amount, BigInt(0));
   const avgAmount = totalAmount / BigInt(Math.max(walletUtxos.length, 1));
@@ -265,22 +231,7 @@ export async function calculateUtxoPrivacy(
 export async function calculateWalletPrivacy(
   walletId: string
 ): Promise<{ utxos: UtxoPrivacyInfo[]; summary: WalletPrivacySummary }> {
-  const utxos = await prisma.uTXO.findMany({
-    where: {
-      walletId,
-      spent: false,
-      frozen: false,
-    },
-    select: {
-      id: true,
-      txid: true,
-      vout: true,
-      amount: true,
-      address: true,
-      blockHeight: true,
-    },
-    orderBy: { amount: 'desc' },
-  });
+  const utxos = await utxoRepository.findUnspentForPrivacy(walletId);
 
   if (utxos.length === 0) {
     return {
@@ -395,14 +346,7 @@ export async function calculateSpendPrivacy(
     };
   }
 
-  const utxos = await prisma.uTXO.findMany({
-    where: { id: { in: utxoIds } },
-    select: {
-      address: true,
-      txid: true,
-      amount: true,
-    },
-  });
+  const utxos = await utxoRepository.findByIdsForPrivacy(utxoIds);
 
   const warnings: string[] = [];
   let score = 100;

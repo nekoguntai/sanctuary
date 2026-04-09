@@ -7,7 +7,7 @@
 
 import { getNodeClient } from '../nodeClient';
 import type { TransactionOutput, TransactionInput } from '../electrum';
-import { db as prisma } from '../../../repositories/db';
+import { addressRepository, transactionRepository, utxoRepository } from '../../../repositories';
 import { createLogger } from '../../../utils/logger';
 import { getErrorMessage } from '../../../utils/errors';
 import { getBlockHeight, getBlockTimestamp } from '../utils/blockHeight';
@@ -35,10 +35,7 @@ export async function getConfirmations(blockHeight: number, network: 'mainnet' |
  * Fetches transactions and UTXOs for an address and updates database
  */
 export async function syncAddress(addressId: string): Promise<SyncAddressResult> {
-  const addressRecord = await prisma.address.findUnique({
-    where: { id: addressId },
-    include: { wallet: true },
-  });
+  const addressRecord = await addressRepository.findByIdWithWallet(addressId);
 
   if (!addressRecord) {
     throw new Error('Address not found');
@@ -64,11 +61,8 @@ export async function syncAddress(addressId: string): Promise<SyncAddressResult>
     };
 
     // Get all wallet addresses for checking inputs (to detect sends)
-    const walletAddresses = await prisma.address.findMany({
-      where: { walletId: addressRecord.walletId },
-      select: { address: true },
-    });
-    const walletAddressSet = new Set(walletAddresses.map(a => a.address));
+    const walletAddressStrings = await addressRepository.findAddressStrings(addressRecord.walletId);
+    const walletAddressSet = new Set(walletAddressStrings);
 
     // BATCH OPTIMIZATION: Pre-fetch all transaction details and previous transactions
     // Phase 1: Batch fetch all history transaction details
@@ -101,13 +95,11 @@ export async function syncAddress(addressId: string): Promise<SyncAddressResult>
     }
 
     // BATCH OPTIMIZATION: Pre-fetch all existing transactions for this wallet to avoid N+1 queries
-    const existingWalletTxs = await prisma.transaction.findMany({
-      where: {
-        walletId: addressRecord.walletId,
-        txid: { in: historyTxIds },
-      },
-      select: { txid: true, type: true },
-    });
+    const existingWalletTxs = await transactionRepository.findByWalletIdAndTxids(
+      addressRecord.walletId,
+      historyTxIds,
+      { txid: true, type: true }
+    );
     // Create lookup map: "txid:type" -> true for O(1) existence checks
     const existingTxLookup = new Set(
       existingWalletTxs.map(tx => `${tx.txid}:${tx.type}`)
@@ -181,17 +173,15 @@ export async function syncAddress(addressId: string): Promise<SyncAddressResult>
             .filter((out) => outputMatchesAddress(out, addressRecord.address))
             .reduce((sum, out) => sum + Math.round(out.value * 100000000), 0);
 
-          await prisma.transaction.create({
-            data: {
-              txid: item.tx_hash,
-              walletId: addressRecord.walletId,
-              addressId: addressRecord.id,
-              type: 'received',
-              amount: BigInt(amount),
-              confirmations: item.height > 0 ? await getConfirmations(item.height, network) : 0,
-              blockHeight: item.height > 0 ? item.height : null,
-              blockTime,
-            },
+          await transactionRepository.create({
+            txid: item.tx_hash,
+            walletId: addressRecord.walletId,
+            addressId: addressRecord.id,
+            type: 'received',
+            amount: BigInt(amount),
+            confirmations: item.height > 0 ? await getConfirmations(item.height, network) : 0,
+            blockHeight: item.height > 0 ? item.height : null,
+            blockTime,
           });
 
           transactionCount++;
@@ -220,18 +210,16 @@ export async function syncAddress(addressId: string): Promise<SyncAddressResult>
 
           if (!existingSentTx) {
             const sentAmount = -(totalToExternal + (validFee ?? 0));
-            await prisma.transaction.create({
-              data: {
-                txid: item.tx_hash,
-                walletId: addressRecord.walletId,
-                addressId: addressRecord.id,
-                type: 'sent',
-                amount: BigInt(sentAmount),
-                fee: validFee !== null ? BigInt(validFee) : null,
-                confirmations: item.height > 0 ? await getConfirmations(item.height, network) : 0,
-                blockHeight: item.height > 0 ? item.height : null,
-                blockTime,
-              },
+            await transactionRepository.create({
+              txid: item.tx_hash,
+              walletId: addressRecord.walletId,
+              addressId: addressRecord.id,
+              type: 'sent',
+              amount: BigInt(sentAmount),
+              fee: validFee !== null ? BigInt(validFee) : null,
+              confirmations: item.height > 0 ? await getConfirmations(item.height, network) : 0,
+              blockHeight: item.height > 0 ? item.height : null,
+              blockTime,
             });
 
             transactionCount++;
@@ -240,18 +228,16 @@ export async function syncAddress(addressId: string): Promise<SyncAddressResult>
           const existingConsolidationTx = existingTxLookup.has(`${item.tx_hash}:consolidation`);
 
           if (!existingConsolidationTx) {
-            await prisma.transaction.create({
-              data: {
-                txid: item.tx_hash,
-                walletId: addressRecord.walletId,
-                addressId: addressRecord.id,
-                type: 'consolidation',
-                amount: validFee !== null ? BigInt(-validFee) : BigInt(0),
-                fee: validFee !== null ? BigInt(validFee) : null,
-                confirmations: item.height > 0 ? await getConfirmations(item.height, network) : 0,
-                blockHeight: item.height > 0 ? item.height : null,
-                blockTime,
-              },
+            await transactionRepository.create({
+              txid: item.tx_hash,
+              walletId: addressRecord.walletId,
+              addressId: addressRecord.id,
+              type: 'consolidation',
+              amount: validFee !== null ? BigInt(-validFee) : BigInt(0),
+              fee: validFee !== null ? BigInt(validFee) : null,
+              confirmations: item.height > 0 ? await getConfirmations(item.height, network) : 0,
+              blockHeight: item.height > 0 ? item.height : null,
+              blockTime,
             });
 
             transactionCount++;
@@ -289,16 +275,9 @@ export async function syncAddress(addressId: string): Promise<SyncAddressResult>
     }> = [];
 
     // Get existing UTXOs in batch
-    const existingUtxos = await prisma.uTXO.findMany({
-      where: {
-        OR: utxos.map(utxo => ({
-          txid: utxo.tx_hash,
-          vout: utxo.tx_pos,
-        })),
-      },
-      select: { txid: true, vout: true },
-    });
-    const existingUtxoSet = new Set(existingUtxos.map(u => `${u.txid}:${u.vout}`));
+    const existingUtxoSet = await utxoRepository.findExistingByOutpointsGlobal(
+      utxos.map(utxo => ({ txid: utxo.tx_hash, vout: utxo.tx_pos }))
+    );
 
     for (const utxo of utxos) {
       const key = `${utxo.tx_hash}:${utxo.tx_pos}`;
@@ -325,33 +304,22 @@ export async function syncAddress(addressId: string): Promise<SyncAddressResult>
 
     // Batch insert new UTXOs
     if (utxosToCreate.length > 0) {
-      await prisma.uTXO.createMany({
-        data: utxosToCreate,
-        skipDuplicates: true,
-      });
+      await utxoRepository.createMany(utxosToCreate, { skipDuplicates: true });
       utxoCount = utxosToCreate.length;
     }
 
     // Mark address as used if it has transactions
     if (history.length > 0 && !addressRecord.used) {
-      await prisma.address.update({
-        where: { id: addressId },
-        data: { used: true },
-      });
+      await addressRepository.markAsUsed(addressId);
     }
 
     // Store transaction inputs/outputs for newly created transactions (batch optimized)
     if (transactionCount > 0) {
       try {
-        const txsWithoutIO = await prisma.transaction.findMany({
-          where: {
-            walletId: addressRecord.walletId,
-            txid: { in: history.map(h => h.tx_hash) },
-            inputs: { none: {} },
-            outputs: { none: {} },
-          },
-          select: { id: true, txid: true, type: true },
-        });
+        const txsWithoutIO = await transactionRepository.findWithoutIO(
+          addressRecord.walletId,
+          history.map(h => h.tx_hash)
+        );
 
         if (txsWithoutIO.length > 0) {
           const txidsToFetch = txsWithoutIO.map(tx => tx.txid);
@@ -444,17 +412,17 @@ export async function syncAddress(addressId: string): Promise<SyncAddressResult>
           }
 
           if (txInputsToCreate.length > 0) {
-            await prisma.transactionInput.createMany({
-              data: txInputsToCreate,
-              skipDuplicates: true,
-            });
+            await transactionRepository.createManyInputs(
+              txInputsToCreate as unknown as Array<Record<string, unknown>>,
+              { skipDuplicates: true }
+            );
           }
 
           if (txOutputsToCreate.length > 0) {
-            await prisma.transactionOutput.createMany({
-              data: txOutputsToCreate,
-              skipDuplicates: true,
-            });
+            await transactionRepository.createManyOutputs(
+              txOutputsToCreate as unknown as Array<Record<string, unknown>>,
+              { skipDuplicates: true }
+            );
           }
 
           log.debug(`[BLOCKCHAIN] Stored I/O for ${txsWithoutIO.length} transactions (${txInputsToCreate.length} inputs, ${txOutputsToCreate.length} outputs)`);

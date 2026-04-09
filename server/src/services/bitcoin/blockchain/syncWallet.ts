@@ -6,7 +6,7 @@
  */
 
 import { getNodeClient } from '../nodeClient';
-import { db as prisma } from '../../../repositories/db';
+import { walletRepository, addressRepository } from '../../../repositories';
 import { createLogger } from '../../../utils/logger';
 import { walletLog } from '../../../websocket/notifications';
 import { executeSyncPipeline, defaultSyncPhases } from '../sync';
@@ -77,19 +77,12 @@ export async function syncWallet(walletId: string, depth = 0): Promise<SyncWalle
       };
     }
 
-    const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
+    const wallet = await walletRepository.findById(walletId);
     if (wallet) {
       const network = (wallet.network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
       const client = await getNodeClient(network);
 
-      const newAddresses = await prisma.address.findMany({
-        where: {
-          walletId,
-          used: false,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: result.stats.newAddressesGenerated,
-      });
+      const newAddresses = await addressRepository.findRecentUnused(walletId, result.stats.newAddressesGenerated);
 
       if (newAddresses.length > 0) {
         try {

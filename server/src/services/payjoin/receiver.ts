@@ -6,7 +6,7 @@
  * and returns a modified proposal PSBT with our input added.
  */
 
-import { db as prisma } from '../../repositories/db';
+import { addressRepository, utxoRepository } from '../../repositories';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import {
@@ -41,19 +41,7 @@ export async function processPayjoinRequest(
 ): Promise<PayjoinResult> {
   try {
     // Get address and wallet info
-    const address = await prisma.address.findUnique({
-      where: { id: addressId },
-      include: {
-        wallet: {
-          select: {
-            id: true,
-            network: true,
-            type: true,
-            scriptType: true,
-          },
-        },
-      },
-    });
+    const address = await addressRepository.findByIdWithWallet(addressId);
 
     if (!address) {
       log.warn('Payjoin request for unknown address', { addressId });
@@ -185,22 +173,9 @@ async function selectContributionUtxo(
   scriptPubKey: string;
 } | null> {
   // Get available UTXOs
-  const utxos = await prisma.uTXO.findMany({
-    where: {
-      walletId,
-      spent: false,
-      frozen: false,
-      confirmations: { gt: 0 },
-      draftLock: null, // Not locked by a draft
-    },
-    select: {
-      id: true,
-      txid: true,
-      vout: true,
-      amount: true,
-      scriptPubKey: true,
-    },
-    orderBy: { amount: 'asc' },
+  const utxos = await utxoRepository.findAvailableForSpending(walletId, {
+    minConfirmations: 1,
+    excludeDraftLocked: true,
   });
 
   if (utxos.length === 0) return null;

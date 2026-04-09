@@ -8,7 +8,7 @@
  * SECURITY: Requires AI_CONFIG_SECRET for authentication
  */
 
-import { db as prisma } from '../../repositories/db';
+import { systemSettingRepository } from '../../repositories';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { safeJsonParse, SystemSettingSchemas } from '../../utils/safeJson';
@@ -49,13 +49,7 @@ function hashConfig(config: AIConfig): string {
  */
 export async function getAIConfig(): Promise<AIConfig> {
   try {
-    const settings = await prisma.systemSetting.findMany({
-      where: {
-        key: {
-          in: ['aiEnabled', 'aiEndpoint', 'aiModel'],
-        },
-      },
-    });
+    const settings = await systemSettingRepository.findByKeys(['aiEnabled', 'aiEndpoint', 'aiModel']);
 
     const config: AIConfig = {
       enabled: false,

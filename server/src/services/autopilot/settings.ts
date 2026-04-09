@@ -5,8 +5,8 @@
  * Follows the same pattern as telegram/settings.ts.
  */
 
-import { Prisma } from '../../generated/prisma/client';
-import { db as prisma } from '../../repositories/db';
+import type { Prisma } from '../../generated/prisma/client';
+import { userRepository } from '../../repositories';
 import type { WalletAutopilotSettings, AutopilotConfig } from './types';
 import { DEFAULT_AUTOPILOT_SETTINGS } from './types';
 
@@ -17,10 +17,7 @@ export async function getWalletAutopilotSettings(
   userId: string,
   walletId: string
 ): Promise<WalletAutopilotSettings | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { preferences: true },
-  });
+  const user = await userRepository.findByIdWithSelect(userId, { preferences: true });
 
   if (!user) return null;
 
@@ -38,10 +35,7 @@ export async function updateWalletAutopilotSettings(
   walletId: string,
   settings: WalletAutopilotSettings
 ): Promise<void> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { preferences: true },
-  });
+  const user = await userRepository.findByIdWithSelect(userId, { preferences: true });
 
   if (!user) {
     throw new Error('User not found');
@@ -60,12 +54,7 @@ export async function updateWalletAutopilotSettings(
     },
   };
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      preferences: updatedPrefs as unknown as Prisma.InputJsonValue,
-    },
-  });
+  await userRepository.updatePreferences(userId, updatedPrefs as unknown as Prisma.InputJsonValue);
 }
 
 /**
@@ -76,32 +65,7 @@ export async function getEnabledAutopilotWallets(): Promise<
   Array<{ walletId: string; walletName: string; userId: string; settings: WalletAutopilotSettings }>
 > {
   // Find all users that have autopilot preferences set
-  const users = await prisma.user.findMany({
-    where: {
-      preferences: {
-        path: ['autopilot'],
-        not: Prisma.DbNull,
-      },
-    },
-    select: {
-      id: true,
-      preferences: true,
-      wallets: {
-        select: {
-          wallet: { select: { id: true, name: true } },
-        },
-      },
-      groupMemberships: {
-        select: {
-          group: {
-            select: {
-              wallets: { select: { id: true, name: true } },
-            },
-          },
-        },
-      },
-    },
-  });
+  const users = await userRepository.findWithAutopilotPreferences();
 
   const results: Array<{
     walletId: string;

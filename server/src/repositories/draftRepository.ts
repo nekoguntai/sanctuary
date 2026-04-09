@@ -255,6 +255,17 @@ export async function countByStatus(
   });
 }
 
+/**
+ * Delete multiple drafts by IDs (for sync reconciliation when UTXOs are spent)
+ */
+export async function deleteManyByIds(draftIds: string[]): Promise<number> {
+  if (draftIds.length === 0) return 0;
+  const result = await prisma.draftTransaction.deleteMany({
+    where: { id: { in: draftIds } },
+  });
+  return result.count;
+}
+
 // Export all functions as namespace
 export const draftRepository = {
   findByWalletId,
@@ -269,6 +280,7 @@ export const draftRepository = {
   deleteExpired,
   countByWalletId,
   countByStatus,
+  deleteManyByIds,
 };
 
 export default draftRepository;

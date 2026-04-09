@@ -4,7 +4,7 @@
  * Orchestrates the execution of sync phases in sequence.
  */
 
-import { db as prisma } from '../../../repositories/db';
+import { walletRepository, addressRepository } from '../../../repositories';
 import { getNodeClient } from '../nodeClient';
 import { getElectrumPool } from '../electrumPool';
 import { createLogger } from '../../../utils/logger';
@@ -35,7 +35,7 @@ export async function executeSyncPipeline(
   const startTime = Date.now();
 
   // Load wallet
-  const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
+  const wallet = await walletRepository.findById(walletId);
   if (!wallet) {
     throw new Error(`Wallet ${walletId} not found`);
   }
@@ -53,9 +53,7 @@ export async function executeSyncPipeline(
   const currentBlockHeight = await getBlockHeight(network);
 
   // Load all addresses for the wallet
-  const addresses = await prisma.address.findMany({
-    where: { walletId },
-  });
+  const addresses = await addressRepository.findByWalletId(walletId);
 
   if (addresses.length === 0) {
     walletLog(walletId, 'info', 'BLOCKCHAIN', 'No addresses to scan');

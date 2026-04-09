@@ -5,18 +5,11 @@ const mocks = vi.hoisted(() => ({
   systemSettingFindMany: vi.fn(),
 }));
 
-vi.mock('../../../src/repositories/db', () => {
-  const prisma = {
-    systemSetting: {
-      findMany: mocks.systemSettingFindMany,
-    },
-  };
-  return {
-    __esModule: true,
-    db: prisma,
-    default: prisma,
-  };
-});
+vi.mock('../../../src/repositories', () => ({
+  systemSettingRepository: {
+    findByKeys: mocks.systemSettingFindMany,
+  },
+}));
 
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({

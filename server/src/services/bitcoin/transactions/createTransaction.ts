@@ -13,7 +13,7 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import { getNetwork } from '../utils';
 import { RBF_SEQUENCE } from '../advancedTx';
-import { db as prisma } from '../../../repositories/db';
+import { walletRepository } from '../../../repositories';
 import { createLogger } from '../../../utils/logger';
 import { getDustThreshold } from '../estimation';
 import { isLegacyScriptType } from './helpers';
@@ -57,16 +57,7 @@ export async function createTransaction(
   const dustThreshold = await getDustThreshold();
 
   // Get wallet info including devices (for fingerprint)
-  const wallet = await prisma.wallet.findUnique({
-    where: { id: walletId },
-    include: {
-      devices: {
-        include: {
-          device: true,
-        },
-      },
-    },
-  });
+  const wallet = await walletRepository.findByIdWithSigningDevices(walletId);
 
   if (!wallet) {
     throw new Error('Wallet not found');

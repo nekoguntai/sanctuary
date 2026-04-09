@@ -161,6 +161,20 @@ export async function resolveUtxoRefs(
   });
 }
 
+/**
+ * Find locks for spent UTXOs with draft label info (for sync reconciliation)
+ */
+export async function findLocksByUtxoIdsWithDraftInfo(utxoIds: string[]) {
+  if (utxoIds.length === 0) return [];
+  return prisma.draftUtxoLock.findMany({
+    where: { utxoId: { in: utxoIds } },
+    select: {
+      draftId: true,
+      draft: { select: { id: true, label: true, recipient: true } },
+    },
+  });
+}
+
 // Export as namespace
 export const draftLockRepository = {
   lockUtxos,
@@ -170,6 +184,7 @@ export const draftLockRepository = {
   findByUtxoId,
   findConflicts,
   resolveUtxoRefs,
+  findLocksByUtxoIdsWithDraftInfo,
 };
 
 export default draftLockRepository;

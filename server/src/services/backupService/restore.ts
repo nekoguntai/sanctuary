@@ -5,7 +5,7 @@
  * encrypted field handling, and schema migration.
  */
 
-import { db as prisma } from '../../repositories/db';
+import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { migrationService } from '../migrationService';

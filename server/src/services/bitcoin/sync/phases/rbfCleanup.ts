@@ -6,7 +6,7 @@
  * software or prior syncs.
  */
 
-import { db as prisma } from '../../../../repositories/db';
+import { transactionRepository } from '../../../../repositories';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext } from '../types';
 
@@ -51,19 +51,7 @@ export async function rbfCleanupPhase(ctx: SyncContext): Promise<SyncContext> {
   const { walletId } = ctx;
 
   // Find pending transactions that have inputs stored
-  const pendingTxsWithInputs = await prisma.transaction.findMany({
-    where: {
-      walletId,
-      confirmations: 0,
-      rbfStatus: 'active',
-      inputs: { some: {} },
-    },
-    select: {
-      id: true,
-      txid: true,
-      inputs: { select: { txid: true, vout: true } },
-    },
-  });
+  const pendingTxsWithInputs = await transactionRepository.findPendingWithInputs(walletId);
 
   // Batch: collect all inputs from pending txs and find confirmed replacements in one query
   if (pendingTxsWithInputs.length > 0) {
@@ -71,21 +59,10 @@ export async function rbfCleanupPhase(ctx: SyncContext): Promise<SyncContext> {
     const pendingTxids = new Set(pendingTxsWithInputs.map(tx => tx.txid));
 
     // Single query: find all confirmed txs sharing any input with pending txs
-    const confirmedWithSharedInputs = await prisma.transaction.findMany({
-      where: {
-        walletId,
-        confirmations: { gt: 0 },
-        inputs: {
-          some: {
-            OR: allPendingInputs.map(i => ({ txid: i.txid, vout: i.vout })),
-          },
-        },
-      },
-      select: {
-        txid: true,
-        inputs: { select: { txid: true, vout: true } },
-      },
-    });
+    const confirmedWithSharedInputs = await transactionRepository.findConfirmedWithSharedInputs(
+      walletId,
+      allPendingInputs.map(i => ({ txid: i.txid, vout: i.vout }))
+    );
 
     // Build input→confirmed map and match pending txs in memory
     const inputToConfirmedTxid = buildInputToConfirmedMap(confirmedWithSharedInputs, pendingTxids);
@@ -94,12 +71,9 @@ export async function rbfCleanupPhase(ctx: SyncContext): Promise<SyncContext> {
       const replacementTxid = findReplacement(pendingTx, inputToConfirmedTxid);
 
       if (replacementTxid) {
-        await prisma.transaction.update({
-          where: { id: pendingTx.id },
-          data: {
-            rbfStatus: 'replaced',
-            replacedByTxid: replacementTxid,
-          },
+        await transactionRepository.updateRbfStatus(pendingTx.id, {
+          rbfStatus: 'replaced',
+          replacedByTxid: replacementTxid,
         });
 
         walletLog(
@@ -113,18 +87,7 @@ export async function rbfCleanupPhase(ctx: SyncContext): Promise<SyncContext> {
   }
 
   // Retroactive RBF linking: Find replaced transactions without replacedByTxid
-  const unlinkedReplacedTxs = await prisma.transaction.findMany({
-    where: {
-      walletId,
-      rbfStatus: 'replaced',
-      replacedByTxid: null,
-    },
-    select: {
-      id: true,
-      txid: true,
-      inputs: { select: { txid: true, vout: true } },
-    },
-  });
+  const unlinkedReplacedTxs = await transactionRepository.findUnlinkedReplaced(walletId);
 
   if (unlinkedReplacedTxs.length > 0) {
     const txsWithInputs = unlinkedReplacedTxs.filter(tx => tx.inputs.length > 0);
@@ -134,21 +97,10 @@ export async function rbfCleanupPhase(ctx: SyncContext): Promise<SyncContext> {
       const unlinkedTxids = new Set(txsWithInputs.map(tx => tx.txid));
 
       // Single query: find all confirmed txs sharing any input
-      const confirmedMatches = await prisma.transaction.findMany({
-        where: {
-          walletId,
-          confirmations: { gt: 0 },
-          inputs: {
-            some: {
-              OR: allUnlinkedInputs.map(i => ({ txid: i.txid, vout: i.vout })),
-            },
-          },
-        },
-        select: {
-          txid: true,
-          inputs: { select: { txid: true, vout: true } },
-        },
-      });
+      const confirmedMatches = await transactionRepository.findConfirmedWithSharedInputs(
+        walletId,
+        allUnlinkedInputs.map(i => ({ txid: i.txid, vout: i.vout }))
+      );
 
       // Build input→confirmed map and match in memory
       const inputToConfirmed = buildInputToConfirmedMap(confirmedMatches, unlinkedTxids);
@@ -157,9 +109,8 @@ export async function rbfCleanupPhase(ctx: SyncContext): Promise<SyncContext> {
         const replacementTxid = findReplacement(replacedTx, inputToConfirmed);
 
         if (replacementTxid) {
-          await prisma.transaction.update({
-            where: { id: replacedTx.id },
-            data: { replacedByTxid: replacementTxid },
+          await transactionRepository.updateRbfStatus(replacedTx.id, {
+            replacedByTxid: replacementTxid,
           });
 
           walletLog(

@@ -83,6 +83,7 @@ describe('Device Access Service', () => {
       mockPrismaClient.device.findFirst.mockResolvedValue({
         id: deviceId,
         groupId,
+        groupRole: 'viewer',
         group: {
           members: [{ userId }],
         },

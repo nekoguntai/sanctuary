@@ -6,7 +6,7 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import { db as prisma } from '../../../repositories/db';
+import { addressRepository } from '../../../repositories';
 import { createLogger } from '../../../utils/logger';
 import { generateDecoyAmounts } from '../psbtBuilder';
 import type { PendingOutput, UtxoSelection } from './types';
@@ -167,30 +167,16 @@ async function buildDecoyChangeOutputs(
   const pendingOutputs: PendingOutput[] = [];
 
   // Get multiple unused change addresses
-  const changeAddresses = await prisma.address.findMany({
-    where: {
-      walletId,
-      used: false,
-      derivationPath: {
-        contains: '/1/',
-      },
-    },
-    orderBy: { index: 'asc' },
-    take: numChangeOutputs,
-  });
+  const changeAddresses = await addressRepository.findUnusedChangeAddresses(walletId, numChangeOutputs);
 
   // Fallback to receiving addresses if not enough change addresses
   if (changeAddresses.length < numChangeOutputs) {
     const additionalNeeded = numChangeOutputs - changeAddresses.length;
-    const receivingAddresses = await prisma.address.findMany({
-      where: {
-        walletId,
-        used: false,
-        address: { notIn: changeAddresses.map(a => a.address) },
-      },
-      orderBy: { index: 'asc' },
-      take: additionalNeeded,
-    });
+    const receivingAddresses = await addressRepository.findUnusedExcluding(
+      walletId,
+      changeAddresses.map(a => a.address),
+      additionalNeeded
+    );
     changeAddresses.push(...receivingAddresses);
   }
 
@@ -245,28 +231,13 @@ async function buildDecoyChangeOutputs(
  * falls back to any unused receiving address.
  */
 export async function findChangeAddress(walletId: string): Promise<string> {
-  const existingChangeAddress = await prisma.address.findFirst({
-    where: {
-      walletId,
-      used: false,
-      derivationPath: {
-        contains: '/1/',
-      },
-    },
-    orderBy: { index: 'asc' },
-  });
+  const existingChangeAddress = await addressRepository.findNextUnusedChange(walletId);
 
   if (existingChangeAddress) {
     return existingChangeAddress.address;
   }
 
-  const receivingAddress = await prisma.address.findFirst({
-    where: {
-      walletId,
-      used: false,
-    },
-    orderBy: { index: 'asc' },
-  });
+  const receivingAddress = await addressRepository.findNextUnused(walletId);
 
   if (!receivingAddress) {
     throw new Error('No change address available');

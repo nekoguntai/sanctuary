@@ -233,6 +233,58 @@ export async function cleanupExpiredRevokedTokens(): Promise<number> {
 }
 
 /**
+ * Upsert a revoked token (create or update)
+ */
+export async function upsertRevokedToken(
+  jti: string,
+  expiresAt: Date,
+  userId?: string,
+  reason?: string
+): Promise<RevokedToken> {
+  return prisma.revokedToken.upsert({
+    where: { jti },
+    update: {
+      userId,
+      reason,
+      revokedAt: new Date(),
+      expiresAt,
+    },
+    create: {
+      jti,
+      userId,
+      reason,
+      expiresAt,
+    },
+  });
+}
+
+/**
+ * Find a revoked token by JTI
+ */
+export async function findRevokedTokenByJti(
+  jti: string
+): Promise<RevokedToken | null> {
+  return prisma.revokedToken.findUnique({
+    where: { jti },
+    select: { jti: true } as any,
+  }) as Promise<RevokedToken | null>;
+}
+
+/**
+ * Count all revoked tokens
+ */
+export async function countRevokedTokens(): Promise<number> {
+  return prisma.revokedToken.count();
+}
+
+/**
+ * Delete all revoked tokens
+ */
+export async function deleteAllRevokedTokens(): Promise<void> {
+  await prisma.revokedToken.deleteMany();
+}
+
+/**
  * Get session info (refresh tokens as sessions)
  */
 export interface SessionInfo {
@@ -299,6 +351,10 @@ export const sessionRepository = {
   isTokenRevoked,
   revokeJwt,
   cleanupExpiredRevokedTokens,
+  upsertRevokedToken,
+  findRevokedTokenByJti,
+  countRevokedTokens,
+  deleteAllRevokedTokens,
   getSessionsForUser,
 };
 

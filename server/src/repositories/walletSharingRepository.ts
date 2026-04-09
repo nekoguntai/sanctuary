@@ -181,6 +181,52 @@ export async function findWalletIdsByUserRole(
   return walletUsers.map(wu => wu.walletId);
 }
 
+/**
+ * Find all wallet users with their user preferences
+ * Used by notification services (AI insights, etc.)
+ */
+export async function findWalletUsersWithPreferences(walletId: string) {
+  return prisma.walletUser.findMany({
+    where: { walletId },
+    include: {
+      user: {
+        select: { id: true, preferences: true },
+      },
+    },
+  });
+}
+
+/**
+ * Find all wallet users with username info
+ * Used by mobile permission service
+ */
+export async function findWalletUsersWithUsername(walletId: string) {
+  return prisma.walletUser.findMany({
+    where: { walletId },
+    include: {
+      user: {
+        select: { id: true, username: true },
+      },
+    },
+  });
+}
+
+/**
+ * Find a wallet user by composite key (walletId + userId)
+ * Returns role info for permission checks
+ */
+export async function findWalletUserByCompositeKey(
+  walletId: string,
+  userId: string
+) {
+  return prisma.walletUser.findUnique({
+    where: {
+      walletId_userId: { walletId, userId },
+    },
+    select: { role: true },
+  });
+}
+
 // Export as namespace
 export const walletSharingRepository = {
   findWalletUser,
@@ -193,6 +239,9 @@ export const walletSharingRepository = {
   updateWalletGroupWithResult,
   getWalletSharingInfo,
   findWalletIdsByUserRole,
+  findWalletUsersWithPreferences,
+  findWalletUsersWithUsername,
+  findWalletUserByCompositeKey,
 };
 
 export default walletSharingRepository;

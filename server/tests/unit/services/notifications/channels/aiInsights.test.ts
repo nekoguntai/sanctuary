@@ -22,12 +22,13 @@ vi.mock('../../../../../src/utils/errors', () => ({
   getErrorMessage: (err: unknown) => (err instanceof Error ? err.message : String(err)),
 }));
 
-// Mock Prisma via repositories/db
-vi.mock('../../../../../src/repositories/db', () => ({
-  db: {
-    walletUser: {
-      findMany: vi.fn(),
-    },
+// Mock walletSharingRepository
+const { mockFindWalletUsersWithPreferences } = vi.hoisted(() => ({
+  mockFindWalletUsersWithPreferences: vi.fn(),
+}));
+vi.mock('../../../../../src/repositories', () => ({
+  walletSharingRepository: {
+    findWalletUsersWithPreferences: mockFindWalletUsersWithPreferences,
   },
 }));
 
@@ -37,11 +38,10 @@ vi.mock('../../../../../src/services/telegram/api', () => ({
 }));
 
 import { aiInsightsChannelHandler } from '../../../../../src/services/notifications/channels/aiInsights';
-import { db as prisma } from '../../../../../src/repositories/db';
 import * as telegramApi from '../../../../../src/services/telegram/api';
 import type { AIInsightNotification } from '../../../../../src/services/notifications/channels/types';
 
-const mockFindMany = vi.mocked(prisma.walletUser.findMany);
+const mockFindMany = mockFindWalletUsersWithPreferences;
 const mockSendTelegram = vi.mocked(telegramApi.sendTelegramMessage);
 
 function makeInsight(overrides?: Partial<AIInsightNotification>): AIInsightNotification {

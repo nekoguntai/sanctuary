@@ -1,17 +1,15 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
-const { mockPrisma } = vi.hoisted(() => ({
-  mockPrisma: {
-    user: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-      findMany: vi.fn(),
-    },
+const { mockUserRepo } = vi.hoisted(() => ({
+  mockUserRepo: {
+    findByIdWithSelect: vi.fn(),
+    updatePreferences: vi.fn(),
+    findWithAutopilotPreferences: vi.fn(),
   },
 }));
 
-vi.mock('../../../../src/repositories/db', () => ({
-  db: mockPrisma,
+vi.mock('../../../../src/repositories', () => ({
+  userRepository: mockUserRepo,
 }));
 
 import {
@@ -23,20 +21,20 @@ import {
 describe('autopilot settings service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (mockPrisma.user.findUnique as Mock).mockReset();
-    (mockPrisma.user.update as Mock).mockReset();
-    (mockPrisma.user.findMany as Mock).mockReset();
+    (mockUserRepo.findByIdWithSelect as Mock).mockReset();
+    (mockUserRepo.updatePreferences as Mock).mockReset();
+    (mockUserRepo.findWithAutopilotPreferences as Mock).mockReset();
   });
 
   describe('getWalletAutopilotSettings', () => {
     it('returns null when user does not exist', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce(null);
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce(null);
 
       await expect(getWalletAutopilotSettings('u1', 'w1')).resolves.toBeNull();
     });
 
     it('returns null when autopilot settings are missing', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce({
         preferences: { theme: 'dark' },
       });
 
@@ -44,7 +42,7 @@ describe('autopilot settings service', () => {
     });
 
     it('returns null when preferences is null', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce({
         preferences: null,
       });
 
@@ -52,7 +50,7 @@ describe('autopilot settings service', () => {
     });
 
     it('returns wallet-specific settings when present', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce({
         preferences: {
           autopilot: {
             wallets: {
@@ -84,7 +82,7 @@ describe('autopilot settings service', () => {
 
   describe('updateWalletAutopilotSettings', () => {
     it('throws when user does not exist', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce(null);
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce(null);
 
       await expect(
         updateWalletAutopilotSettings('missing', 'wallet-1', {
@@ -102,10 +100,10 @@ describe('autopilot settings service', () => {
     });
 
     it('initialises preferences from null when updating settings', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce({
         preferences: null,
       });
-      (mockPrisma.user.update as Mock).mockResolvedValueOnce({});
+      (mockUserRepo.updatePreferences as Mock).mockResolvedValueOnce({});
 
       await updateWalletAutopilotSettings('u1', 'wallet-new', {
         enabled: true,
@@ -119,25 +117,23 @@ describe('autopilot settings service', () => {
         maxUtxoSize: 0,
       });
 
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'u1' },
-        data: {
-          preferences: {
-            autopilot: {
-              wallets: {
-                'wallet-new': expect.objectContaining({ enabled: true }),
-              },
+      expect(mockUserRepo.updatePreferences).toHaveBeenCalledWith(
+        'u1',
+        {
+          autopilot: {
+            wallets: {
+              'wallet-new': expect.objectContaining({ enabled: true }),
             },
           },
         },
-      });
+      );
     });
 
     it('initialises wallets map when autopilot exists without wallets key', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce({
         preferences: { autopilot: {} },
       });
-      (mockPrisma.user.update as Mock).mockResolvedValueOnce({});
+      (mockUserRepo.updatePreferences as Mock).mockResolvedValueOnce({});
 
       await updateWalletAutopilotSettings('u1', 'wallet-new', {
         enabled: false,
@@ -151,22 +147,20 @@ describe('autopilot settings service', () => {
         maxUtxoSize: 0,
       });
 
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'u1' },
-        data: {
-          preferences: {
-            autopilot: {
-              wallets: {
-                'wallet-new': expect.objectContaining({ enabled: false }),
-              },
+      expect(mockUserRepo.updatePreferences).toHaveBeenCalledWith(
+        'u1',
+        {
+          autopilot: {
+            wallets: {
+              'wallet-new': expect.objectContaining({ enabled: false }),
             },
           },
         },
-      });
+      );
     });
 
     it('merges autopilot settings into existing user preferences', async () => {
-      (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({
+      (mockUserRepo.findByIdWithSelect as Mock).mockResolvedValueOnce({
         preferences: {
           language: 'en',
           autopilot: {
@@ -184,7 +178,7 @@ describe('autopilot settings service', () => {
           },
         },
       });
-      (mockPrisma.user.update as Mock).mockResolvedValueOnce({});
+      (mockUserRepo.updatePreferences as Mock).mockResolvedValueOnce({});
 
       await updateWalletAutopilotSettings('u1', 'wallet-new', {
         enabled: false,
@@ -198,36 +192,34 @@ describe('autopilot settings service', () => {
         maxUtxoSize: 0,
       });
 
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'u1' },
-        data: {
-          preferences: {
-            language: 'en',
-            autopilot: {
-              wallets: {
-                'wallet-existing': expect.any(Object),
-                'wallet-new': {
-                  enabled: false,
-                  maxFeeRate: 11,
-                  minUtxoCount: 5,
-                  dustThreshold: 7000,
-                  cooldownHours: 48,
-                  notifyTelegram: false,
-                  notifyPush: true,
-                  minDustCount: 0,
-                  maxUtxoSize: 0,
-                },
+      expect(mockUserRepo.updatePreferences).toHaveBeenCalledWith(
+        'u1',
+        {
+          language: 'en',
+          autopilot: {
+            wallets: {
+              'wallet-existing': expect.any(Object),
+              'wallet-new': {
+                enabled: false,
+                maxFeeRate: 11,
+                minUtxoCount: 5,
+                dustThreshold: 7000,
+                cooldownHours: 48,
+                notifyTelegram: false,
+                notifyPush: true,
+                minDustCount: 0,
+                maxUtxoSize: 0,
               },
             },
           },
         },
-      });
+      );
     });
   });
 
   describe('getEnabledAutopilotWallets', () => {
     it('falls back to "Unknown" when wallet name is empty', async () => {
-      (mockPrisma.user.findMany as Mock).mockResolvedValueOnce([
+      (mockUserRepo.findWithAutopilotPreferences as Mock).mockResolvedValueOnce([
         {
           id: 'u1',
           preferences: {
@@ -251,7 +243,7 @@ describe('autopilot settings service', () => {
     });
 
     it('returns only enabled wallets accessible by each user and applies defaults', async () => {
-      (mockPrisma.user.findMany as Mock).mockResolvedValueOnce([
+      (mockUserRepo.findWithAutopilotPreferences as Mock).mockResolvedValueOnce([
         {
           id: 'u1',
           preferences: {

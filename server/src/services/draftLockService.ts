@@ -11,8 +11,8 @@
  * - RBF drafts skip locking (they reuse same UTXOs as original tx)
  */
 
-import { db as prisma } from '../repositories/db';
 import { Prisma } from '../generated/prisma/client';
+import { draftLockRepository } from '../repositories';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 
@@ -73,81 +73,14 @@ export async function lockUtxosForDraft(
   }
 
   try {
-    // Create locks for all UTXOs atomically using a transaction
-    // Check and lock are done together to prevent TOCTOU race conditions
-    const lockResult = await prisma.$transaction(async (tx) => {
-      // First, remove any existing locks for this draft (in case of update)
-      await tx.draftUtxoLock.deleteMany({
-        where: { draftId },
-      });
-
-      // Check if any UTXOs are already locked by other drafts
-      // This check is now inside the transaction to prevent race conditions
-      const existingLocks = await tx.draftUtxoLock.findMany({
-        where: {
-          utxoId: { in: uniqueUtxoIds },
-          draftId: { not: draftId }, // Exclude our own draft
-        },
-        include: {
-          draft: {
-            select: { id: true, label: true },
-          },
-          utxo: {
-            select: { txid: true, vout: true },
-          },
-        },
-      });
-
-      if (existingLocks.length > 0) {
-        const failedUtxoIds = existingLocks.map(lock => lock.utxoId);
-        const lockedByDraftIds = [...new Set(existingLocks.map(lock => lock.draftId))];
-
-        log.warn(`Cannot lock UTXOs for draft ${draftId}: ${existingLocks.length} UTXOs already locked`, {
-          failedUtxoIds,
-          lockedByDraftIds,
-        });
-
-        return {
-          success: false,
-          lockedCount: 0,
-          failedUtxoIds,
-          lockedByDraftIds,
-        };
-      }
-
-      // Create new locks
-      const createdLocks = await tx.draftUtxoLock.createMany({
-        data: uniqueUtxoIds.map(utxoId => ({
-          draftId,
-          utxoId,
-        })),
-      });
-
-      if (createdLocks.count !== uniqueUtxoIds.length) {
-        const conflictingLocks = await tx.draftUtxoLock.findMany({
-          where: {
-            utxoId: { in: uniqueUtxoIds },
-            draftId: { not: draftId },
-          },
-        });
-
-        return {
-          success: false,
-          lockedCount: createdLocks.count,
-          failedUtxoIds: conflictingLocks.map(lock => lock.utxoId),
-          lockedByDraftIds: [...new Set(conflictingLocks.map(lock => lock.draftId))],
-        };
-      }
-
-      return {
-        success: true,
-        lockedCount: createdLocks.count,
-        failedUtxoIds: [],
-        lockedByDraftIds: [],
-      };
-    });
+    // Delegate to repository's atomic lock method
+    const lockResult = await draftLockRepository.lockUtxos(draftId, uniqueUtxoIds);
 
     if (!lockResult.success) {
+      log.warn(`Cannot lock UTXOs for draft ${draftId}: UTXOs already locked`, {
+        failedUtxoIds: lockResult.failedUtxoIds,
+        lockedByDraftIds: lockResult.lockedByDraftIds,
+      });
       return lockResult;
     }
 
@@ -163,16 +96,7 @@ export async function lockUtxosForDraft(
       let lockedByDraftIds: string[] = [];
 
       try {
-        const conflictingLocks = await prisma.draftUtxoLock.findMany({
-          where: {
-            utxoId: { in: uniqueUtxoIds },
-            draftId: { not: draftId },
-          },
-          select: {
-            utxoId: true,
-            draftId: true,
-          },
-        });
+        const conflictingLocks = await draftLockRepository.findConflicts(uniqueUtxoIds, draftId);
 
         if (conflictingLocks.length > 0) {
           failedUtxoIds = [...new Set(conflictingLocks.map(lock => lock.utxoId))];
@@ -202,15 +126,13 @@ export async function lockUtxosForDraft(
  */
 export async function unlockUtxosForDraft(draftId: string): Promise<number> {
   try {
-    const result = await prisma.draftUtxoLock.deleteMany({
-      where: { draftId },
-    });
+    const count = await draftLockRepository.deleteByDraftId(draftId);
 
-    if (result.count > 0) {
-      log.debug(`Unlocked ${result.count} UTXOs for draft ${draftId}`);
+    if (count > 0) {
+      log.debug(`Unlocked ${count} UTXOs for draft ${draftId}`);
     }
 
-    return result.count;
+    return count;
   } catch (error) {
     log.error(`Failed to unlock UTXOs for draft ${draftId}`, { error: getErrorMessage(error) });
     throw error;
@@ -228,20 +150,7 @@ export async function getAvailableUtxoIds(
     return { available: [], locked: [] };
   }
 
-  const locks = await prisma.draftUtxoLock.findMany({
-    where: {
-      utxoId: { in: utxoIds },
-      ...(excludeDraftId ? { draftId: { not: excludeDraftId } } : {}),
-    },
-    include: {
-      draft: {
-        select: { id: true, label: true },
-      },
-      utxo: {
-        select: { id: true, txid: true, vout: true },
-      },
-    },
-  });
+  const locks = await draftLockRepository.findByUtxoIds(utxoIds, excludeDraftId);
 
   const lockedUtxoIds = new Set(locks.map(lock => lock.utxoId));
   const available = utxoIds.filter(id => !lockedUtxoIds.has(id));
@@ -262,17 +171,7 @@ export async function getAvailableUtxoIds(
  * Get all locks for a specific draft
  */
 export async function getLocksForDraft(draftId: string): Promise<UtxoLockInfo[]> {
-  const locks = await prisma.draftUtxoLock.findMany({
-    where: { draftId },
-    include: {
-      draft: {
-        select: { id: true, label: true },
-      },
-      utxo: {
-        select: { id: true, txid: true, vout: true },
-      },
-    },
-  });
+  const locks = await draftLockRepository.findByDraftId(draftId);
 
   return locks.map(lock => ({
     utxoId: lock.utxoId,
@@ -288,10 +187,7 @@ export async function getLocksForDraft(draftId: string): Promise<UtxoLockInfo[]>
  * Check if a UTXO is locked by any draft
  */
 export async function isUtxoLocked(utxoId: string): Promise<{ locked: boolean; draftId?: string }> {
-  const lock = await prisma.draftUtxoLock.findUnique({
-    where: { utxoId },
-    select: { draftId: true },
-  });
+  const lock = await draftLockRepository.findByUtxoId(utxoId);
 
   return {
     locked: !!lock,
@@ -318,13 +214,7 @@ export async function resolveUtxoIds(
   });
 
   // Find UTXOs by txid and vout
-  const utxos = await prisma.uTXO.findMany({
-    where: {
-      walletId,
-      OR: refs.map(ref => ({ txid: ref.txid, vout: ref.vout })),
-    },
-    select: { id: true, txid: true, vout: true },
-  });
+  const utxos = await draftLockRepository.resolveUtxoRefs(walletId, refs);
 
   // Map found UTXOs
   const foundMap = new Map<string, string>();

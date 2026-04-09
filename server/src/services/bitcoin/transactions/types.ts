@@ -5,7 +5,7 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import { db as prisma } from '../../../repositories/db';
+import prisma from '../../../models/prisma';
 
 /**
  * Prisma transaction client type for use in nested $transaction blocks.

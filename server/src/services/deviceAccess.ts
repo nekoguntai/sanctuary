@@ -4,7 +4,7 @@
  * Business logic for device access control and sharing
  */
 
-import { db as prisma } from '../repositories/db';
+import { deviceRepository, userRepository } from '../repositories';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('DEVICE_ACCESS:SVC');
@@ -71,25 +71,17 @@ export interface DeviceWithAccess {
  */
 export async function getUserDeviceRole(deviceId: string, userId: string): Promise<DeviceRole> {
   // Check direct user access first (via DeviceUser table)
-  const deviceUser = await prisma.deviceUser.findFirst({
-    where: { deviceId, userId },
-  });
+  const deviceUser = await deviceRepository.findDeviceUser(deviceId, userId);
 
   if (deviceUser) {
     return deviceUser.role as DeviceRole;
   }
 
   // Check group access
-  const device = await prisma.device.findFirst({
-    where: {
-      id: deviceId,
-      group: { members: { some: { userId } } },
-    },
-    select: { groupRole: true },
-  });
+  const groupRole = await deviceRepository.findGroupRoleByMembership(deviceId, userId);
 
-  if (device) {
-    return device.groupRole as DeviceRole;
+  if (groupRole) {
+    return groupRole as DeviceRole;
   }
 
   return null;
@@ -133,62 +125,7 @@ export async function checkDeviceAccessWithRole(
  */
 export async function getUserAccessibleDevices(userId: string): Promise<DeviceWithAccess[]> {
   // Single query combining direct access and group access
-  const devices = await prisma.device.findMany({
-    where: {
-      OR: [
-        // Direct access via DeviceUser
-        { users: { some: { userId } } },
-        // Group access (user is member of device's group)
-        {
-          groupId: { not: null },
-          group: { members: { some: { userId } } },
-        },
-      ],
-    },
-    include: {
-      // Only load needed model fields
-      model: {
-        select: {
-          id: true,
-          slug: true,
-          name: true,
-        },
-      },
-      // Get all device accounts (for filtering by wallet type compatibility)
-      accounts: {
-        select: {
-          id: true,
-          purpose: true,
-          scriptType: true,
-          derivationPath: true,
-          xpub: true,
-        },
-      },
-      // Get associated wallets with basic info for display
-      wallets: {
-        select: {
-          wallet: {
-            select: {
-              id: true,
-              name: true,
-              type: true,
-              scriptType: true,
-            },
-          },
-        },
-      },
-      // Get user's role for this device
-      users: {
-        where: { userId },
-        select: { role: true },
-      },
-      // Get device owner's username for "shared by" display
-      user: {
-        select: { username: true },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  const devices = await deviceRepository.findAccessibleByUser(userId);
 
   // Format devices with access info
   return devices.map((device) => {
@@ -231,21 +168,7 @@ export async function getDeviceShareInfo(deviceId: string): Promise<{
   group: { id: string; name: string } | null;
   users: Array<{ id: string; username: string; role: string }>;
 }> {
-  const device = await prisma.device.findUnique({
-    where: { id: deviceId },
-    include: {
-      group: {
-        select: { id: true, name: true },
-      },
-      users: {
-        include: {
-          user: {
-            select: { id: true, username: true },
-          },
-        },
-      },
-    },
-  });
+  const device = await deviceRepository.findShareInfo(deviceId);
 
   if (!device) {
     return { group: null, users: [] };
@@ -276,30 +199,20 @@ export async function shareDeviceWithUser(
   }
 
   // Check if target user exists
-  const targetUser = await prisma.user.findUnique({
-    where: { id: targetUserId },
-  });
+  const targetUser = await userRepository.findById(targetUserId);
   if (!targetUser) {
     return { success: false, message: 'User not found' };
   }
 
   // Check if already shared
-  const existing = await prisma.deviceUser.findFirst({
-    where: { deviceId, userId: targetUserId },
-  });
+  const existing = await deviceRepository.findDeviceUser(deviceId, targetUserId);
 
   if (existing) {
     return { success: true, message: 'Device already shared with this user' };
   }
 
   // Create share record
-  await prisma.deviceUser.create({
-    data: {
-      deviceId,
-      userId: targetUserId,
-      role: 'viewer',
-    },
-  });
+  await deviceRepository.createDeviceUser(deviceId, targetUserId, 'viewer');
 
   log.info('Device shared with user', { deviceId, targetUserId, sharedBy: ownerId });
 
@@ -321,9 +234,7 @@ export async function removeUserFromDevice(
   }
 
   // Find the access record
-  const deviceUser = await prisma.deviceUser.findFirst({
-    where: { deviceId, userId: targetUserId },
-  });
+  const deviceUser = await deviceRepository.findDeviceUser(deviceId, targetUserId);
 
   if (!deviceUser) {
     return { success: false, message: 'User does not have access to this device' };
@@ -335,9 +246,7 @@ export async function removeUserFromDevice(
   }
 
   // Delete access record
-  await prisma.deviceUser.delete({
-    where: { id: deviceUser.id },
-  });
+  await deviceRepository.deleteDeviceUser(deviceUser.id);
 
   log.info('User removed from device', { deviceId, targetUserId, removedBy: ownerId });
 
@@ -361,23 +270,16 @@ export async function shareDeviceWithGroup(
   // If groupId provided, verify group exists
   let groupName: string | null = null;
   if (groupId) {
-    const group = await prisma.group.findUnique({
-      where: { id: groupId },
-      select: { name: true },
-    });
-    if (!group) {
+    groupName = await deviceRepository.findGroupName(groupId);
+    if (!groupName) {
       return { success: false, message: 'Group not found', groupName: null };
     }
-    groupName = group.name;
   }
 
   // Update device's group
-  await prisma.device.update({
-    where: { id: deviceId },
-    data: {
-      groupId: groupId,
-      groupRole: 'viewer',
-    },
+  await deviceRepository.update(deviceId, {
+    groupId: groupId,
+    groupRole: 'viewer',
   });
 
   log.info('Device group sharing updated', { deviceId, groupId, updatedBy: ownerId });
@@ -398,25 +300,11 @@ export async function getDevicesToShareForWallet(
   targetUserId: string
 ): Promise<Array<{ id: string; label: string; fingerprint: string }>> {
   // Batch fetch: get all groups the target user is a member of (avoids N+1 queries)
-  const userGroupMemberships = await prisma.groupMember.findMany({
-    where: { userId: targetUserId },
-    select: { groupId: true },
-  });
-  const userGroupIds = new Set(userGroupMemberships.map((m) => m.groupId));
+  const userGroupIdsList = await deviceRepository.findUserGroupIds(targetUserId);
+  const userGroupIds = new Set(userGroupIdsList);
 
   // Get all devices associated with the wallet
-  const walletDevices = await prisma.walletDevice.findMany({
-    where: { walletId },
-    include: {
-      device: {
-        include: {
-          users: {
-            where: { userId: targetUserId },
-          },
-        },
-      },
-    },
-  });
+  const walletDevices = await deviceRepository.findWalletDevicesWithUserAccess(walletId, targetUserId);
 
   // Filter to devices the target user doesn't have access to
   const devicesToShare: Array<{ id: string; label: string; fingerprint: string }> = [];

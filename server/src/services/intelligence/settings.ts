@@ -5,7 +5,7 @@
  * Stored in user.preferences.intelligence (same pattern as autopilot/settings.ts).
  */
 
-import { db as prisma } from '../../repositories/db';
+import { userRepository } from '../../repositories';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import type { WalletIntelligenceSettings, IntelligenceConfig } from './types';
@@ -21,10 +21,7 @@ export async function getWalletIntelligenceSettings(
   walletId: string
 ): Promise<WalletIntelligenceSettings> {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { preferences: true },
-    });
+    const user = await userRepository.findByIdWithSelect(userId, { preferences: true });
 
     if (!user?.preferences) return { ...DEFAULT_INTELLIGENCE_SETTINGS };
 
@@ -55,10 +52,7 @@ export async function updateWalletIntelligenceSettings(
   walletId: string,
   settings: Partial<WalletIntelligenceSettings>
 ): Promise<WalletIntelligenceSettings> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { preferences: true },
-  });
+  const user = await userRepository.findByIdWithSelect(userId, { preferences: true });
 
   const prefs = (user?.preferences as Record<string, unknown>) ?? {};
   const intelligence = (prefs.intelligence as IntelligenceConfig) ?? { wallets: {} };
@@ -76,10 +70,7 @@ export async function updateWalletIntelligenceSettings(
   intelligence.wallets[walletId] = updated;
   prefs.intelligence = intelligence;
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { preferences: prefs as any },
-  });
+  await userRepository.updatePreferences(userId, prefs as any);
 
   return updated;
 }
@@ -100,17 +91,7 @@ export async function getEnabledIntelligenceWallets(): Promise<
 
   try {
     // Find all users with their wallet associations
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        preferences: true,
-        wallets: {
-          select: {
-            wallet: { select: { id: true, name: true } },
-          },
-        },
-      },
-    });
+    const users = await userRepository.findAllWithWalletAssociations();
 
     for (const user of users) {
       if (!user.preferences) continue;

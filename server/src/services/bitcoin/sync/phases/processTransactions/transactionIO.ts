@@ -5,7 +5,7 @@
  * new transactions are created. Also triggers RBF detection.
  */
 
-import { db as prisma } from '../../../../../repositories/db';
+import { transactionRepository } from '../../../../../repositories';
 import { createLogger } from '../../../../../utils/logger';
 import type { SyncContext, TransactionCreateData, TxInputCreateData, TxOutputCreateData } from '../../types';
 import { detectRBFReplacements } from './rbfDetection';
@@ -22,13 +22,11 @@ export async function storeTransactionIO(
   const { walletId, txDetailsCache, walletAddressSet, addressToDerivationPath } = ctx;
 
   try {
-    const createdTxRecords = await prisma.transaction.findMany({
-      where: {
-        walletId,
-        txid: { in: newTransactions.map(tx => tx.txid) },
-      },
-      select: { id: true, txid: true, type: true },
-    });
+    const createdTxRecords = await transactionRepository.findByWalletIdAndTxids(
+      walletId,
+      newTransactions.map(tx => tx.txid),
+      { id: true, txid: true, type: true }
+    );
 
     const txInputsToCreate: TxInputCreateData[] = [];
     const txOutputsToCreate: TxOutputCreateData[] = [];
@@ -114,20 +112,20 @@ export async function storeTransactionIO(
     }
 
     if (txInputsToCreate.length > 0) {
-      await prisma.transactionInput.createMany({
-        data: txInputsToCreate,
-        skipDuplicates: true,
-      });
+      await transactionRepository.createManyInputs(
+        txInputsToCreate as unknown as Array<Record<string, unknown>>,
+        { skipDuplicates: true }
+      );
 
       // RBF detection
       await detectRBFReplacements(walletId, createdTxRecords, newTransactions, txInputsToCreate);
     }
 
     if (txOutputsToCreate.length > 0) {
-      await prisma.transactionOutput.createMany({
-        data: txOutputsToCreate,
-        skipDuplicates: true,
-      });
+      await transactionRepository.createManyOutputs(
+        txOutputsToCreate as unknown as Array<Record<string, unknown>>,
+        { skipDuplicates: true }
+      );
     }
   } catch (ioError) {
     log.warn(`[SYNC] Failed to store transaction inputs/outputs: ${ioError}`);

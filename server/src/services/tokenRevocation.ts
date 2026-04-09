@@ -19,7 +19,7 @@
  * 3. In auth middleware, call isTokenRevoked(jti)
  */
 
-import { db as prisma } from '../repositories/db';
+import { sessionRepository } from '../repositories';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 import { getNamespacedCache } from '../infrastructure/redis';
@@ -76,21 +76,7 @@ export async function revokeToken(
     const cache = getRevocationCache();
     await cache.set<CachedRevocationStatus>(jti, { revoked: true }, CACHE_TTL_SECONDS);
 
-    await prisma.revokedToken.upsert({
-      where: { jti },
-      update: {
-        userId,
-        reason,
-        revokedAt: new Date(),
-        expiresAt,
-      },
-      create: {
-        jti,
-        userId,
-        reason,
-        expiresAt,
-      },
-    });
+    await sessionRepository.upsertRevokedToken(jti, expiresAt, userId, reason);
     log.debug('Token revoked', { jti: jti.substring(0, 8) + '...', reason });
   } catch (error) {
     log.error('Failed to revoke token', { error: getErrorMessage(error), jti: jti.substring(0, 8) + '...' });
@@ -123,10 +109,7 @@ export async function isTokenRevoked(jti: string): Promise<boolean> {
   }
 
   try {
-    const revoked = await prisma.revokedToken.findUnique({
-      where: { jti },
-      select: { jti: true },
-    });
+    const revoked = await sessionRepository.findRevokedTokenByJti(jti);
 
     const isRevoked = revoked !== null;
 
@@ -150,7 +133,7 @@ export async function isTokenRevoked(jti: string): Promise<boolean> {
  */
 export async function getRevokedTokenCount(): Promise<number> {
   try {
-    return await prisma.revokedToken.count();
+    return await sessionRepository.countRevokedTokens();
   } catch (error) {
     log.error('Failed to get revoked token count', { error: getErrorMessage(error) });
     return 0;
@@ -163,16 +146,10 @@ export async function getRevokedTokenCount(): Promise<number> {
  */
 async function cleanupExpiredEntries(): Promise<void> {
   try {
-    const result = await prisma.revokedToken.deleteMany({
-      where: {
-        expiresAt: {
-          lt: new Date(),
-        },
-      },
-    });
+    const count = await sessionRepository.cleanupExpiredRevokedTokens();
 
-    if (result.count > 0) {
-      log.debug('Cleaned up expired revocation entries', { count: result.count });
+    if (count > 0) {
+      log.debug('Cleaned up expired revocation entries', { count });
     }
   } catch (error) {
     log.error('Failed to cleanup expired tokens', { error: getErrorMessage(error) });
@@ -191,12 +168,10 @@ export async function revokeAllUserTokens(userId: string, reason?: string): Prom
 
   try {
     // Delete all refresh tokens for the user
-    const result = await prisma.refreshToken.deleteMany({
-      where: { userId },
-    });
+    const count = await sessionRepository.revokeAllUserTokens(userId);
 
-    log.info('Revoked all user tokens', { userId, count: result.count });
-    return result.count;
+    log.info('Revoked all user tokens', { userId, count });
+    return count;
   } catch (error) {
     log.error('Failed to revoke all user tokens', { error: getErrorMessage(error), userId });
     throw error;
@@ -208,7 +183,7 @@ export async function revokeAllUserTokens(userId: string, reason?: string): Prom
  */
 export async function clearAllRevokedTokens(): Promise<void> {
   try {
-    await prisma.revokedToken.deleteMany();
+    await sessionRepository.deleteAllRevokedTokens();
     log.debug('All revoked tokens cleared');
   } catch (error) {
     log.error('Failed to clear all revoked tokens', { error: getErrorMessage(error) });

@@ -8,7 +8,7 @@
  */
 
 import { estimateTransactionSize, calculateFee } from '../utils';
-import { db as prisma } from '../../../repositories/db';
+import { utxoRepository } from '../../../repositories';
 import { selectUTXOs, UTXOSelectionStrategy } from '../utxoSelection';
 import type { UtxoSelection } from './types';
 
@@ -66,13 +66,7 @@ async function selectUtxosForSendMax(
   feeRate: number,
   selectedUtxoIds?: string[]
 ): Promise<{ effectiveAmount: number; selection: UtxoSelection }> {
-  let utxos = await prisma.uTXO.findMany({
-    where: {
-      walletId,
-      spent: false,
-      frozen: false,
-    },
-  });
+  let utxos = await utxoRepository.findUnspent(walletId, { excludeFrozen: true });
 
   if (selectedUtxoIds && selectedUtxoIds.length > 0) {
     utxos = utxos.filter((utxo) =>
@@ -119,14 +113,7 @@ async function selectUtxosForSubtractFees(
   dustThreshold: number,
   selectedUtxoIds?: string[]
 ): Promise<{ effectiveAmount: number; selection: UtxoSelection }> {
-  let utxos = await prisma.uTXO.findMany({
-    where: {
-      walletId,
-      spent: false,
-      frozen: false,
-    },
-    orderBy: { amount: 'desc' },
-  });
+  let utxos = await utxoRepository.findUnspent(walletId, { excludeFrozen: true });
 
   if (selectedUtxoIds && selectedUtxoIds.length > 0) {
     utxos = utxos.filter((utxo) =>

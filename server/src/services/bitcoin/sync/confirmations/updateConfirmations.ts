@@ -6,8 +6,7 @@
  * for milestone notifications.
  */
 
-import { db as prisma } from '../../../../repositories/db';
-import { systemSettingRepository } from '../../../../repositories';
+import { walletRepository, transactionRepository, systemSettingRepository } from '../../../../repositories';
 import { DEFAULT_DEEP_CONFIRMATION_THRESHOLD } from '../../../../constants';
 import { getBlockHeight } from '../../utils/blockHeight';
 import { SystemSettingSchemas } from '../../../../utils/safeJson';
@@ -20,29 +19,19 @@ import type { ConfirmationUpdate } from './types';
  */
 export async function updateTransactionConfirmations(walletId: string): Promise<ConfirmationUpdate[]> {
   // Get wallet to determine network for correct block height
-  const wallet = await prisma.wallet.findUnique({
-    where: { id: walletId },
-    select: { network: true },
-  });
-  if (!wallet) return [];
+  const network = await walletRepository.findNetwork(walletId);
+  if (network === null) return [];
 
-  const network = (wallet.network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
+  const castNetwork = (network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
 
   // Get deep confirmation threshold from settings
   const deepConfirmationThreshold = await systemSettingRepository.getParsed('deepConfirmationThreshold', SystemSettingSchemas.number, DEFAULT_DEEP_CONFIRMATION_THRESHOLD);
 
-  const transactions = await prisma.transaction.findMany({
-    where: {
-      walletId,
-      confirmations: { lt: deepConfirmationThreshold }, // Only update transactions below deep confirmation threshold
-      blockHeight: { not: null },
-    },
-    select: { id: true, txid: true, blockHeight: true, confirmations: true },
-  });
+  const transactions = await transactionRepository.findBelowConfirmationThreshold(walletId, deepConfirmationThreshold);
 
   if (transactions.length === 0) return [];
 
-  const currentHeight = await getBlockHeight(network);
+  const currentHeight = await getBlockHeight(castNetwork);
 
   // Calculate new confirmations and collect updates
   const updates: Array<{ id: string; txid: string; oldConfirmations: number; newConfirmations: number }> = [];
@@ -63,16 +52,16 @@ export async function updateTransactionConfirmations(walletId: string): Promise<
 
   // Batch update using chunked transactions to avoid long locks
   if (updates.length > 0) {
-    await executeInChunks(updates, (u) =>
-      prisma.transaction.update({
-        where: { id: u.id },
+    await executeInChunks(
+      updates.map(u => ({
+        id: u.id,
         data: {
           confirmations: u.newConfirmations,
           // When a transaction transitions from 0 to confirmed, update rbfStatus
           // to 'confirmed' to prevent cleanup logic from incorrectly marking it as replaced
           ...(u.oldConfirmations === 0 && u.newConfirmations > 0 ? { rbfStatus: 'confirmed' } : {}),
         },
-      }),
+      })),
       walletId
     );
   }

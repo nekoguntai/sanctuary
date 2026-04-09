@@ -32,11 +32,10 @@
  * ```
  */
 
-import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { ForbiddenError, NotFoundError } from '../../errors';
-import { mobilePermissionRepository } from '../../repositories';
+import { mobilePermissionRepository, walletSharingRepository } from '../../repositories';
 import type { MobilePermission } from '../../generated/prisma/client';
 import {
   type MobileAction,
@@ -373,14 +372,7 @@ class MobilePermissionService {
     }
 
     // Get all wallet users
-    const walletUsers = await prisma.walletUser.findMany({
-      where: { walletId },
-      include: {
-        user: {
-          select: { id: true, username: true },
-        },
-      },
-    });
+    const walletUsers = await walletSharingRepository.findWalletUsersWithUsername(walletId);
 
     // Batch fetch all mobile permissions for this wallet's users
     const userIds = walletUsers.map((wu) => wu.userId);
@@ -443,12 +435,7 @@ class MobilePermissionService {
    * Get user's role for a wallet
    */
   private async getWalletRole(walletId: string, userId: string): Promise<WalletRole | null> {
-    const walletUser = await prisma.walletUser.findUnique({
-      where: {
-        walletId_userId: { walletId, userId },
-      },
-      select: { role: true },
-    });
+    const walletUser = await walletSharingRepository.findWalletUserByCompositeKey(walletId, userId);
 
     if (!walletUser) return null;
 

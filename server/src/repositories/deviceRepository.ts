@@ -538,6 +538,158 @@ export async function findManufacturers() {
   return manufacturers.map(m => m.manufacturer);
 }
 
+/**
+ * Find a DeviceUser record for a specific device and user
+ */
+export async function findDeviceUser(
+  deviceId: string,
+  userId: string
+) {
+  return prisma.deviceUser.findFirst({
+    where: { deviceId, userId },
+  });
+}
+
+/**
+ * Find a device's group role via group membership
+ */
+export async function findGroupRoleByMembership(
+  deviceId: string,
+  userId: string
+): Promise<string | null> {
+  const device = await prisma.device.findFirst({
+    where: {
+      id: deviceId,
+      group: { members: { some: { userId } } },
+    },
+    select: { groupRole: true },
+  });
+  return device?.groupRole ?? null;
+}
+
+/**
+ * Find all devices accessible by user (owned + shared via user + shared via group)
+ * with full details for listing
+ */
+export async function findAccessibleByUser(userId: string) {
+  return prisma.device.findMany({
+    where: {
+      OR: [
+        { users: { some: { userId } } },
+        {
+          groupId: { not: null },
+          group: { members: { some: { userId } } },
+        },
+      ],
+    },
+    include: {
+      model: { select: { id: true, slug: true, name: true } },
+      accounts: {
+        select: {
+          id: true,
+          purpose: true,
+          scriptType: true,
+          derivationPath: true,
+          xpub: true,
+        },
+      },
+      wallets: {
+        select: {
+          wallet: {
+            select: { id: true, name: true, type: true, scriptType: true },
+          },
+        },
+      },
+      users: {
+        where: { userId },
+        select: { role: true },
+      },
+      user: { select: { username: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+/**
+ * Find device sharing info (group + users)
+ */
+export async function findShareInfo(deviceId: string) {
+  return prisma.device.findUnique({
+    where: { id: deviceId },
+    include: {
+      group: { select: { id: true, name: true } },
+      users: {
+        include: {
+          user: { select: { id: true, username: true } },
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Delete a DeviceUser record by its ID
+ */
+export async function deleteDeviceUser(id: string): Promise<void> {
+  await prisma.deviceUser.delete({ where: { id } });
+}
+
+/**
+ * Create a DeviceUser record with a specific role
+ */
+export async function createDeviceUser(
+  deviceId: string,
+  userId: string,
+  role: string
+) {
+  return prisma.deviceUser.create({
+    data: { deviceId, userId, role },
+  });
+}
+
+/**
+ * Find a group by ID (name only)
+ */
+export async function findGroupName(groupId: string): Promise<string | null> {
+  const group = await prisma.group.findUnique({
+    where: { id: groupId },
+    select: { name: true },
+  });
+  return group?.name ?? null;
+}
+
+/**
+ * Find group memberships for a user
+ */
+export async function findUserGroupIds(userId: string): Promise<string[]> {
+  const memberships = await prisma.groupMember.findMany({
+    where: { userId },
+    select: { groupId: true },
+  });
+  return memberships.map(m => m.groupId);
+}
+
+/**
+ * Find wallet devices with device user info for a target user
+ */
+export async function findWalletDevicesWithUserAccess(
+  walletId: string,
+  targetUserId: string
+) {
+  return prisma.walletDevice.findMany({
+    where: { walletId },
+    include: {
+      device: {
+        include: {
+          users: {
+            where: { userId: targetUserId },
+          },
+        },
+      },
+    },
+  });
+}
+
 // Export as namespace
 export const deviceRepository = {
   findById,
@@ -571,6 +723,16 @@ export const deviceRepository = {
   findHardwareModel,
   findHardwareModels,
   findManufacturers,
+  // Access control methods
+  findDeviceUser,
+  findGroupRoleByMembership,
+  findAccessibleByUser,
+  findShareInfo,
+  deleteDeviceUser,
+  createDeviceUser,
+  findGroupName,
+  findUserGroupIds,
+  findWalletDevicesWithUserAccess,
 };
 
 export default deviceRepository;

@@ -5,7 +5,7 @@
  * Also logs the total value of new UTXOs found.
  */
 
-import { db as prisma } from '../../../../repositories/db';
+import { utxoRepository } from '../../../../repositories';
 import { createLogger } from '../../../../utils/logger';
 import { getErrorMessage } from '../../../../utils/errors';
 import { walletLog } from '../../../../websocket/notifications';
@@ -32,21 +32,7 @@ export async function insertUtxosPhase(ctx: SyncContext): Promise<SyncContext> {
     return { txid, vout: parseInt(voutStr, 10) };
   });
 
-  const existingUtxoSet = new Set<string>();
-  const CHUNK_SIZE = 500;
-  for (let i = 0; i < keysToCheck.length; i += CHUNK_SIZE) {
-    const chunk = keysToCheck.slice(i, i + CHUNK_SIZE);
-    const existing = await prisma.uTXO.findMany({
-      where: {
-        walletId,
-        OR: chunk.map(k => ({ txid: k.txid, vout: k.vout })),
-      },
-      select: { txid: true, vout: true },
-    });
-    for (const u of existing) {
-      existingUtxoSet.add(`${u.txid}:${u.vout}`);
-    }
-  }
+  const existingUtxoSet = await utxoRepository.findExistingByOutpoints(walletId, keysToCheck);
 
   // Process UTXO data from context
   for (const key of ctx.allUtxoKeys) {
@@ -99,10 +85,7 @@ export async function insertUtxosPhase(ctx: SyncContext): Promise<SyncContext> {
   if (utxosToCreate.length > 0) {
     log.debug(`[SYNC] Inserting ${utxosToCreate.length} UTXOs...`);
 
-    await prisma.uTXO.createMany({
-      data: utxosToCreate,
-      skipDuplicates: true,
-    });
+    await utxoRepository.createMany(utxosToCreate, { skipDuplicates: true });
 
     ctx.stats.utxosCreated = utxosToCreate.length;
 

@@ -43,7 +43,7 @@
  */
 
 import { getConfig, type FeatureFlags, type FeatureFlagKey, type ExperimentalFeatures } from '../config';
-import { db as prisma } from '../repositories/db';
+import { featureFlagRepository } from '../repositories';
 import { getDistributedCache, getDistributedEventBus } from '../infrastructure';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
@@ -121,18 +121,16 @@ class FeatureFlagService {
 
       // Sync to database (insert if not exists)
       for (const [key, enabled] of Object.entries(envFlags)) {
-        const existing = await prisma.featureFlag.findUnique({ where: { key } });
+        const existing = await featureFlagRepository.findByKey(key);
 
         if (!existing) {
           const meta = getFeatureFlagDefinition(key);
-          await prisma.featureFlag.create({
-            data: {
-              key,
-              enabled,
-              description: meta?.description ?? null,
-              category: meta?.category ?? 'general',
-              modifiedBy: 'system',
-            },
+          await featureFlagRepository.create({
+            key,
+            enabled,
+            description: meta?.description ?? null,
+            category: meta?.category ?? 'general',
+            modifiedBy: 'system',
           });
           log.debug(`Created feature flag: ${key} = ${enabled}`);
         }
@@ -192,7 +190,7 @@ class FeatureFlagService {
    */
   private async refreshCache(): Promise<void> {
     try {
-      const flags = await prisma.featureFlag.findMany();
+      const flags = await featureFlagRepository.findAll();
 
       this.localCache.clear();
       for (const flag of flags) {
@@ -230,7 +228,7 @@ class FeatureFlagService {
 
     // Fall back to database
     try {
-      const flag = await prisma.featureFlag.findUnique({ where: { key } });
+      const flag = await featureFlagRepository.findByKey(key);
       if (flag) {
         this.localCache.set(key, flag.enabled);
         return flag.enabled;
@@ -252,38 +250,11 @@ class FeatureFlagService {
    * Set a feature flag value
    */
   async setFlag(key: FeatureFlagKey, enabled: boolean, options: SetFlagOptions): Promise<void> {
-    // Use interactive transaction to avoid TOCTOU race on the read-then-write
-    const previousValue = await prisma.$transaction(async (tx) => {
-      const current = await tx.featureFlag.findUnique({ where: { key } });
-      if (!current) {
-        throw new Error(`Feature flag '${key}' does not exist`);
-      }
-
-      if (current.enabled === enabled) {
-        return null; // No change needed
-      }
-
-      await tx.featureFlag.update({
-        where: { key },
-        data: {
-          enabled,
-          modifiedBy: options.userId,
-        },
-      });
-
-      await tx.featureFlagAudit.create({
-        data: {
-          featureFlagId: current.id,
-          key,
-          previousValue: current.enabled,
-          newValue: enabled,
-          changedBy: options.userId,
-          reason: options.reason,
-          ipAddress: options.ipAddress,
-        },
-      });
-
-      return current.enabled;
+    // Use repository's atomic set+audit method to avoid TOCTOU race
+    const previousValue = await featureFlagRepository.setFlagWithAudit(key, enabled, {
+      userId: options.userId,
+      reason: options.reason,
+      ipAddress: options.ipAddress,
     });
 
     if (previousValue === null) {
@@ -318,9 +289,7 @@ class FeatureFlagService {
    * Get all feature flags with metadata
    */
   async getAllFlags(): Promise<FeatureFlagInfo[]> {
-    const flags = await prisma.featureFlag.findMany({
-      orderBy: [{ category: 'asc' }, { key: 'asc' }],
-    });
+    const flags = await featureFlagRepository.findAll();
 
     return flags.map((flag) => {
       const definition = getFeatureFlagDefinition(flag.key);
@@ -343,13 +312,7 @@ class FeatureFlagService {
    * Get audit log for a specific flag or all flags
    */
   async getAuditLog(key?: string, limit = 50, offset = 0): Promise<AuditEntry[]> {
-    const where = key ? { key } : undefined;
-    const entries = await prisma.featureFlagAudit.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
-    });
+    const entries = await featureFlagRepository.getAuditLog(key, limit, offset);
 
     return entries.map((entry) => ({
       id: entry.id,
@@ -367,7 +330,7 @@ class FeatureFlagService {
    * Get flag info by key
    */
   async getFlag(key: FeatureFlagKey): Promise<FeatureFlagInfo | null> {
-    const flag = await prisma.featureFlag.findUnique({ where: { key } });
+    const flag = await featureFlagRepository.findByKey(key);
 
     if (!flag) return null;
 

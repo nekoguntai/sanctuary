@@ -5,7 +5,7 @@
  * This enables proper gap limit tracking for BIP-44 wallets.
  */
 
-import { db as prisma } from '../../../../repositories/db';
+import { addressRepository } from '../../../../repositories';
 import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext } from '../types';
@@ -32,18 +32,14 @@ export async function updateAddressesPhase(ctx: SyncContext): Promise<SyncContex
   }
 
   if (usedAddresses.size > 0) {
-    const result = await prisma.address.updateMany({
-      where: {
-        walletId,
-        address: { in: Array.from(usedAddresses) },
-        used: false,
-      },
-      data: { used: true },
-    });
+    const count = await addressRepository.markManyAsUsedByAddress(
+      walletId,
+      Array.from(usedAddresses)
+    );
 
-    if (result.count > 0) {
-      ctx.stats.addressesUpdated = result.count;
-      log.debug(`[SYNC] Marked ${result.count} addresses as used`);
+    if (count > 0) {
+      ctx.stats.addressesUpdated = count;
+      log.debug(`[SYNC] Marked ${count} addresses as used`);
     }
   }
 

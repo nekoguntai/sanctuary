@@ -232,6 +232,23 @@ export async function findByIdWithGroup(walletId: string): Promise<(Wallet & { g
 }
 
 /**
+ * Find wallet with device signing info for transaction construction.
+ * Returns only the device fields needed for PSBT signing (fingerprint, xpub).
+ */
+export async function findByIdWithSigningDevices(walletId: string) {
+  return prisma.wallet.findUnique({
+    where: { id: walletId },
+    include: {
+      devices: {
+        include: {
+          device: true,
+        },
+      },
+    },
+  });
+}
+
+/**
  * Find wallet with devices for export
  * Includes device accounts to properly select derivation paths for wallet type
  */
@@ -303,6 +320,45 @@ export async function findByIdWithEditAccess(
   });
 }
 
+/**
+ * Find a wallet's group role by group membership
+ * Used by access control to check group-based wallet access
+ */
+export async function findGroupRoleByMembership(
+  walletId: string,
+  userId: string
+): Promise<string | null> {
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      group: { members: { some: { userId } } },
+    },
+    select: { groupRole: true },
+  });
+  return wallet?.groupRole ?? null;
+}
+
+/**
+ * Find wallet name by ID (lean select)
+ */
+export async function findNameById(walletId: string): Promise<{ id: string; name: string } | null> {
+  return prisma.wallet.findUnique({
+    where: { id: walletId },
+    select: { id: true, name: true },
+  });
+}
+
+/**
+ * Get wallet network (lean query for sync operations)
+ */
+export async function findNetwork(walletId: string): Promise<string | null> {
+  const wallet = await prisma.wallet.findUnique({
+    where: { id: walletId },
+    select: { network: true },
+  });
+  return wallet?.network ?? null;
+}
+
 // Export all functions as a namespace for convenient importing
 export const walletRepository = {
   findByIdWithAccess,
@@ -319,10 +375,14 @@ export const walletRepository = {
   findById,
   getName,
   findByIdWithGroup,
+  findByIdWithSigningDevices,
   findByIdWithDevices,
   findByIdWithSelect,
   findAccessibleWithSelect,
   findByIdWithEditAccess,
+  findGroupRoleByMembership,
+  findNameById,
+  findNetwork,
 };
 
 export default walletRepository;

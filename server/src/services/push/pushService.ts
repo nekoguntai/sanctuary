@@ -6,7 +6,7 @@
  * Uses the same per-wallet notification settings as Telegram.
  */
 
-import { db as prisma } from '../../repositories/db';
+import { pushDeviceRepository, walletRepository, userRepository } from '../../repositories';
 import { ProviderRegistry } from '../../providers';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
@@ -74,9 +74,7 @@ class PushService {
   async sendToUser(userId: string, message: PushMessage): Promise<void> {
     await this.ensureInitialized();
 
-    const devices = await prisma.pushDevice.findMany({
-      where: { userId },
-    });
+    const devices = await pushDeviceRepository.findByUserId(userId);
 
     if (devices.length === 0) {
       return;
@@ -95,13 +93,10 @@ class PushService {
 
         if (result.success) {
           // Update last used timestamp
-          await prisma.pushDevice.update({
-            where: { id: device.id },
-            data: { lastUsedAt: new Date() },
-          });
+          await pushDeviceRepository.updateLastUsed(device.id);
         } else if (result.error && isInvalidTokenError(new Error(result.error))) {
           // Remove invalid tokens
-          await prisma.pushDevice.delete({ where: { id: device.id } });
+          await pushDeviceRepository.deleteById(device.id);
           log.info(`Removed invalid ${device.platform} token for user ${userId}`);
         }
       } catch (err) {
@@ -110,7 +105,7 @@ class PushService {
 
         // Remove invalid tokens
         if (isInvalidTokenError(err)) {
-          await prisma.pushDevice.delete({ where: { id: device.id } });
+          await pushDeviceRepository.deleteById(device.id);
           log.info(`Removed invalid ${device.platform} token for user ${userId}`);
         } else {
           // Record non-token-related failures in dead letter queue
@@ -148,28 +143,12 @@ class PushService {
 
     try {
       // Get wallet info
-      const wallet = await prisma.wallet.findUnique({
-        where: { id: walletId },
-        select: { id: true, name: true },
-      });
+      const wallet = await walletRepository.findNameById(walletId);
       if (!wallet) return;
 
       // Get all users with access to this wallet, including push device counts
       // This avoids N+1 queries by fetching device counts in a single query
-      const users = await prisma.user.findMany({
-        where: {
-          OR: [
-            { wallets: { some: { walletId } } },
-            { groupMemberships: { some: { group: { wallets: { some: { id: walletId } } } } } },
-          ],
-        },
-        select: {
-          id: true,
-          username: true,
-          preferences: true,
-          _count: { select: { pushDevices: true } },
-        },
-      });
+      const users = await userRepository.findByWalletAccess(walletId, { includePushDeviceCount: true });
 
       for (const user of users) {
         // Skip if user has no push devices registered (count already fetched)

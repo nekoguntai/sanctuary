@@ -10,7 +10,7 @@
  * 6. Sending notifications
  */
 
-import { db as prisma } from '../../../../../repositories/db';
+import { transactionRepository } from '../../../../../repositories';
 import { createLogger } from '../../../../../utils/logger';
 import { getErrorMessage } from '../../../../../utils/errors';
 import { walletLog } from '../../../../../websocket/notifications';
@@ -190,23 +190,17 @@ async function insertTransactionBatch(
   const uniqueTxArray = Array.from(uniqueTxs.values());
 
   // Check for existing
-  const existingTxids = new Set(
-    (await prisma.transaction.findMany({
-      where: {
-        walletId,
-        txid: { in: uniqueTxArray.map(tx => tx.txid) },
-      },
-      select: { txid: true },
-    })).map(tx => tx.txid)
+  const existingTxRecords = await transactionRepository.findByWalletIdAndTxids(
+    walletId,
+    uniqueTxArray.map(tx => tx.txid),
+    { txid: true }
   );
+  const existingTxids = new Set(existingTxRecords.map(tx => tx.txid));
 
   const newTransactions = uniqueTxArray.filter(tx => !existingTxids.has(tx.txid));
 
   if (newTransactions.length > 0) {
-    await prisma.transaction.createMany({
-      data: uniqueTxArray,
-      skipDuplicates: true,
-    });
+    await transactionRepository.createMany(uniqueTxArray as unknown as Array<Record<string, unknown>>, { skipDuplicates: true });
   }
 
   return newTransactions;

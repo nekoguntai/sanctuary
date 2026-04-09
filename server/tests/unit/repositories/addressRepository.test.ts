@@ -17,6 +17,7 @@ vi.mock('../../../src/models/prisma', () => ({
       findFirst: vi.fn(),
       update: vi.fn(),
       count: vi.fn(),
+      create: vi.fn(),
     },
   },
 }));
@@ -246,6 +247,137 @@ describe('Address Repository', () => {
       const result = await addressRepository.findWithLabels('wallet-456');
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('findAllWithWalletNetwork', () => {
+    it('should return all addresses with wallet network info', async () => {
+      const addresses = [
+        { id: 'a1', address: 'bc1q...', walletId: 'w1', wallet: { network: 'mainnet' } },
+      ];
+      (prisma.address.findMany as Mock).mockResolvedValue(addresses);
+
+      const result = await addressRepository.findAllWithWalletNetwork();
+
+      expect(result).toEqual(addresses);
+      expect(prisma.address.findMany).toHaveBeenCalledWith({
+        select: {
+          id: true,
+          address: true,
+          walletId: true,
+          wallet: { select: { network: true } },
+        },
+        orderBy: { id: 'asc' },
+      });
+    });
+  });
+
+  describe('findAllWithWalletNetworkPaginated', () => {
+    it('should paginate without cursor', async () => {
+      (prisma.address.findMany as Mock).mockResolvedValue([]);
+
+      await addressRepository.findAllWithWalletNetworkPaginated({ take: 100 });
+
+      expect(prisma.address.findMany).toHaveBeenCalledWith({
+        select: {
+          id: true,
+          address: true,
+          walletId: true,
+          wallet: { select: { network: true } },
+        },
+        take: 100,
+        skip: 0,
+        cursor: undefined,
+        orderBy: { id: 'asc' },
+      });
+    });
+
+    it('should paginate with cursor', async () => {
+      (prisma.address.findMany as Mock).mockResolvedValue([]);
+
+      await addressRepository.findAllWithWalletNetworkPaginated({ take: 100, cursor: 'addr-50' });
+
+      expect(prisma.address.findMany).toHaveBeenCalledWith({
+        select: {
+          id: true,
+          address: true,
+          walletId: true,
+          wallet: { select: { network: true } },
+        },
+        take: 100,
+        skip: 1,
+        cursor: { id: 'addr-50' },
+        orderBy: { id: 'asc' },
+      });
+    });
+  });
+
+  describe('findByAddress', () => {
+    it('should find address by address string with default select', async () => {
+      (prisma.address.findFirst as Mock).mockResolvedValue({ walletId: 'w1' });
+
+      const result = await addressRepository.findByAddress('bc1q...');
+
+      expect(result).toEqual({ walletId: 'w1' });
+      expect(prisma.address.findFirst).toHaveBeenCalledWith({
+        where: { address: 'bc1q...' },
+        select: { walletId: true },
+      });
+    });
+
+    it('should use custom select when provided', async () => {
+      (prisma.address.findFirst as Mock).mockResolvedValue({ walletId: 'w1' });
+
+      await addressRepository.findByAddress('bc1q...', { walletId: true });
+
+      expect(prisma.address.findFirst).toHaveBeenCalledWith({
+        where: { address: 'bc1q...' },
+        select: { walletId: true },
+      });
+    });
+
+    it('should return null when address not found', async () => {
+      (prisma.address.findFirst as Mock).mockResolvedValue(null);
+
+      const result = await addressRepository.findByAddress('unknown');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('findByAddressWithWallet', () => {
+    it('should find address with wallet included', async () => {
+      const addressWithWallet = {
+        ...mockAddress,
+        wallet: { id: 'w1', name: 'Test', network: 'mainnet' },
+      };
+      (prisma.address.findFirst as Mock).mockResolvedValue(addressWithWallet);
+
+      const result = await addressRepository.findByAddressWithWallet('bc1q...');
+
+      expect(result).toEqual(addressWithWallet);
+      expect(prisma.address.findFirst).toHaveBeenCalledWith({
+        where: { address: 'bc1q...' },
+        include: { wallet: true },
+      });
+    });
+  });
+
+  describe('create', () => {
+    it('should create a single address', async () => {
+      const newAddr = {
+        walletId: 'w1',
+        address: 'bc1qnew...',
+        derivationPath: "m/84'/0'/0'/0/5",
+        index: 5,
+        used: false,
+      };
+      (prisma.address.create as Mock).mockResolvedValue({ id: 'new-id', ...newAddr });
+
+      const result = await addressRepository.create(newAddr);
+
+      expect(result.id).toBe('new-id');
+      expect(prisma.address.create).toHaveBeenCalledWith({ data: newAddr });
     });
   });
 });

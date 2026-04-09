@@ -422,4 +422,76 @@ describe('Device Repository', () => {
       expect(result).toBe(0);
     });
   });
+
+  describe('findByIdAndUser', () => {
+    it('should return device when user owns it', async () => {
+      (prisma.device.findFirst as Mock).mockResolvedValue(mockDevice);
+
+      const result = await deviceRepository.findByIdAndUser('device-123', 'user-456');
+
+      expect(result).toEqual(mockDevice);
+      expect(prisma.device.findFirst).toHaveBeenCalledWith({
+        where: { id: 'device-123', userId: 'user-456' },
+      });
+    });
+
+    it('should return null when user does not own device', async () => {
+      (prisma.device.findFirst as Mock).mockResolvedValue(null);
+
+      const result = await deviceRepository.findByIdAndUser('device-123', 'other-user');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('findByIdsAndUserWithAccounts', () => {
+    it('should return devices with accounts for given IDs and user', async () => {
+      const devicesWithAccounts = [
+        { ...mockDevice, accounts: [{ id: 'acc-1', deviceId: 'device-123' }] },
+      ];
+      (prisma.device.findMany as Mock).mockResolvedValue(devicesWithAccounts);
+
+      const result = await deviceRepository.findByIdsAndUserWithAccounts(
+        ['device-123', 'device-456'],
+        'user-456'
+      );
+
+      expect(result).toEqual(devicesWithAccounts);
+      expect(prisma.device.findMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: ['device-123', 'device-456'] },
+          userId: 'user-456',
+        },
+        include: { accounts: true },
+      });
+    });
+
+    it('should return empty array when no devices match', async () => {
+      (prisma.device.findMany as Mock).mockResolvedValue([]);
+
+      const result = await deviceRepository.findByIdsAndUserWithAccounts([], 'user-456');
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('findByUserIdWithAccounts', () => {
+    it('should return devices with accounts for user', async () => {
+      const devicesWithAccounts = [
+        { ...mockDevice, accounts: [{ id: 'acc-1' }] },
+      ];
+      (prisma.device.findMany as Mock).mockResolvedValue(devicesWithAccounts);
+
+      const result = await deviceRepository.findByUserIdWithAccounts('user-456');
+
+      expect(result).toEqual(devicesWithAccounts);
+      expect(prisma.device.findMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: [] },
+          userId: 'user-456',
+        },
+        include: { accounts: true },
+      });
+    });
+  });
 });

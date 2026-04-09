@@ -14,6 +14,7 @@ vi.mock('../../../src/models/prisma', () => ({
     uTXO: {
       aggregate: vi.fn(),
       groupBy: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
       update: vi.fn(),
       deleteMany: vi.fn(),
@@ -284,6 +285,65 @@ describe('UTXO Repository', () => {
       expect(prisma.uTXO.count).toHaveBeenCalledWith({
         where: { walletId: 'wallet-456', spent: false },
       });
+    });
+  });
+
+  describe('findByIdWithAccess', () => {
+    it('should return UTXO when user has wallet access', async () => {
+      (prisma.uTXO.findFirst as Mock).mockResolvedValue(mockUtxo);
+
+      const result = await utxoRepository.findByIdWithAccess('utxo-123', 'user-456');
+
+      expect(result).toEqual(mockUtxo);
+      expect(prisma.uTXO.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'utxo-123',
+          wallet: {
+            OR: [
+              { users: { some: { userId: 'user-456' } } },
+              { group: { members: { some: { userId: 'user-456' } } } },
+            ],
+          },
+        },
+      });
+    });
+
+    it('should return null when user lacks access', async () => {
+      (prisma.uTXO.findFirst as Mock).mockResolvedValue(null);
+
+      const result = await utxoRepository.findByIdWithAccess('utxo-123', 'other-user');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getConfirmedUnconfirmedBalance', () => {
+    it('should return confirmed and unconfirmed balances separately', async () => {
+      (prisma.uTXO.aggregate as Mock)
+        .mockResolvedValueOnce({ _sum: { amount: BigInt(300000) } })
+        .mockResolvedValueOnce({ _sum: { amount: BigInt(50000) } });
+
+      const result = await utxoRepository.getConfirmedUnconfirmedBalance('wallet-456');
+
+      expect(result).toEqual({ confirmed: 300000, unconfirmed: 50000 });
+      expect(prisma.uTXO.aggregate).toHaveBeenNthCalledWith(1, {
+        where: { walletId: 'wallet-456', spent: false, blockHeight: { not: null } },
+        _sum: { amount: true },
+      });
+      expect(prisma.uTXO.aggregate).toHaveBeenNthCalledWith(2, {
+        where: { walletId: 'wallet-456', spent: false, blockHeight: null },
+        _sum: { amount: true },
+      });
+    });
+
+    it('should return zeros when no UTXOs exist', async () => {
+      (prisma.uTXO.aggregate as Mock)
+        .mockResolvedValueOnce({ _sum: { amount: null } })
+        .mockResolvedValueOnce({ _sum: { amount: null } });
+
+      const result = await utxoRepository.getConfirmedUnconfirmedBalance('empty-wallet');
+
+      expect(result).toEqual({ confirmed: 0, unconfirmed: 0 });
     });
   });
 });

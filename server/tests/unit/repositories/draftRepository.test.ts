@@ -32,6 +32,7 @@ import {
   findExpired,
   remove,
   update,
+  updateApprovalStatus,
 } from '../../../src/repositories/draftRepository';
 
 describe('draftRepository', () => {
@@ -222,9 +223,37 @@ describe('draftRepository', () => {
     expect(statusCount).toBe(4);
   });
 
+  describe('updateApprovalStatus', () => {
+    it('should update approval status without approvedAt for non-approved', async () => {
+      (prisma.draftTransaction.update as Mock).mockResolvedValue(undefined);
+
+      await updateApprovalStatus('d1', 'rejected');
+
+      expect(prisma.draftTransaction.update).toHaveBeenCalledWith({
+        where: { id: 'd1' },
+        data: { approvalStatus: 'rejected' },
+      });
+    });
+
+    it('should set approvedAt when status is approved', async () => {
+      (prisma.draftTransaction.update as Mock).mockResolvedValue(undefined);
+
+      await updateApprovalStatus('d1', 'approved');
+
+      expect(prisma.draftTransaction.update).toHaveBeenCalledWith({
+        where: { id: 'd1' },
+        data: {
+          approvalStatus: 'approved',
+          approvedAt: expect.any(Date),
+        },
+      });
+    });
+  });
+
   it('exports all operations via namespace and default object', () => {
     expect(draftRepository.findById).toBe(findById);
     expect(draftRepository.create).toBe(create);
     expect(draftRepository.update).toBe(update);
+    expect(draftRepository.updateApprovalStatus).toBe(updateApprovalStatus);
   });
 });

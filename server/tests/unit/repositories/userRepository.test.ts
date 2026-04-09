@@ -12,6 +12,7 @@ vi.mock('../../../src/models/prisma', () => ({
   default: {
     user: {
       findUnique: vi.fn(),
+      findMany: vi.fn(),
       count: vi.fn(),
       update: vi.fn(),
     },
@@ -251,6 +252,129 @@ describe('User Repository', () => {
 
       await expect(userRepository.emailExists('test@example.com'))
         .rejects.toThrow('Database error');
+    });
+  });
+
+  describe('update2FA', () => {
+    it('should enable 2FA with secret', async () => {
+      const updatedUser = { id: 'user-123', twoFactorEnabled: true, twoFactorSecret: 'secret' };
+      (prisma.user.update as Mock).mockResolvedValue(updatedUser);
+
+      const result = await userRepository.update2FA('user-123', {
+        twoFactorEnabled: true,
+        twoFactorSecret: 'secret',
+      });
+
+      expect(result).toEqual(updatedUser);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-123' },
+        data: { twoFactorEnabled: true, twoFactorSecret: 'secret' },
+      });
+    });
+
+    it('should disable 2FA and clear secret', async () => {
+      const updatedUser = { id: 'user-123', twoFactorEnabled: false, twoFactorSecret: null };
+      (prisma.user.update as Mock).mockResolvedValue(updatedUser);
+
+      const result = await userRepository.update2FA('user-123', {
+        twoFactorEnabled: false,
+        twoFactorSecret: null,
+      });
+
+      expect(result).toEqual(updatedUser);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-123' },
+        data: { twoFactorEnabled: false, twoFactorSecret: null },
+      });
+    });
+  });
+
+  describe('findAllWithWalletAssociations', () => {
+    it('should return users with wallet associations', async () => {
+      const users = [
+        {
+          id: 'u1',
+          preferences: {},
+          wallets: [{ wallet: { id: 'w1', name: 'Wallet 1' } }],
+        },
+      ];
+      (prisma.user.findMany as Mock).mockResolvedValue(users);
+
+      const result = await userRepository.findAllWithWalletAssociations();
+
+      expect(result).toEqual(users);
+      expect(prisma.user.findMany).toHaveBeenCalledWith({
+        select: {
+          id: true,
+          preferences: true,
+          wallets: {
+            select: {
+              wallet: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
+    });
+  });
+
+  describe('findWithAutopilotPreferences', () => {
+    it('should return users with autopilot preferences', async () => {
+      const users = [
+        {
+          id: 'u1',
+          preferences: { autopilot: { enabled: true } },
+          wallets: [],
+          groupMemberships: [],
+        },
+      ];
+      (prisma.user.findMany as Mock).mockResolvedValue(users);
+
+      const result = await userRepository.findWithAutopilotPreferences();
+
+      expect(result).toEqual(users);
+      expect(prisma.user.findMany).toHaveBeenCalledWith({
+        where: {
+          preferences: {
+            path: ['autopilot'],
+            not: expect.anything(),
+          },
+        },
+        select: expect.objectContaining({
+          id: true,
+          preferences: true,
+          wallets: expect.any(Object),
+          groupMemberships: expect.any(Object),
+        }),
+      });
+    });
+  });
+
+  describe('findAllWithSelect', () => {
+    it('should find all users with custom select', async () => {
+      const users = [{ id: 'u1', username: 'alice' }];
+      (prisma.user.findMany as Mock).mockResolvedValue(users);
+
+      const result = await userRepository.findAllWithSelect({ id: true, username: true });
+
+      expect(result).toEqual(users);
+      expect(prisma.user.findMany).toHaveBeenCalledWith({
+        where: undefined,
+        select: { id: true, username: true },
+      });
+    });
+
+    it('should apply where filter when provided', async () => {
+      (prisma.user.findMany as Mock).mockResolvedValue([]);
+
+      await userRepository.findAllWithSelect(
+        { id: true },
+        { isAdmin: true }
+      );
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith({
+        where: { isAdmin: true },
+        select: { id: true },
+      });
     });
   });
 });

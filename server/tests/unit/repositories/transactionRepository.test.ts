@@ -320,4 +320,25 @@ describe('Transaction Repository', () => {
       });
     });
   });
+
+  describe('findByTxidGlobal', () => {
+    it('should find transaction by txid without wallet filter', async () => {
+      (prisma.transaction.findFirst as Mock).mockResolvedValue(mockTransaction);
+
+      const result = await transactionRepository.findByTxidGlobal('abc123def456');
+
+      expect(result).toEqual(mockTransaction);
+      expect(prisma.transaction.findFirst).toHaveBeenCalledWith({
+        where: { txid: 'abc123def456' },
+      });
+    });
+
+    it('should return null when txid not found globally', async () => {
+      (prisma.transaction.findFirst as Mock).mockResolvedValue(null);
+
+      const result = await transactionRepository.findByTxidGlobal('nonexistent');
+
+      expect(result).toBeNull();
+    });
+  });
 });

@@ -16,7 +16,9 @@ vi.mock('../../../src/models/prisma', () => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       create: vi.fn(),
+      delete: vi.fn(),
     },
     walletDevice: {
       create: vi.fn(),
@@ -578,6 +580,293 @@ describe('Wallet Repository', () => {
       await expect(
         walletRepository.createWithDeviceLinks({ name: 'Ghost' } as any),
       ).rejects.toThrow('Failed to create wallet');
+    });
+  });
+
+  describe('resetAllStuckSyncFlags', () => {
+    it('should reset all stuck sync flags and return count', async () => {
+      (prisma.wallet.updateMany as Mock).mockResolvedValue({ count: 3 });
+
+      const result = await walletRepository.resetAllStuckSyncFlags();
+
+      expect(result).toBe(3);
+      expect(prisma.wallet.updateMany).toHaveBeenCalledWith({
+        where: { syncInProgress: true },
+        data: { syncInProgress: false },
+      });
+    });
+
+    it('should return 0 when no stuck wallets', async () => {
+      (prisma.wallet.updateMany as Mock).mockResolvedValue({ count: 0 });
+
+      const result = await walletRepository.resetAllStuckSyncFlags();
+
+      expect(result).toBe(0);
+    });
+  });
+
+  describe('findStuckSyncing', () => {
+    it('should find wallets with syncInProgress=true', async () => {
+      const stuck = [{ id: 'w1', name: 'Wallet 1' }];
+      (prisma.wallet.findMany as Mock).mockResolvedValue(stuck);
+
+      const result = await walletRepository.findStuckSyncing();
+
+      expect(result).toEqual(stuck);
+      expect(prisma.wallet.findMany).toHaveBeenCalledWith({
+        where: { syncInProgress: true },
+        select: { id: true, name: true },
+      });
+    });
+
+    it('should use custom select when provided', async () => {
+      (prisma.wallet.findMany as Mock).mockResolvedValue([]);
+
+      await walletRepository.findStuckSyncing({ id: true, name: true, lastSyncedAt: true });
+
+      expect(prisma.wallet.findMany).toHaveBeenCalledWith({
+        where: { syncInProgress: true },
+        select: { id: true, name: true, lastSyncedAt: true },
+      });
+    });
+  });
+
+  describe('findAllWithSelect', () => {
+    it('should find all wallets with custom select', async () => {
+      const wallets = [{ id: 'w1', name: 'Test' }];
+      (prisma.wallet.findMany as Mock).mockResolvedValue(wallets);
+
+      const result = await walletRepository.findAllWithSelect({ id: true, name: true });
+
+      expect(result).toEqual(wallets);
+      expect(prisma.wallet.findMany).toHaveBeenCalledWith({
+        where: undefined,
+        select: { id: true, name: true },
+      });
+    });
+
+    it('should apply where filter when provided', async () => {
+      (prisma.wallet.findMany as Mock).mockResolvedValue([]);
+
+      await walletRepository.findAllWithSelect(
+        { id: true },
+        { network: 'mainnet' }
+      );
+
+      expect(prisma.wallet.findMany).toHaveBeenCalledWith({
+        where: { network: 'mainnet' },
+        select: { id: true },
+      });
+    });
+  });
+
+  describe('findByIdWithSelect', () => {
+    it('should find wallet by ID with custom select', async () => {
+      (prisma.wallet.findUnique as Mock).mockResolvedValue({ id: 'wallet-123', name: 'Test' });
+
+      const result = await walletRepository.findByIdWithSelect('wallet-123', { id: true, name: true });
+
+      expect(result).toEqual({ id: 'wallet-123', name: 'Test' });
+      expect(prisma.wallet.findUnique).toHaveBeenCalledWith({
+        where: { id: 'wallet-123' },
+        select: { id: true, name: true },
+      });
+    });
+  });
+
+  describe('findAccessibleWithSelect', () => {
+    it('should find accessible wallets with custom select', async () => {
+      (prisma.wallet.findMany as Mock).mockResolvedValue([{ id: 'w1' }]);
+
+      const result = await walletRepository.findAccessibleWithSelect(mockUserId, { id: true });
+
+      expect(result).toEqual([{ id: 'w1' }]);
+      expect(prisma.wallet.findMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          OR: expect.any(Array),
+        }),
+        select: { id: true },
+      });
+    });
+
+    it('should merge additionalWhere when provided', async () => {
+      (prisma.wallet.findMany as Mock).mockResolvedValue([]);
+
+      await walletRepository.findAccessibleWithSelect(
+        mockUserId,
+        { id: true },
+        { network: 'testnet' }
+      );
+
+      expect(prisma.wallet.findMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({ network: 'testnet' }),
+        select: { id: true },
+      });
+    });
+  });
+
+  describe('findByIdWithEditAccess', () => {
+    it('should find wallet where user is owner or signer', async () => {
+      (prisma.wallet.findFirst as Mock).mockResolvedValue(mockWallet);
+
+      const result = await walletRepository.findByIdWithEditAccess('wallet-123', mockUserId);
+
+      expect(result).toEqual(mockWallet);
+      expect(prisma.wallet.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'wallet-123',
+          users: {
+            some: {
+              userId: mockUserId,
+              role: { in: ['owner', 'signer'] },
+            },
+          },
+        },
+      });
+    });
+  });
+
+  describe('findGroupRoleByMembership', () => {
+    it('should return group role when found', async () => {
+      (prisma.wallet.findFirst as Mock).mockResolvedValue({ groupRole: 'viewer' });
+
+      const result = await walletRepository.findGroupRoleByMembership('wallet-123', mockUserId);
+
+      expect(result).toBe('viewer');
+    });
+
+    it('should return null when no group membership', async () => {
+      (prisma.wallet.findFirst as Mock).mockResolvedValue(null);
+
+      const result = await walletRepository.findGroupRoleByMembership('wallet-123', mockUserId);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('findNameById', () => {
+    it('should return id and name', async () => {
+      (prisma.wallet.findUnique as Mock).mockResolvedValue({ id: 'w1', name: 'Test' });
+
+      const result = await walletRepository.findNameById('w1');
+
+      expect(result).toEqual({ id: 'w1', name: 'Test' });
+      expect(prisma.wallet.findUnique).toHaveBeenCalledWith({
+        where: { id: 'w1' },
+        select: { id: true, name: true },
+      });
+    });
+  });
+
+  describe('findNetwork', () => {
+    it('should return network string', async () => {
+      (prisma.wallet.findUnique as Mock).mockResolvedValue({ network: 'mainnet' });
+
+      const result = await walletRepository.findNetwork('w1');
+
+      expect(result).toBe('mainnet');
+    });
+
+    it('should return null when wallet not found', async () => {
+      (prisma.wallet.findUnique as Mock).mockResolvedValue(null);
+
+      const result = await walletRepository.findNetwork('unknown');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('findByIdWithAccessAndInclude', () => {
+    it('should find wallet with access check and custom include', async () => {
+      const walletWithTx = { ...mockWallet, transactions: [] };
+      (prisma.wallet.findFirst as Mock).mockResolvedValue(walletWithTx);
+
+      const result = await walletRepository.findByIdWithAccessAndInclude(
+        'wallet-123',
+        mockUserId,
+        { transactions: true }
+      );
+
+      expect(result).toEqual(walletWithTx);
+      expect(prisma.wallet.findFirst).toHaveBeenCalledWith({
+        where: expect.objectContaining({ id: 'wallet-123' }),
+        include: { transactions: true },
+      });
+    });
+  });
+
+  describe('deleteById', () => {
+    it('should delete a wallet by ID', async () => {
+      (prisma.wallet.delete as Mock).mockResolvedValue(mockWallet);
+
+      await walletRepository.deleteById('wallet-123');
+
+      expect(prisma.wallet.delete).toHaveBeenCalledWith({
+        where: { id: 'wallet-123' },
+      });
+    });
+  });
+
+  describe('findByIdWithFullAccess', () => {
+    it('should find wallet with full access check', async () => {
+      const walletWithInclude = { ...mockWallet, users: [] };
+      (prisma.wallet.findFirst as Mock).mockResolvedValue(walletWithInclude);
+
+      const result = await walletRepository.findByIdWithFullAccess(
+        'wallet-123',
+        mockUserId,
+        { users: true }
+      );
+
+      expect(result).toEqual(walletWithInclude);
+      expect(prisma.wallet.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'wallet-123',
+          OR: [
+            { users: { some: { userId: mockUserId } } },
+            { group: { members: { some: { userId: mockUserId } } } },
+          ],
+        },
+        include: { users: true },
+      });
+    });
+  });
+
+  describe('findByUserIdWithInclude', () => {
+    it('should find user wallets with include', async () => {
+      const wallets = [{ ...mockWallet, addresses: [] }];
+      (prisma.wallet.findMany as Mock).mockResolvedValue(wallets);
+
+      const result = await walletRepository.findByUserIdWithInclude(
+        mockUserId,
+        { addresses: true }
+      );
+
+      expect(result).toEqual(wallets);
+      expect(prisma.wallet.findMany).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { users: { some: { userId: mockUserId } } },
+            { group: { members: { some: { userId: mockUserId } } } },
+          ],
+        },
+        include: { addresses: true },
+        orderBy: undefined,
+      });
+    });
+
+    it('should pass orderBy when provided', async () => {
+      (prisma.wallet.findMany as Mock).mockResolvedValue([]);
+
+      await walletRepository.findByUserIdWithInclude(
+        mockUserId,
+        { addresses: true },
+        { name: 'asc' }
+      );
+
+      expect(prisma.wallet.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { name: 'asc' } })
+      );
     });
   });
 });

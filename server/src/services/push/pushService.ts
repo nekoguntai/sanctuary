@@ -288,8 +288,8 @@ export function isPushConfigured(): boolean {
       const fs = require('fs');
       fs.accessSync(serviceAccountPath, fs.constants.R_OK);
       fcmConfigured = true;
-    } catch {
-      // Not configured
+    } catch (error) {
+      log.debug('FCM service account not accessible', { error: getErrorMessage(error) });
     }
   }
 

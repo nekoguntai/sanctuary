@@ -7,6 +7,9 @@
 
 import type Redis from 'ioredis';
 import type { IRateLimiter, RateLimitResult } from './types';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('RATE_LIMIT:REDIS');
 
 /**
  * Lua script for sliding window rate limiting
@@ -201,7 +204,8 @@ export class RedisRateLimiter implements IRateLimiter {
     try {
       const result = await this.redis.ping();
       return result === 'PONG';
-    } catch {
+    } catch (error) {
+      log.debug('Redis health check failed', { error: String(error) });
       return false;
     }
   }

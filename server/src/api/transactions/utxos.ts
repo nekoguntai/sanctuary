@@ -6,8 +6,7 @@
 
 import { Router } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
-import { db as prisma } from '../../repositories/db';
-import { systemSettingRepository } from '../../repositories';
+import { systemSettingRepository, utxoRepository, transactionRepository } from '../../repositories';
 import { checkWalletAccess } from '../../services/accessControl';
 import { SystemSettingSchemas } from '../../utils/safeJson';
 import { bigIntToNumberOrZero, validatePagination } from '../../utils/errors';
@@ -36,26 +35,8 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), asyncHandler
   const confirmationThreshold = await systemSettingRepository.getParsed('confirmationThreshold', SystemSettingSchemas.number, 3);
 
   const [summary, utxos] = await Promise.all([
-    prisma.uTXO.aggregate({
-      where: { walletId, spent: false },
-      _count: { _all: true },
-      _sum: { amount: true },
-    }),
-    prisma.uTXO.findMany({
-      where: {
-        walletId,
-        spent: false,
-      },
-      orderBy: { amount: 'desc' },
-      include: {
-        draftLock: {
-          include: {
-            draft: {
-              select: { id: true, label: true },
-            },
-          },
-        },
-      },
+    utxoRepository.aggregateUnspent(walletId),
+    utxoRepository.findUnspentWithDraftLocks(walletId, {
       take: effectiveLimit,
       skip: effectiveOffset,
     }),
@@ -63,17 +44,7 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), asyncHandler
 
   // Get associated transactions to find blockTime for each UTXO
   const txids = [...new Set(utxos.map(u => u.txid))];
-  const transactions = await prisma.transaction.findMany({
-    where: {
-      txid: { in: txids },
-      walletId,
-    },
-    select: {
-      txid: true,
-      blockTime: true,
-    },
-  });
-  const txBlockTimes = new Map(transactions.map(t => [t.txid, t.blockTime]));
+  const txBlockTimes = await transactionRepository.findBlockTimesByTxids(walletId, txids);
 
   // Convert BigInt amounts to numbers for JSON serialization
   // Use transaction blockTime for the UTXO date (when it was created on blockchain)
@@ -126,26 +97,7 @@ router.patch('/utxos/:utxoId/freeze', asyncHandler(async (req, res) => {
   }
 
   // Find the UTXO and verify user has access to the wallet
-  const utxo = await prisma.uTXO.findFirst({
-    where: {
-      id: utxoId,
-      wallet: {
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    },
-    include: {
-      wallet: {
-        include: {
-          users: {
-            where: { userId },
-          },
-        },
-      },
-    },
-  });
+  const utxo = await utxoRepository.findByIdWithWalletAccess(utxoId, userId);
 
   if (!utxo) {
     throw new NotFoundError('UTXO not found');
@@ -158,10 +110,7 @@ router.patch('/utxos/:utxoId/freeze', asyncHandler(async (req, res) => {
   }
 
   // Update the frozen status
-  const updatedUtxo = await prisma.uTXO.update({
-    where: { id: utxoId },
-    data: { frozen },
-  });
+  const updatedUtxo = await utxoRepository.updateById(utxoId, { frozen });
 
   res.json({
     id: updatedUtxo.id,

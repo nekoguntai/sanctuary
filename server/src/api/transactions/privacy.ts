@@ -6,7 +6,7 @@
 
 import { Router } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
-import { db as prisma } from '../../repositories/db';
+import { utxoRepository } from '../../repositories';
 import { checkWalletAccess } from '../../services/accessControl';
 import { asyncHandler } from '../../errors/errorHandler';
 import { NotFoundError, ForbiddenError, UnauthorizedError, ValidationError } from '../../errors/ApiError';
@@ -48,16 +48,13 @@ router.get('/utxos/:utxoId/privacy', asyncHandler(async (req, res) => {
   }
 
   // Get UTXO and check wallet access
-  const utxo = await prisma.uTXO.findUnique({
-    where: { id: utxoId },
-    select: { walletId: true },
-  });
+  const utxoWalletId = await utxoRepository.findWalletIdByUtxoId(utxoId);
 
-  if (!utxo) {
+  if (!utxoWalletId) {
     throw new NotFoundError('UTXO not found');
   }
 
-  const access = await checkWalletAccess(utxo.walletId, userId);
+  const access = await checkWalletAccess(utxoWalletId, userId);
   if (!access.hasAccess) {
     throw new ForbiddenError('Access denied');
   }
@@ -80,15 +77,9 @@ router.post('/wallets/:walletId/privacy/spend-analysis', requireWalletAccess('vi
   }
 
   // Verify all UTXOs belong to this wallet
-  const utxos = await prisma.uTXO.findMany({
-    where: {
-      id: { in: utxoIds },
-      walletId,
-    },
-    select: { id: true },
-  });
+  const matchCount = await utxoRepository.countByIdsInWallet(utxoIds, walletId);
 
-  if (utxos.length !== utxoIds.length) {
+  if (matchCount !== utxoIds.length) {
     throw new ValidationError('Some UTXOs not found or do not belong to this wallet');
   }
 

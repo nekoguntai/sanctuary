@@ -332,7 +332,8 @@ export async function importWallet(
     let walletExport: { descriptor: string };
     try {
       walletExport = JSON.parse(trimmed);
-    } catch {
+    } catch (error) {
+      log.debug('Failed to parse wallet export JSON', { error: String(error) });
       throw new Error('Invalid JSON in wallet export data');
     }
     return importFromDescriptor(userId, {

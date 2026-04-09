@@ -196,6 +196,261 @@ export async function findWithLabels(walletId: string) {
   });
 }
 
+/**
+ * Get bucketed balance deltas using raw SQL (for balance history charts)
+ */
+export async function getBucketedBalanceDeltas(
+  walletIds: string[],
+  startDate: Date,
+  bucketUnit: 'hour' | 'day' | 'week' | 'month'
+): Promise<Array<{ bucket: Date; amount: bigint }>> {
+  switch (bucketUnit) {
+    case 'hour':
+      return prisma.$queryRaw<Array<{ bucket: Date; amount: bigint }>>`
+        SELECT date_trunc('hour', "blockTime") AS bucket,
+               COALESCE(SUM("amount"), 0) AS amount
+        FROM "transactions"
+        WHERE "walletId" = ANY(${walletIds}::text[])
+          AND "blockTime" IS NOT NULL
+          AND "blockTime" >= ${startDate}
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `;
+    case 'day':
+      return prisma.$queryRaw<Array<{ bucket: Date; amount: bigint }>>`
+        SELECT date_trunc('day', "blockTime") AS bucket,
+               COALESCE(SUM("amount"), 0) AS amount
+        FROM "transactions"
+        WHERE "walletId" = ANY(${walletIds}::text[])
+          AND "blockTime" IS NOT NULL
+          AND "blockTime" >= ${startDate}
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `;
+    case 'week':
+      return prisma.$queryRaw<Array<{ bucket: Date; amount: bigint }>>`
+        SELECT date_trunc('week', "blockTime") AS bucket,
+               COALESCE(SUM("amount"), 0) AS amount
+        FROM "transactions"
+        WHERE "walletId" = ANY(${walletIds}::text[])
+          AND "blockTime" IS NOT NULL
+          AND "blockTime" >= ${startDate}
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `;
+    case 'month':
+      return prisma.$queryRaw<Array<{ bucket: Date; amount: bigint }>>`
+        SELECT date_trunc('month', "blockTime") AS bucket,
+               COALESCE(SUM("amount"), 0) AS amount
+        FROM "transactions"
+        WHERE "walletId" = ANY(${walletIds}::text[])
+          AND "blockTime" IS NOT NULL
+          AND "blockTime" >= ${startDate}
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `;
+  }
+}
+
+/**
+ * Find the most recent transaction for a wallet (for balance lookups)
+ */
+export async function findLastByWalletId(
+  walletId: string,
+  options?: { select?: Prisma.TransactionSelect }
+) {
+  return prisma.transaction.findFirst({
+    where: { walletId },
+    orderBy: [
+      { blockTime: { sort: 'desc', nulls: 'first' } },
+      { createdAt: 'desc' },
+    ],
+    select: options?.select,
+  });
+}
+
+/**
+ * Find a transaction by ID with wallet access check
+ */
+export async function findByIdWithAccess(
+  id: string,
+  userId: string,
+  options?: { select?: Prisma.TransactionSelect; include?: Prisma.TransactionInclude }
+) {
+  const query: Prisma.TransactionFindFirstArgs = {
+    where: {
+      id,
+      wallet: {
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+    },
+  };
+  if (options?.select) query.select = options.select;
+  if (options?.include) query.include = options.include;
+  return prisma.transaction.findFirst(query);
+}
+
+/**
+ * Find a transaction by txid with wallet access check
+ */
+export async function findByTxidWithAccess(
+  txid: string,
+  userId: string,
+  options?: { select?: Prisma.TransactionSelect; include?: Prisma.TransactionInclude }
+) {
+  const query: Prisma.TransactionFindFirstArgs = {
+    where: {
+      txid,
+      wallet: {
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+    },
+  };
+  if (options?.select) query.select = options.select;
+  if (options?.include) query.include = options.include;
+  return prisma.transaction.findFirst(query);
+}
+
+/**
+ * Group transactions by type with counts and sums
+ */
+export async function groupByType(walletId: string) {
+  return prisma.transaction.groupBy({
+    by: ['type'],
+    where: { walletId },
+    _count: { id: true },
+    _sum: { amount: true },
+  });
+}
+
+/**
+ * Aggregate fees for sent/consolidation transactions
+ */
+export async function aggregateFees(walletId: string) {
+  return prisma.transaction.aggregate({
+    where: {
+      walletId,
+      type: { in: ['sent', 'consolidation'] },
+      fee: { gt: 0 },
+    },
+    _sum: { fee: true },
+  });
+}
+
+/**
+ * Find transactions by wallet with full details (includes, labels, etc.)
+ */
+export async function findByWalletIdWithDetails(
+  walletId: string,
+  options?: {
+    where?: Prisma.TransactionWhereInput;
+    include?: Prisma.TransactionInclude;
+    orderBy?: Prisma.TransactionOrderByWithRelationInput | Prisma.TransactionOrderByWithRelationInput[];
+    take?: number;
+    skip?: number;
+  }
+) {
+  return prisma.transaction.findMany({
+    where: {
+      walletId,
+      ...options?.where,
+    },
+    include: options?.include,
+    orderBy: options?.orderBy ?? { blockTime: 'desc' },
+    take: options?.take,
+    skip: options?.skip,
+  });
+}
+
+/**
+ * Find transactions across multiple wallets with details
+ */
+export async function findByWalletIdsWithDetails(
+  walletIds: string[],
+  options?: {
+    where?: Prisma.TransactionWhereInput;
+    include?: Prisma.TransactionInclude;
+    orderBy?: Prisma.TransactionOrderByWithRelationInput | Prisma.TransactionOrderByWithRelationInput[];
+    select?: Prisma.TransactionSelect;
+    take?: number;
+  }
+) {
+  const query: Prisma.TransactionFindManyArgs = {
+    where: {
+      walletId: { in: walletIds },
+      ...options?.where,
+    },
+    orderBy: options?.orderBy ?? { blockTime: 'desc' },
+    take: options?.take,
+  };
+  if (options?.select) query.select = options.select;
+  else if (options?.include) query.include = options.include;
+  return prisma.transaction.findMany(query);
+}
+
+/**
+ * Aggregate spending by period for a wallet
+ */
+export async function aggregateSpending(
+  walletId: string,
+  cutoff: Date
+) {
+  return prisma.transaction.aggregate({
+    where: { walletId, type: 'sent', blockTime: { gte: cutoff } },
+    _count: { _all: true },
+    _sum: { amount: true },
+  });
+}
+
+/**
+ * Find transactions for export with labels
+ */
+export async function findForExport(
+  walletId: string,
+  dateFilter?: { gte?: Date; lte?: Date }
+) {
+  return prisma.transaction.findMany({
+    where: {
+      walletId,
+      ...(dateFilter && Object.keys(dateFilter).length > 0 ? { blockTime: dateFilter } : {}),
+    },
+    include: {
+      transactionLabels: {
+        include: {
+          label: true,
+        },
+      },
+    },
+    orderBy: { blockTime: 'asc' },
+  });
+}
+
+/**
+ * Find block times for transactions by txids (for UTXO date enrichment)
+ */
+export async function findBlockTimesByTxids(
+  walletId: string,
+  txids: string[]
+): Promise<Map<string, Date | null>> {
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      txid: { in: txids },
+      walletId,
+    },
+    select: {
+      txid: true,
+      blockTime: true,
+    },
+  });
+  return new Map(transactions.map(t => [t.txid, t.blockTime]));
+}
+
 // Export as namespace
 export const transactionRepository = {
   deleteByWalletId,
@@ -206,6 +461,17 @@ export const transactionRepository = {
   findByTxid,
   findForBalanceHistory,
   findWithLabels,
+  getBucketedBalanceDeltas,
+  findLastByWalletId,
+  findByIdWithAccess,
+  findByTxidWithAccess,
+  groupByType,
+  aggregateFees,
+  findByWalletIdWithDetails,
+  findByWalletIdsWithDetails,
+  aggregateSpending,
+  findForExport,
+  findBlockTimesByTxids,
 };
 
 export default transactionRepository;

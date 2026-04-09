@@ -24,6 +24,14 @@ vi.mock('../../../src/repositories/db', async () => {
   };
 });
 
+vi.mock('../../../src/models/prisma', async () => {
+  const { mockPrismaClient: prisma } = await import('../../mocks/prisma');
+  return {
+    __esModule: true,
+    default: prisma,
+  };
+});
+
 vi.mock('../../../src/middleware/walletAccess', () => ({
   requireWalletAccess: () => (req: any, _res: any, next: () => void) => {
     req.walletId = req.params.walletId;
@@ -181,7 +189,7 @@ describe('Transactions Privacy Routes', () => {
   });
 
   it('returns 400 when spend-analysis utxos do not all belong to wallet', async () => {
-    mockPrismaClient.uTXO.findMany.mockResolvedValue([{ id: 'utxo-1' }] as any);
+    mockPrismaClient.uTXO.count.mockResolvedValueOnce(1);
 
     const response = await request(app)
       .post('/api/v1/wallets/wallet-1/privacy/spend-analysis')
@@ -192,17 +200,18 @@ describe('Transactions Privacy Routes', () => {
   });
 
   it('analyzes spend privacy for wallet-owned utxos', async () => {
+    mockPrismaClient.uTXO.count.mockResolvedValueOnce(2);
+
     const response = await request(app)
       .post('/api/v1/wallets/wallet-1/privacy/spend-analysis')
       .send({ utxoIds: ['utxo-1', 'utxo-2'] });
 
     expect(response.status).toBe(200);
-    expect(mockPrismaClient.uTXO.findMany).toHaveBeenCalledWith({
+    expect(mockPrismaClient.uTXO.count).toHaveBeenCalledWith({
       where: {
         id: { in: ['utxo-1', 'utxo-2'] },
         walletId: 'wallet-1',
       },
-      select: { id: true },
     });
     expect(mockCalculateSpendPrivacy).toHaveBeenCalledWith(['utxo-1', 'utxo-2']);
     expect(response.body).toEqual({
@@ -212,7 +221,7 @@ describe('Transactions Privacy Routes', () => {
   });
 
   it('handles spend-analysis failures with api error response', async () => {
-    mockPrismaClient.uTXO.findMany.mockRejectedValue(new Error('db error'));
+    mockPrismaClient.uTXO.count.mockRejectedValueOnce(new Error('db error'));
 
     const response = await request(app)
       .post('/api/v1/wallets/wallet-1/privacy/spend-analysis')

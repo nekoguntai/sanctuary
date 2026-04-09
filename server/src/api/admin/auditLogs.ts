@@ -5,9 +5,19 @@
  */
 
 import { Router } from 'express';
+import { z } from 'zod';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { asyncHandler } from '../../errors/errorHandler';
 import { auditService, AuditCategory } from '../../services/auditService';
+
+/** Pagination with clamping for audit logs (max 500) */
+const AuditPaginationSchema = z.object({
+  limit: z.coerce.number().int().catch(50).transform(v => Math.max(1, Math.min(v, 500))),
+  offset: z.coerce.number().int().catch(0).transform(v => Math.max(0, v)),
+});
+
+/** Days parameter with clamping */
+const DaysSchema = z.coerce.number().int().catch(30).transform(v => Math.max(1, v));
 
 const router = Router();
 
@@ -39,6 +49,9 @@ router.get('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
     offset,
   } = req.query;
 
+  const pagination = AuditPaginationSchema.safeParse({ limit, offset }).data
+    ?? { limit: 50, offset: 0 };
+
   const result = await auditService.query({
     userId: userId as string,
     username: username as string,
@@ -47,8 +60,8 @@ router.get('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
     success: success !== undefined ? success === 'true' : undefined,
     startDate: startDate ? new Date(startDate as string) : undefined,
     endDate: endDate ? new Date(endDate as string) : undefined,
-    limit: Math.min(parseInt(limit as string, 10) || 50, 500),
-    offset: parseInt(offset as string, 10) || 0,
+    limit: pagination.limit,
+    offset: pagination.offset,
   });
 
   res.json(result);
@@ -62,7 +75,7 @@ router.get('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
  *   - days: Number of days to include (default 30)
  */
 router.get('/stats', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days as string, 10) || 30;
+  const days = DaysSchema.safeParse(req.query.days).data ?? 30;
   const stats = await auditService.getStats(days);
   res.json(stats);
 }));

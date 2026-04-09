@@ -7,7 +7,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { approvalService } from '../services/vaultPolicy/approvalService';
-import { db as prisma } from '../repositories/db';
+import { walletSharingRepository } from '../repositories';
 import { asyncHandler } from '../errors/errorHandler';
 
 const router = Router();
@@ -22,15 +22,7 @@ router.get('/approvals/pending', asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
 
   // Single query: get wallet IDs where user has approve-capable role (owner or approver)
-  const walletUsers = await prisma.walletUser.findMany({
-    where: {
-      userId,
-      role: { in: ['owner', 'approver'] },
-    },
-    select: { walletId: true },
-  });
-
-  const approveWalletIds = walletUsers.map(wu => wu.walletId);
+  const approveWalletIds = await walletSharingRepository.findWalletIdsByUserRole(userId, ['owner', 'approver']);
 
   const pending = await approvalService.getPendingApprovalsForUser(approveWalletIds);
 

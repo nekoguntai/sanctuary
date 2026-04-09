@@ -7,7 +7,7 @@
 
 import { Router } from 'express';
 import { requireWalletAccess } from '../../../middleware/walletAccess';
-import { db as prisma } from '../../../repositories/db';
+import { walletRepository, transactionRepository } from '../../../repositories';
 import { createLogger } from '../../../utils/logger';
 import { asyncHandler } from '../../../errors/errorHandler';
 
@@ -28,16 +28,12 @@ export function createPendingRouter(): Router {
     const walletId = req.walletId!;
 
     // Get wallet name for display
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-      select: { name: true, network: true },
-    });
+    const wallet = await walletRepository.findByIdWithSelect(walletId, { name: true, network: true });
 
     // Query unconfirmed transactions (blockHeight is null or 0)
     // Exclude replaced RBF transactions which are no longer in mempool
-    const pendingTxs = await prisma.transaction.findMany({
+    const pendingTxs = await transactionRepository.findByWalletIdWithDetails(walletId, {
       where: {
-        walletId,
         rbfStatus: { not: 'replaced' },
         OR: [
           { blockHeight: 0 },

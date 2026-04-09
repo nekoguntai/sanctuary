@@ -292,7 +292,8 @@ async function fetchOllamaCheck(): Promise<{ compatible: boolean; endpointType?:
 
     if (!response.ok) return null;
     return await response.json() as { compatible: boolean; endpointType?: string; reason?: string };
-  } catch {
+  } catch (error) {
+    log.debug('Ollama check failed', { error: getErrorMessage(error) });
     return null;
   }
 }

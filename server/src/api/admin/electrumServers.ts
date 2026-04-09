@@ -5,8 +5,7 @@
  */
 
 import { Router } from 'express';
-import type { Prisma } from '../../generated/prisma/client';
-import { db as prisma } from '../../repositories/db';
+import { nodeConfigRepository } from '../../repositories/nodeConfigRepository';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { asyncHandler } from '../../errors/errorHandler';
 import { InvalidInputError, NotFoundError, ConflictError } from '../../errors/ApiError';
@@ -26,23 +25,16 @@ const log = createLogger('ADMIN_ELECTRUM:ROUTE');
 router.get('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { network } = req.query;
 
-  const nodeConfig = await prisma.nodeConfig.findFirst({
-    where: { isDefault: true },
-  });
+  const nodeConfig = await nodeConfigRepository.findDefault();
 
   if (!nodeConfig) {
     return res.json([]);
   }
 
-  const where: Prisma.ElectrumServerWhereInput = { nodeConfigId: nodeConfig.id };
-  if (network) {
-    where.network = network as string;
-  }
-
-  const servers = await prisma.electrumServer.findMany({
-    where,
-    orderBy: { priority: 'asc' },
-  });
+  const servers = await nodeConfigRepository.electrumServer.findByConfig(
+    nodeConfig.id,
+    network ? { network: network as string } : undefined,
+  );
 
   res.json(servers);
 }));
@@ -94,13 +86,8 @@ router.put('/reorder', authenticate, requireAdmin, asyncHandler(async (req, res)
   }
 
   // Update priorities based on array order
-  await Promise.all(
-    serverIds.map((id: string, index: number) =>
-      prisma.electrumServer.update({
-        where: { id },
-        data: { priority: index },
-      })
-    )
+  await nodeConfigRepository.electrumServer.reorderPriorities(
+    serverIds.map((id: string, index: number) => ({ id, priority: index }))
   );
 
   log.info('Electrum servers reordered', { count: serverIds.length });
@@ -124,21 +111,16 @@ router.get('/:network', authenticate, requireAdmin, asyncHandler(async (req, res
     throw new InvalidInputError(`Invalid network. Must be one of: ${validNetworks.join(', ')}`);
   }
 
-  const nodeConfig = await prisma.nodeConfig.findFirst({
-    where: { isDefault: true },
-  });
+  const nodeConfig = await nodeConfigRepository.findDefault();
 
   if (!nodeConfig) {
     return res.json([]);
   }
 
-  const servers = await prisma.electrumServer.findMany({
-    where: {
-      nodeConfigId: nodeConfig.id,
-      network,
-    },
-    orderBy: { priority: 'asc' },
-  });
+  const servers = await nodeConfigRepository.electrumServer.findByConfig(
+    nodeConfig.id,
+    { network },
+  );
 
   res.json(servers);
 }));
@@ -164,59 +146,39 @@ router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   }
 
   // Check for duplicate (same host, port, and network)
-  const existingServer = await prisma.electrumServer.findFirst({
-    where: {
-      host: host.toLowerCase(),
-      port: parseInt(port.toString(), 10),
-      network: serverNetwork,
-    },
-  });
+  const existingServer = await nodeConfigRepository.electrumServer.findByHostAndPort(
+    host,
+    parseInt(port.toString(), 10),
+    serverNetwork,
+  );
 
   if (existingServer) {
     throw new ConflictError(`A server with host ${host}, port ${port}, and network ${serverNetwork} already exists (${existingServer.label})`);
   }
 
   // Get or create default node config
-  let nodeConfig = await prisma.nodeConfig.findFirst({
-    where: { isDefault: true },
+  const nodeConfig = await nodeConfigRepository.findOrCreateDefault({
+    id: 'default',
+    type: 'electrum',
+    network: serverNetwork,
+    host: host,
+    port: parseInt(port.toString(), 10),
+    useSsl: useSsl ?? true,
+    isDefault: true,
   });
-
-  if (!nodeConfig) {
-    // Create default electrum config if none exists
-    nodeConfig = await prisma.nodeConfig.create({
-      data: {
-        id: 'default',
-        type: 'electrum',
-        network: serverNetwork,
-        host: host,
-        port: parseInt(port.toString(), 10),
-        useSsl: useSsl ?? true,
-        isDefault: true,
-      },
-    });
-  }
 
   // Get highest priority for this network to set new server at end if not specified
-  const highestPriority = await prisma.electrumServer.findFirst({
-    where: {
-      nodeConfigId: nodeConfig.id,
-      network: serverNetwork,
-    },
-    orderBy: { priority: 'desc' },
-    select: { priority: true },
-  });
+  const maxPriority = await nodeConfigRepository.electrumServer.getMaxPriority(nodeConfig.id, serverNetwork);
 
-  const server = await prisma.electrumServer.create({
-    data: {
-      nodeConfigId: nodeConfig.id,
-      network: serverNetwork,
-      label,
-      host,
-      port: parseInt(port.toString(), 10),
-      useSsl: useSsl ?? true,
-      priority: priority ?? (highestPriority ? highestPriority.priority + 1 : 0),
-      enabled: enabled ?? true,
-    },
+  const server = await nodeConfigRepository.electrumServer.create({
+    nodeConfig: { connect: { id: nodeConfig.id } },
+    network: serverNetwork,
+    label,
+    host,
+    port: parseInt(port.toString(), 10),
+    useSsl: useSsl ?? true,
+    priority: priority ?? (maxPriority + 1),
+    enabled: enabled ?? true,
   });
 
   log.info('Electrum server added', { id: server.id, label, host, port, network: serverNetwork });
@@ -235,9 +197,7 @@ router.put('/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => 
   const { id } = req.params;
   const { label, host, port, useSsl, priority, enabled, network } = req.body;
 
-  const server = await prisma.electrumServer.findUnique({
-    where: { id },
-  });
+  const server = await nodeConfigRepository.electrumServer.findById(id);
 
   if (!server) {
     throw new NotFoundError('Electrum server not found');
@@ -253,31 +213,23 @@ router.put('/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => 
   // Check for duplicate (same host, port, and network, excluding this server)
   const newHost = host ?? server.host;
   const newPort = port ? parseInt(port.toString(), 10) : server.port;
-  const existingServer = await prisma.electrumServer.findFirst({
-    where: {
-      host: newHost.toLowerCase(),
-      port: newPort,
-      network: serverNetwork,
-      id: { not: id },
-    },
-  });
+  const existingServer = await nodeConfigRepository.electrumServer.findByHostAndPort(
+    newHost, newPort, serverNetwork, id,
+  );
 
   if (existingServer) {
     throw new ConflictError(`A server with host ${newHost}, port ${newPort}, and network ${serverNetwork} already exists (${existingServer.label})`);
   }
 
-  const updatedServer = await prisma.electrumServer.update({
-    where: { id },
-    data: {
-      label: label ?? server.label,
-      host: host ?? server.host,
-      port: port ? parseInt(port.toString(), 10) : server.port,
-      useSsl: useSsl ?? server.useSsl,
-      priority: priority ?? server.priority,
-      enabled: enabled ?? server.enabled,
-      network: serverNetwork,
-      updatedAt: new Date(),
-    },
+  const updatedServer = await nodeConfigRepository.electrumServer.update(id, {
+    label: label ?? server.label,
+    host: host ?? server.host,
+    port: port ? parseInt(port.toString(), 10) : server.port,
+    useSsl: useSsl ?? server.useSsl,
+    priority: priority ?? server.priority,
+    enabled: enabled ?? server.enabled,
+    network: serverNetwork,
+    updatedAt: new Date(),
   });
 
   log.info('Electrum server updated', { id, label: updatedServer.label, network: updatedServer.network });
@@ -295,17 +247,13 @@ router.put('/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => 
 router.delete('/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const server = await prisma.electrumServer.findUnique({
-    where: { id },
-  });
+  const server = await nodeConfigRepository.electrumServer.findById(id);
 
   if (!server) {
     throw new NotFoundError('Electrum server not found');
   }
 
-  await prisma.electrumServer.delete({
-    where: { id },
-  });
+  await nodeConfigRepository.electrumServer.delete(id);
 
   log.info('Electrum server deleted', { id, label: server.label });
 
@@ -322,9 +270,7 @@ router.delete('/:id', authenticate, requireAdmin, asyncHandler(async (req, res) 
 router.post('/:id/test', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const server = await prisma.electrumServer.findUnique({
-    where: { id },
-  });
+  const server = await nodeConfigRepository.electrumServer.findById(id);
 
   if (!server) {
     throw new NotFoundError('Electrum server not found');
@@ -338,19 +284,15 @@ router.post('/:id/test', authenticate, requireAdmin, asyncHandler(async (req, re
   });
 
   // Update health status and capability info based on test result
-  await prisma.electrumServer.update({
-    where: { id },
-    data: {
-      lastHealthCheck: new Date(),
-      isHealthy: result.success,
-      healthCheckFails: result.success ? 0 : server.healthCheckFails + 1,
-      lastHealthCheckError: result.success ? null : result.message,
-      // Update verbose capability if we got a result
-      ...(result.info?.supportsVerbose !== undefined && {
-        supportsVerbose: result.info.supportsVerbose,
-        lastCapabilityCheck: new Date(),
-      }),
-    },
+  await nodeConfigRepository.electrumServer.updateHealth(id, {
+    isHealthy: result.success,
+    lastHealthCheck: new Date(),
+    lastHealthCheckError: result.success ? null : result.message,
+    healthCheckFails: result.success ? 0 : server.healthCheckFails + 1,
+    ...(result.info?.supportsVerbose !== undefined && {
+      supportsVerbose: result.info.supportsVerbose,
+      lastCapabilityCheck: new Date(),
+    }),
   });
 
   log.info('Electrum server test result', {

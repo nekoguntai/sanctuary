@@ -6,7 +6,7 @@
 
 import { Router } from 'express';
 import { requireWalletAccess } from '../../../middleware/walletAccess';
-import { db as prisma } from '../../../repositories/db';
+import { transactionRepository } from '../../../repositories';
 import { bigIntToNumberOrZero } from '../../../utils/errors';
 import { asyncHandler } from '../../../errors/errorHandler';
 import { walletCache } from '../../../services/cache';
@@ -46,27 +46,10 @@ export function createStatsRouter(): Router {
     if (!stats) {
       // OPTIMIZED: Use aggregate queries instead of loading all transactions
       const [typeStats, feeStats, lastTx] = await Promise.all([
-        prisma.transaction.groupBy({
-          by: ['type'],
-          where: { walletId },
-          _count: { id: true },
-          _sum: { amount: true },
-        }),
-        prisma.transaction.aggregate({
-          where: {
-            walletId,
-            type: { in: ['sent', 'consolidation'] },
-            fee: { gt: 0 },
-          },
-          _sum: { fee: true },
-        }),
-        prisma.transaction.findFirst({
-          where: { walletId },
-          orderBy: [
-            { blockTime: { sort: 'desc', nulls: 'first' } },
-            { createdAt: 'desc' },
-          ],
-          select: { balanceAfter: true },
+        transactionRepository.groupByType(walletId),
+        transactionRepository.aggregateFees(walletId),
+        transactionRepository.findLastByWalletId(walletId, {
+          select: { id: true, balanceAfter: true },
         }),
       ]);
 

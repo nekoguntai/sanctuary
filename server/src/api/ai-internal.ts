@@ -25,7 +25,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../middleware/auth';
-import { db as prisma } from '../repositories/db';
+import { walletRepository, transactionRepository, labelRepository, utxoRepository, addressRepository } from '../repositories';
 import { buildWalletAccessWhere } from '../repositories/accessControl';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
@@ -142,16 +142,7 @@ router.get('/tx/:id', asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
 
   // Fetch transaction with wallet access check
-  const transaction = await prisma.transaction.findFirst({
-    where: {
-      id,
-      wallet: {
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    },
+  const transaction = await transactionRepository.findByIdWithAccess(id, userId, {
     select: {
       // ONLY select non-sensitive fields
       id: true,
@@ -191,24 +182,17 @@ router.get('/wallet/:id/labels', asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
 
   // Verify wallet access
-  const wallet = await prisma.wallet.findFirst({
-    where: { id, ...buildWalletAccessWhere(userId) },
-  });
+  const wallet = await walletRepository.findByIdWithAccess(id, userId);
 
   if (!wallet) {
     throw new NotFoundError('Wallet not found');
   }
 
   // Fetch recent labels
-  const labels = await prisma.label.findMany({
-    where: { walletId: id },
-    select: { name: true },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-  });
+  const labelNames = await labelRepository.findNamesByWalletId(id, { take: 50 });
 
   res.json({
-    labels: labels.map(l => l.name),
+    labels: labelNames,
   });
 }));
 
@@ -223,33 +207,26 @@ router.get('/wallet/:id/context', asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
 
   // Verify wallet access
-  const wallet = await prisma.wallet.findFirst({
-    where: { id, ...buildWalletAccessWhere(userId) },
-  });
+  const wallet = await walletRepository.findByIdWithAccess(id, userId);
 
   if (!wallet) {
     throw new NotFoundError('Wallet not found');
   }
 
   // Fetch summary stats (no sensitive data)
-  const [labels, txCount, addressCount, utxoCount] = await Promise.all([
-    prisma.label.findMany({
-      where: { walletId: id },
-      select: { name: true },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    }),
-    prisma.transaction.count({ where: { walletId: id } }),
-    prisma.address.count({ where: { walletId: id } }),
-    prisma.uTXO.count({ where: { walletId: id, spent: false } }),
+  const [labelNames, txCount, addrCount, unspentUtxoCount] = await Promise.all([
+    labelRepository.findNamesByWalletId(id, { take: 20 }),
+    transactionRepository.countByWalletId(id),
+    addressRepository.countByWalletId(id),
+    utxoRepository.countByWalletId(id, { spent: false }),
   ]);
 
   res.json({
-    labels: labels.map(l => l.name),
+    labels: labelNames,
     stats: {
       transactionCount: txCount,
-      addressCount: addressCount,
-      utxoCount: utxoCount,
+      addressCount: addrCount,
+      utxoCount: unspentUtxoCount,
     },
     // DO NOT include: balance, addresses, txids, or any identifying info
   });
@@ -269,9 +246,7 @@ router.get('/wallet/:id/utxo-health', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user!.userId;
 
-  const wallet = await prisma.wallet.findFirst({
-    where: { id, ...buildWalletAccessWhere(userId) },
-  });
+  const wallet = await walletRepository.findByIdWithAccess(id, userId);
 
   if (!wallet) {
     throw new NotFoundError('Wallet not found');
@@ -314,9 +289,7 @@ router.get('/wallet/:id/fee-history', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user!.userId;
 
-  const wallet = await prisma.wallet.findFirst({
-    where: { id, ...buildWalletAccessWhere(userId) },
-  });
+  const wallet = await walletRepository.findByIdWithAccess(id, userId);
 
   if (!wallet) {
     throw new NotFoundError('Wallet not found');
@@ -365,9 +338,7 @@ router.get('/wallet/:id/spending-velocity', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user!.userId;
 
-  const wallet = await prisma.wallet.findFirst({
-    where: { id, ...buildWalletAccessWhere(userId) },
-  });
+  const wallet = await walletRepository.findByIdWithAccess(id, userId);
 
   if (!wallet) {
     throw new NotFoundError('Wallet not found');
@@ -383,11 +354,7 @@ router.get('/wallet/:id/spending-velocity', asyncHandler(async (req, res) => {
 
   const results = await Promise.all(periods.map(period => {
     const cutoff = new Date(now.getTime() - period.days * 86400000);
-    return prisma.transaction.aggregate({
-      where: { walletId: id, type: 'sent', blockTime: { gte: cutoff } },
-      _count: { _all: true },
-      _sum: { amount: true },
-    });
+    return transactionRepository.aggregateSpending(id, cutoff);
   }));
 
   const velocity: Record<string, { count: number; totalSats: number }> = {};
@@ -421,9 +388,7 @@ router.get('/wallet/:id/utxo-age-profile', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user!.userId;
 
-  const wallet = await prisma.wallet.findFirst({
-    where: { id, ...buildWalletAccessWhere(userId) },
-  });
+  const wallet = await walletRepository.findByIdWithAccess(id, userId);
 
   if (!wallet) {
     throw new NotFoundError('Wallet not found');
@@ -437,11 +402,7 @@ router.get('/wallet/:id/utxo-age-profile', asyncHandler(async (req, res) => {
   const milestoneResults = await Promise.all([15, 30, 60].map(async (daysAhead) => {
     const windowStart = new Date(now.getTime() - (365 - daysAhead) * 86400000);
     const windowEnd = new Date(now.getTime() - (365 - daysAhead - 1) * 86400000);
-    const agg = await prisma.uTXO.aggregate({
-      where: { walletId: id, spent: false, createdAt: { gte: windowStart, lt: windowEnd } },
-      _count: { _all: true },
-      _sum: { amount: true },
-    });
+    const agg = await utxoRepository.aggregateByDateWindow(id, windowStart, windowEnd);
     const count = agg._count?._all ?? 0;
     return count > 0 ? { daysUntilLongTerm: daysAhead, count, totalSats: Number(agg._sum?.amount ?? 0) } : null;
   }));

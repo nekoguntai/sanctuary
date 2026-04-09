@@ -17,6 +17,14 @@ vi.mock('../../../src/repositories/db', async () => {
   };
 });
 
+vi.mock('../../../src/models/prisma', async () => {
+  const { mockPrismaClient: prisma } = await import('../../mocks/prisma');
+  return {
+    __esModule: true,
+    default: prisma,
+  };
+});
+
 vi.mock('../../../src/middleware/walletAccess', () => ({
   requireWalletAccess: () => (req: any, _res: any, next: () => void) => {
     req.walletId = req.params.walletId;
@@ -28,11 +36,16 @@ vi.mock('../../../src/services/accessControl', () => ({
   checkWalletAccess: mockCheckWalletAccess,
 }));
 
-vi.mock('../../../src/repositories', () => ({
-  systemSettingRepository: {
-    getParsed: mockGetParsed,
-  },
-}));
+vi.mock('../../../src/repositories', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/repositories')>();
+  return {
+    ...actual,
+    systemSettingRepository: {
+      ...actual.systemSettingRepository,
+      getParsed: mockGetParsed,
+    },
+  };
+});
 
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({

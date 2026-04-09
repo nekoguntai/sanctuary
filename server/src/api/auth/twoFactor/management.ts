@@ -5,7 +5,7 @@
  */
 
 import { Router } from 'express';
-import { db as prisma } from '../../../repositories/db';
+import { userRepository } from '../../../repositories';
 import { verifyPassword } from '../../../utils/password';
 import * as twoFactorService from '../../../services/twoFactorService';
 import { auditService, AuditAction, AuditCategory } from '../../../services/auditService';
@@ -30,9 +30,7 @@ export function createManagementRouter(): Router {
       throw new InvalidInputError('Password and 2FA token are required');
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
-    });
+    const user = await userRepository.findById(req.user!.userId);
 
     if (!user) {
       throw new NotFoundError('User not found');
@@ -64,13 +62,10 @@ export function createManagementRouter(): Router {
     }
 
     // Disable 2FA
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        twoFactorEnabled: false,
-        twoFactorSecret: null,
-        twoFactorBackupCodes: null,
-      },
+    await userRepository.update(user.id, {
+      twoFactorEnabled: false,
+      twoFactorSecret: null,
+      twoFactorBackupCodes: null,
     });
 
     // Audit 2FA disabled
@@ -93,9 +88,7 @@ export function createManagementRouter(): Router {
       throw new InvalidInputError('Password is required');
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
-    });
+    const user = await userRepository.findById(req.user!.userId);
 
     if (!user) {
       throw new NotFoundError('User not found');
@@ -127,9 +120,7 @@ export function createManagementRouter(): Router {
       throw new InvalidInputError('Password and 2FA token are required');
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
-    });
+    const user = await userRepository.findById(req.user!.userId);
 
     if (!user) {
       throw new NotFoundError('User not found');
@@ -155,10 +146,7 @@ export function createManagementRouter(): Router {
     const backupCodes = twoFactorService.generateBackupCodes();
     const hashedBackupCodes = await twoFactorService.hashBackupCodes(backupCodes);
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { twoFactorBackupCodes: hashedBackupCodes },
-    });
+    await userRepository.update(user.id, { twoFactorBackupCodes: hashedBackupCodes });
 
     // Audit backup codes regenerated
     await auditService.logFromRequest(

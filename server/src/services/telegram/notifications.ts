@@ -6,6 +6,7 @@
 
 import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 import { walletLog } from '../../websocket/notifications';
 import { sendTelegramMessage } from './api';
 import { getWalletUsers, formatTransactionMessage, formatDraftMessage } from './formatting';
@@ -37,8 +38,8 @@ export async function notifyNewTransactions(
       if (nodeConfig?.explorerUrl) {
         explorerUrl = nodeConfig.explorerUrl;
       }
-    } catch {
-      // Use default
+    } catch (error) {
+      log.debug('Failed to load explorer URL from node config, using default', { error: getErrorMessage(error) });
     }
 
     // Get all users with access to this wallet

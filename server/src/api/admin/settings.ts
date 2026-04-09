@@ -5,7 +5,7 @@
  */
 
 import { Router } from 'express';
-import { db as prisma } from '../../repositories/db';
+import { systemSettingRepository } from '../../repositories';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { asyncHandler } from '../../errors/errorHandler';
 import { InvalidInputError } from '../../errors/ApiError';
@@ -36,7 +36,7 @@ const log = createLogger('ADMIN_SETTINGS:ROUTE');
  * Get all system settings (admin only)
  */
 router.get('/', authenticate, requireAdmin, asyncHandler(async (_req, res) => {
-  const settings = await prisma.systemSetting.findMany();
+  const settings = await systemSettingRepository.getAll();
 
   // Convert to key-value object with parsed JSON values
   const settingsObj: Record<string, unknown> = {};
@@ -88,9 +88,7 @@ router.put('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   // Validate confirmation thresholds relationship
   if (updates.confirmationThreshold !== undefined || updates.deepConfirmationThreshold !== undefined) {
     // Get current values for comparison
-    const currentSettings = await prisma.systemSetting.findMany({
-      where: { key: { in: ['confirmationThreshold', 'deepConfirmationThreshold'] } },
-    });
+    const currentSettings = await systemSettingRepository.findByKeys(['confirmationThreshold', 'deepConfirmationThreshold']);
     const currentValues: Record<string, number> = {
       confirmationThreshold: DEFAULT_CONFIRMATION_THRESHOLD,
       deepConfirmationThreshold: DEFAULT_DEEP_CONFIRMATION_THRESHOLD,
@@ -122,11 +120,7 @@ router.put('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
       }
     }
 
-    await prisma.systemSetting.upsert({
-      where: { key },
-      update: { value: JSON.stringify(valueToStore) },
-      create: { key, value: JSON.stringify(valueToStore) },
-    });
+    await systemSettingRepository.set(key, JSON.stringify(valueToStore));
   }
 
   // Clear SMTP transporter cache if SMTP settings changed
@@ -143,7 +137,7 @@ router.put('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   });
 
   // Return updated settings
-  const settings = await prisma.systemSetting.findMany();
+  const settings = await systemSettingRepository.getAll();
   const settingsObj: Record<string, unknown> = {
     registrationEnabled: false, // Default to disabled (admin-only)
     confirmationThreshold: DEFAULT_CONFIRMATION_THRESHOLD,

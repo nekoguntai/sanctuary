@@ -63,7 +63,10 @@ export async function suggestTransactionLabel(
     });
 
     if (!response.ok) {
-      const errorJson = await response.json().catch(() => ({}));
+      const errorJson = await response.json().catch(() => {
+        log.warn('Failed to parse error response JSON for label suggestion');
+        return {};
+      });
       const error = validateResponse<{ error?: string }>(errorJson, []);
       log.error('AI label suggestion failed', { status: response.status, error: error?.error });
       return null;
@@ -116,7 +119,10 @@ export async function executeNaturalQuery(
     });
 
     if (!response.ok) {
-      const errorJson = await response.json().catch(() => ({}));
+      const errorJson = await response.json().catch(() => {
+        log.warn('Failed to parse error response JSON for query');
+        return {};
+      });
       const error = validateResponse<{ error?: string }>(errorJson, []);
       log.error('AI query failed', { status: response.status, error: error?.error });
       return null;
@@ -195,7 +201,10 @@ export async function listModels(): Promise<{
     });
 
     if (!response.ok) {
-      const errorJson = await response.json().catch(() => ({}));
+      const errorJson = await response.json().catch(() => {
+        log.warn('Failed to parse error response JSON for list models');
+        return {};
+      });
       const error = validateResponse<{ error?: string }>(errorJson, []);
       return { models: [], error: error?.error || 'Failed to list models' };
     }
@@ -242,7 +251,10 @@ export async function pullModel(model: string): Promise<{
     });
 
     if (!response.ok) {
-      const errorJson = await response.json().catch(() => ({}));
+      const errorJson = await response.json().catch(() => {
+        log.warn('Failed to parse error response JSON for pull model');
+        return {};
+      });
       const error = validateResponse<{ error?: string }>(errorJson, []);
       return { success: false, error: error?.error || 'Pull failed' };
     }
@@ -288,7 +300,10 @@ export async function deleteModel(model: string): Promise<{
     });
 
     if (!response.ok) {
-      const errorJson = await response.json().catch(() => ({}));
+      const errorJson = await response.json().catch(() => {
+        log.warn('Failed to parse error response JSON for delete model');
+        return {};
+      });
       const error = validateResponse<{ error?: string }>(errorJson, []);
       return { success: false, error: error?.error || 'Delete failed' };
     }

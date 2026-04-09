@@ -6,7 +6,7 @@
 
 import { Router } from 'express';
 import { requireWalletAccess } from '../../../middleware/walletAccess';
-import { db as prisma } from '../../../repositories/db';
+import { walletRepository, transactionRepository } from '../../../repositories';
 import { asyncHandler } from '../../../errors/errorHandler';
 
 /**
@@ -36,26 +36,10 @@ export function createExportRouter(): Router {
     }
 
     // Get wallet name for filename
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-      select: { name: true },
-    });
+    const wallet = await walletRepository.findByIdWithSelect(walletId, { name: true });
 
     // Query all transactions (no pagination for export)
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        walletId,
-        ...(Object.keys(dateFilter).length > 0 ? { blockTime: dateFilter } : {}),
-      },
-      include: {
-        transactionLabels: {
-          include: {
-            label: true,
-          },
-        },
-      },
-      orderBy: { blockTime: 'asc' },  // Oldest first to match Sparrow format
-    });
+    const transactions = await transactionRepository.findForExport(walletId, dateFilter);
 
     // Convert to export format
     // The amount in DB is already correctly signed:

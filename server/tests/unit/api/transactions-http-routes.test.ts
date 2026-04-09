@@ -46,11 +46,24 @@ vi.mock('../../../src/repositories/db', async () => {
   };
 });
 
-vi.mock('../../../src/repositories/walletRepository', () => ({
-  walletRepository: {
-    findById: mockWalletFindById,
-  },
-}));
+vi.mock('../../../src/models/prisma', async () => {
+  const { mockPrismaClient: prisma } = await import('../../mocks/prisma');
+  return {
+    __esModule: true,
+    default: prisma,
+  };
+});
+
+vi.mock('../../../src/repositories/walletRepository', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/repositories/walletRepository')>();
+  return {
+    ...actual,
+    walletRepository: {
+      ...actual.walletRepository,
+      findById: mockWalletFindById,
+    },
+  };
+});
 
 vi.mock('../../../src/middleware/walletAccess', () => ({
   requireWalletAccess: () => (req: any, _res: any, next: () => void) => {

@@ -38,6 +38,15 @@ vi.mock('../../../src/repositories/db', () => ({
   },
 }));
 
+vi.mock('../../../src/models/prisma', () => ({
+  __esModule: true,
+  default: {
+    walletUser: {
+      findMany: mockFindManyWalletUser,
+    },
+  },
+}));
+
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
     debug: vi.fn(),

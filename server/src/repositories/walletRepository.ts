@@ -253,6 +253,56 @@ export async function findByIdWithDevices(walletId: string) {
   });
 }
 
+/**
+ * Find wallet by ID with specific select (no access check - for internal use)
+ */
+export async function findByIdWithSelect<T extends Prisma.WalletSelect>(
+  walletId: string,
+  select: T
+) {
+  return prisma.wallet.findUnique({
+    where: { id: walletId },
+    select,
+  });
+}
+
+/**
+ * Find accessible wallets for a user with select
+ */
+export async function findAccessibleWithSelect<T extends Prisma.WalletSelect>(
+  userId: string,
+  select: T,
+  additionalWhere?: Prisma.WalletWhereInput
+) {
+  return prisma.wallet.findMany({
+    where: {
+      ...buildWalletAccessWhere(userId),
+      ...additionalWhere,
+    },
+    select,
+  });
+}
+
+/**
+ * Find a wallet by ID with sign/edit access check (owner or signer role)
+ */
+export async function findByIdWithEditAccess(
+  walletId: string,
+  userId: string
+): Promise<Wallet | null> {
+  return prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      users: {
+        some: {
+          userId,
+          role: { in: ['owner', 'signer'] },
+        },
+      },
+    },
+  });
+}
+
 // Export all functions as a namespace for convenient importing
 export const walletRepository = {
   findByIdWithAccess,
@@ -270,6 +320,9 @@ export const walletRepository = {
   getName,
   findByIdWithGroup,
   findByIdWithDevices,
+  findByIdWithSelect,
+  findAccessibleWithSelect,
+  findByIdWithEditAccess,
 };
 
 export default walletRepository;

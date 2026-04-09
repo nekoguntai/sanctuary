@@ -17,6 +17,14 @@ vi.mock('../../../src/repositories/db', async () => {
   };
 });
 
+vi.mock('../../../src/models/prisma', async () => {
+  const { mockPrismaClient: prisma } = await import('../../mocks/prisma');
+  return {
+    __esModule: true,
+    default: prisma,
+  };
+});
+
 vi.mock('../../../src/middleware/auth', () => ({
   authenticate: (_req: unknown, _res: unknown, next: () => void) => next(),
   requireAdmin: (_req: unknown, _res: unknown, next: () => void) => next(),
@@ -401,7 +409,7 @@ describe('admin electrum servers router', () => {
     expect(mockPrismaClient.electrumServer.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          nodeConfigId: 'default-existing',
+          nodeConfig: { connect: { id: 'default-existing' } },
           useSsl: true,
           priority: 0,
           enabled: true,

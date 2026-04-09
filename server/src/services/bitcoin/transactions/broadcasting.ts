@@ -10,6 +10,7 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import { broadcastTransaction, recalculateWalletBalances } from '../blockchain';
 import { createLogger } from '../../../utils/logger';
+import { getErrorMessage } from '../../../utils/errors';
 import { eventService } from '../../eventService';
 import { transactionBroadcastsTotal } from '../../../observability/metrics';
 import { parseMultisigScript, finalizeMultisigInput } from '../psbtBuilder';
@@ -82,7 +83,7 @@ export async function broadcastAndSave(
         type: persisted.txType,
         amount: BigInt(metadata.amount),
       }]).catch(err => {
-        log.warn('Failed to send notifications', { error: String(err) });
+        log.warn('Failed to send notifications', { error: getErrorMessage(err) });
       });
     });
 
@@ -116,7 +117,7 @@ export async function broadcastAndSave(
         type: 'received',
         amount: BigInt(receivingTx.amount),
       }]).catch(err => {
-        log.warn('Failed to send notifications for receiving wallet', { error: String(err) });
+        log.warn('Failed to send notifications for receiving wallet', { error: getErrorMessage(err) });
       });
     });
   }

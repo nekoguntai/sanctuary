@@ -164,6 +164,23 @@ export async function getWalletSharingInfo(walletId: string) {
   });
 }
 
+/**
+ * Find wallet IDs where a user has specific roles
+ */
+export async function findWalletIdsByUserRole(
+  userId: string,
+  roles: string[]
+): Promise<string[]> {
+  const walletUsers = await prisma.walletUser.findMany({
+    where: {
+      userId,
+      role: { in: roles },
+    },
+    select: { walletId: true },
+  });
+  return walletUsers.map(wu => wu.walletId);
+}
+
 // Export as namespace
 export const walletSharingRepository = {
   findWalletUser,
@@ -175,6 +192,7 @@ export const walletSharingRepository = {
   updateWalletGroup,
   updateWalletGroupWithResult,
   getWalletSharingInfo,
+  findWalletIdsByUserRole,
 };
 
 export default walletSharingRepository;

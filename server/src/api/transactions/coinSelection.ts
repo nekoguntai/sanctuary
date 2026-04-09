@@ -5,10 +5,12 @@
  */
 
 import { Router } from 'express';
+import { z } from 'zod';
 import { requireWalletAccess } from '../../middleware/walletAccess';
-import { db as prisma } from '../../repositories/db';
+import { utxoRepository } from '../../repositories';
 import { asyncHandler } from '../../errors/errorHandler';
 import { ValidationError } from '../../errors/ApiError';
+import { FeeRateSchema } from '../schemas/common';
 import * as selectionService from '../../services/utxoSelectionService';
 
 const router = Router();
@@ -25,8 +27,8 @@ router.post('/wallets/:walletId/utxos/select', requireWalletAccess('view'), asyn
     throw new ValidationError('amount and feeRate are required');
   }
 
-  const feeRateNum = parseFloat(feeRate);
-  if (isNaN(feeRateNum) || feeRateNum <= 0) {
+  const feeRateResult = FeeRateSchema.safeParse(feeRate);
+  if (!feeRateResult.success) {
     throw new ValidationError('feeRate must be a positive number');
   }
 
@@ -38,7 +40,7 @@ router.post('/wallets/:walletId/utxos/select', requireWalletAccess('view'), asyn
   const result = await selectionService.selectUtxos({
     walletId,
     targetAmount: BigInt(amount),
-    feeRate: feeRateNum,
+    feeRate: feeRateResult.data,
     strategy,
     scriptType,
   });
@@ -71,15 +73,15 @@ router.post('/wallets/:walletId/utxos/compare-strategies', requireWalletAccess('
     throw new ValidationError('amount and feeRate are required');
   }
 
-  const feeRateNum = parseFloat(feeRate);
-  if (isNaN(feeRateNum) || feeRateNum <= 0) {
+  const feeRateResult = FeeRateSchema.safeParse(feeRate);
+  if (!feeRateResult.success) {
     throw new ValidationError('feeRate must be a positive number');
   }
 
   const results = await selectionService.compareStrategies(
     walletId,
     BigInt(amount),
-    feeRateNum,
+    feeRateResult.data,
     scriptType
   );
 
@@ -110,17 +112,11 @@ router.post('/wallets/:walletId/utxos/compare-strategies', requireWalletAccess('
  */
 router.get('/wallets/:walletId/utxos/recommended-strategy', requireWalletAccess('view'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
-  const feeRate = parseFloat(req.query.feeRate as string) || 10;
+  const feeRate = z.coerce.number().min(1).catch(10).safeParse(req.query.feeRate).data ?? 10;
   const prioritizePrivacy = req.query.prioritizePrivacy === 'true';
 
   // Get UTXO count
-  const utxoCount = await prisma.uTXO.count({
-    where: {
-      walletId,
-      spent: false,
-      frozen: false,
-    },
-  });
+  const utxoCount = await utxoRepository.countUnspentUnfrozen(walletId);
 
   const recommendation = selectionService.getRecommendedStrategy(
     utxoCount,

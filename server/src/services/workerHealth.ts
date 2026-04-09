@@ -226,9 +226,8 @@ export async function stopWorkerHealthMonitor(): Promise<void> {
   if (activeCheck) {
     try {
       await activeCheck;
-    } catch {
-      // Defensive: runHealthCheck currently resolves false on failure, but
-      // keep stop resilient if that implementation changes.
+    } catch (error) {
+      log.debug('Active health check failed during stop', { error: String(error) });
     }
   }
 

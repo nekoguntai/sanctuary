@@ -4,10 +4,12 @@
  * Health check and availability functions for the AI service.
  */
 
+import { createLogger } from '../../utils/logger';
 import { getAIConfig, syncConfigToContainer, getContainerUrl } from './config';
 import { validateResponse } from './validation';
 import type { AIHealthResponse } from './types';
 
+const log = createLogger('AI:SVC_HEALTH');
 const AI_CONTAINER_URL = getContainerUrl();
 
 /**
@@ -28,7 +30,8 @@ export async function isContainerAvailable(): Promise<boolean> {
       signal: AbortSignal.timeout(5000),
     });
     return response.ok;
-  } catch {
+  } catch (error) {
+    log.debug('AI container health check failed', { error: String(error) });
     return false;
   }
 }

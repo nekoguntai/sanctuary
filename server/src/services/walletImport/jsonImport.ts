@@ -9,7 +9,10 @@ import type { JsonImportConfig, Network } from '../bitcoin/descriptorParser';
 import { parseJsonImport } from '../bitcoin/descriptorParser';
 import { resolveDevices } from './deviceResolution';
 import { createWalletTransaction } from './walletImportService';
+import { createLogger } from '../../utils/logger';
 import type { ImportWalletResult } from './types';
+
+const log = createLogger('WALLET_IMPORT:JSON');
 
 /**
  * Import wallet from JSON configuration
@@ -27,7 +30,8 @@ export async function importFromJson(
   let parsedJson: unknown;
   try {
     parsedJson = JSON.parse(input.json);
-  } catch {
+  } catch (error) {
+    log.debug('Failed to parse wallet import JSON', { error: String(error) });
     throw new Error('Invalid JSON format in wallet import data');
   }
   const parseResult = JsonImportConfigSchema.safeParse(parsedJson);

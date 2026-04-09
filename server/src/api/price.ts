@@ -5,11 +5,15 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { getPriceService } from '../services/price';
 import { createLogger } from '../utils/logger';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { asyncHandler } from '../errors/errorHandler';
 import { InvalidInputError } from '../errors/ApiError';
+
+/** Days parameter: integer between 1 and 365 */
+const HistoryDaysSchema = z.coerce.number().int().min(1).max(365);
 
 const router = Router();
 const log = createLogger('PRICE:ROUTE');
@@ -217,17 +221,16 @@ router.get('/historical', asyncHandler(async (req, res) => {
 router.get('/history', asyncHandler(async (req, res) => {
   const { days = '30', currency = 'USD' } = req.query;
 
-  const daysNum = parseInt(days as string, 10);
-
-  if (isNaN(daysNum) || daysNum < 1 || daysNum > 365) {
+  const daysResult = HistoryDaysSchema.safeParse(days);
+  if (!daysResult.success) {
     throw new InvalidInputError('days must be a number between 1 and 365');
   }
 
-  const history = await priceService.getPriceHistory(currency as string, daysNum);
+  const history = await priceService.getPriceHistory(currency as string, daysResult.data);
 
   res.json({
     currency,
-    days: daysNum,
+    days: daysResult.data,
     dataPoints: history.length,
     history: history.map(({ timestamp, price }) => ({
       timestamp: timestamp.toISOString(),

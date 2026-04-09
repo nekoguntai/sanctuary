@@ -7,7 +7,7 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import * as blockchain from '../../services/bitcoin/blockchain';
-import { db as prisma } from '../../repositories/db';
+import { walletRepository } from '../../repositories';
 import { asyncHandler } from '../../errors/errorHandler';
 import { ValidationError, ForbiddenError } from '../../errors/ApiError';
 import * as advancedTx from '../../services/bitcoin/advancedTx';
@@ -68,17 +68,7 @@ router.post('/transaction/:txid/rbf', authenticate, asyncHandler(async (req, res
   }
 
   // Check user has access to wallet
-  const wallet = await prisma.wallet.findFirst({
-    where: {
-      id: walletId,
-      users: {
-        some: {
-          userId,
-          role: { in: ['owner', 'signer'] },
-        },
-      },
-    },
-  });
+  const wallet = await walletRepository.findByIdWithEditAccess(walletId, userId);
 
   if (!wallet) {
     throw new ForbiddenError('Insufficient permissions for this wallet');
@@ -121,17 +111,7 @@ router.post('/transaction/cpfp', authenticate, asyncHandler(async (req, res) => 
   }
 
   // Check user has access to wallet
-  const wallet = await prisma.wallet.findFirst({
-    where: {
-      id: walletId,
-      users: {
-        some: {
-          userId,
-          role: { in: ['owner', 'signer'] },
-        },
-      },
-    },
-  });
+  const wallet = await walletRepository.findByIdWithEditAccess(walletId, userId);
 
   if (!wallet) {
     throw new ForbiddenError('Insufficient permissions for this wallet');
@@ -180,17 +160,7 @@ router.post('/transaction/batch', authenticate, asyncHandler(async (req, res) =>
   }
 
   // Check user has access to wallet
-  const wallet = await prisma.wallet.findFirst({
-    where: {
-      id: walletId,
-      users: {
-        some: {
-          userId,
-          role: { in: ['owner', 'signer'] },
-        },
-      },
-    },
-  });
+  const wallet = await walletRepository.findByIdWithEditAccess(walletId, userId);
 
   if (!wallet) {
     throw new ForbiddenError('Insufficient permissions for this wallet');

@@ -8,6 +8,9 @@
 import type { ImportFormatHandler, FormatDetectionResult, ImportParseResult } from '../types';
 import { parseJsonImport, type JsonImportConfig } from '../../bitcoin/descriptorParser';
 import { JsonImportConfigSchema, JsonConfigDetectionSchema } from '../schemas';
+import { createLogger } from '../../../utils/logger';
+
+const log = createLogger('IMPORT:JSON_CONFIG');
 
 export const jsonConfigHandler: ImportFormatHandler = {
   id: 'json',
@@ -46,7 +49,8 @@ export const jsonConfigHandler: ImportFormatHandler = {
       }
 
       return { detected: false, confidence: 0 };
-    } catch {
+    } catch (error) {
+      log.debug('Failed to parse input as JSON config', { error: String(error) });
       return { detected: false, confidence: 0 };
     }
   },
@@ -55,7 +59,8 @@ export const jsonConfigHandler: ImportFormatHandler = {
     let json: unknown;
     try {
       json = JSON.parse(input.trim());
-    } catch {
+    } catch (error) {
+      log.debug('Invalid JSON in config parse', { error: String(error) });
       throw new Error('Invalid JSON in configuration input');
     }
     const validated = JsonImportConfigSchema.parse(json);
@@ -84,7 +89,8 @@ export const jsonConfigHandler: ImportFormatHandler = {
     try {
       const json = JSON.parse(input.trim());
       return json.name;
-    } catch {
+    } catch (error) {
+      log.debug('Failed to extract JSON config name', { error: String(error) });
       return undefined;
     }
   },

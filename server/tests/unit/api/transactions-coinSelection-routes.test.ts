@@ -22,6 +22,14 @@ vi.mock('../../../src/repositories/db', async () => {
   };
 });
 
+vi.mock('../../../src/models/prisma', async () => {
+  const { mockPrismaClient: prisma } = await import('../../mocks/prisma');
+  return {
+    __esModule: true,
+    default: prisma,
+  };
+});
+
 vi.mock('../../../src/middleware/walletAccess', () => ({
   requireWalletAccess: () => (req: any, _res: any, next: () => void) => {
     req.walletId = req.params.walletId;

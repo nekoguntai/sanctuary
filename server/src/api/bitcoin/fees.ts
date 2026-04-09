@@ -8,7 +8,7 @@ import { Router } from 'express';
 import * as blockchain from '../../services/bitcoin/blockchain';
 import * as utils from '../../services/bitcoin/utils';
 import * as mempool from '../../services/bitcoin/mempool';
-import { db as prisma } from '../../repositories/db';
+import { nodeConfigRepository } from '../../repositories/nodeConfigRepository';
 import { createLogger } from '../../utils/logger';
 import { asyncHandler } from '../../errors/errorHandler';
 import { ValidationError } from '../../errors/ApiError';
@@ -23,9 +23,7 @@ const log = createLogger('BITCOIN_FEE:ROUTE');
  */
 router.get('/fees', asyncHandler(async (_req, res) => {
   // Check configured fee estimator source
-  const nodeConfig = await prisma.nodeConfig.findFirst({
-    where: { isDefault: true },
-  });
+  const nodeConfig = await nodeConfigRepository.findDefault();
 
   const useMempoolApi = nodeConfig?.feeEstimatorUrl !== '' && nodeConfig?.feeEstimatorUrl !== undefined;
 

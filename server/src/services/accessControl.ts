@@ -126,8 +126,8 @@ export async function getUserWalletRole(walletId: string, userId: string): Promi
     if (cached !== null && typeof cached === 'object' && 'role' in cached) {
       return cached.role;
     }
-  } catch {
-    // Cache miss or error, continue to DB
+  } catch (error) {
+    log.debug('Access cache lookup failed, continuing to DB', { error: getErrorMessage(error) });
   }
 
   // Check direct user access first
@@ -158,8 +158,8 @@ export async function getUserWalletRole(walletId: string, userId: string): Promi
   // Wrap in object to distinguish from cache miss
   try {
     await cache.set<CachedRole>(cacheKey, { role }, ACCESS_CACHE_TTL_SECONDS);
-  } catch {
-    // Cache set failed, continue without caching
+  } catch (error) {
+    log.debug('Failed to cache access role', { error: getErrorMessage(error) });
   }
 
   return role;

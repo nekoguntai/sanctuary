@@ -6,7 +6,7 @@
 
 import { Router } from 'express';
 import { requireWalletAccess } from '../../../middleware/walletAccess';
-import { db as prisma } from '../../../repositories/db';
+import { walletRepository, transactionRepository } from '../../../repositories';
 import { validatePagination, bigIntToNumber, bigIntToNumberOrZero } from '../../../utils/errors';
 import { asyncHandler } from '../../../errors/errorHandler';
 import { getCachedBlockHeight } from '../../../services/bitcoin/blockchain';
@@ -30,18 +30,15 @@ export function createListTransactionsRouter(): Router {
     );
 
     // Get wallet network for network-specific block height cache
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-      select: { network: true },
-    });
+    const wallet = await walletRepository.findByIdWithSelect(walletId, { network: true });
     const network = (wallet?.network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
 
     // Get cached block height for this network (no network call)
     const currentHeight = getCachedBlockHeight(network);
 
-    const transactions = await prisma.transaction.findMany({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const transactions: any[] = await transactionRepository.findByWalletIdWithDetails(walletId, {
       where: {
-        walletId,
         // Exclude replaced RBF transactions which are no longer in mempool
         // These show as "pending" forever since they'll never confirm
         rbfStatus: { not: 'replaced' },
@@ -96,7 +93,7 @@ export function createListTransactionsRouter(): Router {
         // Calculate confirmations dynamically from cached block height
         // Falls back to stored value if cache not yet populated
         confirmations: currentHeight > 0 ? calculateConfirmations(blockHeight, currentHeight) : tx.confirmations,
-        labels: tx.transactionLabels.map(tl => tl.label),
+        labels: tx.transactionLabels.map((tl: any) => tl.label),
         transactionLabels: undefined, // Remove the raw join data
       };
     });

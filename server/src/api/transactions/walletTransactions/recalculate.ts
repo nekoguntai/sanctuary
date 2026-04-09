@@ -6,7 +6,7 @@
 
 import { Router } from 'express';
 import { requireWalletAccess } from '../../../middleware/walletAccess';
-import { db as prisma } from '../../../repositories/db';
+import { transactionRepository } from '../../../repositories';
 import { recalculateWalletBalances } from '../../../services/bitcoin/blockchain';
 import { asyncHandler } from '../../../errors/errorHandler';
 
@@ -26,13 +26,8 @@ export function createRecalculateRouter(): Router {
     await recalculateWalletBalances(walletId);
 
     // Get the final balance after recalculation
-    const lastTx = await prisma.transaction.findFirst({
-      where: { walletId },
-      orderBy: [
-        { blockTime: { sort: 'desc', nulls: 'first' } },
-        { createdAt: 'desc' },
-      ],
-      select: { balanceAfter: true },
+    const lastTx = await transactionRepository.findLastByWalletId(walletId, {
+      select: { id: true, balanceAfter: true },
     });
 
     res.json({

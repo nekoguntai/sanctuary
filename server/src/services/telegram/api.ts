@@ -13,7 +13,7 @@ const log = createLogger('TELEGRAM:SVC_API');
 
 export const TELEGRAM_API = 'https://api.telegram.org/bot';
 
-// Circuit breaker: 5 failures → open for 60s → half-open probe
+// Circuit breaker: 5 failures -> open for 60s -> half-open probe
 const telegramCircuit = createCircuitBreaker<{ success: boolean; chatId?: string; username?: string; error?: string }>({
   name: 'telegram',
   failureThreshold: 5,
@@ -46,7 +46,10 @@ export async function sendTelegramMessage(
       );
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({})) as TelegramErrorResponse | Record<string, never>;
+        const errorData = await response.json().catch(() => {
+          log.warn('Failed to parse Telegram sendMessage error response JSON');
+          return {};
+        }) as TelegramErrorResponse | Record<string, never>;
         const errorMsg =
           'description' in errorData ? errorData.description : `HTTP ${response.status}`;
 
@@ -87,7 +90,10 @@ export async function getChatIdFromBot(
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({})) as TelegramErrorResponse | Record<string, never>;
+        const errorData = await response.json().catch(() => {
+          log.warn('Failed to parse Telegram getUpdates error response JSON');
+          return {};
+        }) as TelegramErrorResponse | Record<string, never>;
         const errorMsg =
           'description' in errorData ? errorData.description : `HTTP ${response.status}`;
 

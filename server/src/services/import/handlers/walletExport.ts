@@ -8,6 +8,9 @@
 import type { ImportFormatHandler, FormatDetectionResult, ImportParseResult } from '../types';
 import { parseDescriptorForImport } from '../../bitcoin/descriptorParser';
 import { WalletExportDetectionSchema } from '../schemas';
+import { createLogger } from '../../../utils/logger';
+
+const log = createLogger('IMPORT:WALLET_EXPORT');
 
 export const walletExportHandler: ImportFormatHandler = {
   id: 'wallet_export',
@@ -37,7 +40,8 @@ export const walletExportHandler: ImportFormatHandler = {
       }
 
       return { detected: false, confidence: 0 };
-    } catch {
+    } catch (error) {
+      log.debug('Failed to parse input as wallet export JSON', { error: String(error) });
       return { detected: false, confidence: 0 };
     }
   },
@@ -46,7 +50,8 @@ export const walletExportHandler: ImportFormatHandler = {
     let json: Record<string, unknown>;
     try {
       json = JSON.parse(input.trim());
-    } catch {
+    } catch (error) {
+      log.debug('Invalid JSON in wallet export parse', { error: String(error) });
       throw new Error('Invalid JSON in wallet export input');
     }
     const parsed = parseDescriptorForImport(json.descriptor as string);
@@ -61,7 +66,8 @@ export const walletExportHandler: ImportFormatHandler = {
     try {
       const json = JSON.parse(input.trim());
       return json.label || json.name;
-    } catch {
+    } catch (error) {
+      log.debug('Failed to extract wallet export name', { error: String(error) });
       return undefined;
     }
   },

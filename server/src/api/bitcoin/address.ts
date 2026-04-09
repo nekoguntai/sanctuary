@@ -8,7 +8,7 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import * as blockchain from '../../services/bitcoin/blockchain';
 import * as utils from '../../services/bitcoin/utils';
-import { db as prisma } from '../../repositories/db';
+import { addressRepository } from '../../repositories';
 import { asyncHandler } from '../../errors/errorHandler';
 import { ValidationError, NotFoundError } from '../../errors/ApiError';
 
@@ -64,17 +64,7 @@ router.post('/address/:addressId/sync', authenticate, asyncHandler(async (req, r
   const { addressId } = req.params;
 
   // Check user has access to address's wallet
-  const address = await prisma.address.findFirst({
-    where: {
-      id: addressId,
-      wallet: {
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    },
-  });
+  const address = await addressRepository.findByIdWithAccess(addressId, userId);
 
   if (!address) {
     throw new NotFoundError('Address not found');
@@ -107,27 +97,7 @@ router.post('/address-lookup', authenticate, asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
 
   // Find addresses that belong to wallets the user has access to
-  const addressRecords = await prisma.address.findMany({
-    where: {
-      address: { in: addresses },
-      wallet: {
-        users: {
-          some: {
-            userId,
-          },
-        },
-      },
-    },
-    select: {
-      address: true,
-      wallet: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-  });
+  const addressRecords = await addressRepository.findByAddressesForUser(addresses, userId);
 
   // Build lookup map: address -> { walletId, walletName }
   const lookup: Record<string, { walletId: string; walletName: string }> = {};

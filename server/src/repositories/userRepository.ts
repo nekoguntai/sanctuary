@@ -17,6 +17,19 @@ export async function findById(id: string): Promise<User | null> {
 }
 
 /**
+ * Find user by ID with select
+ */
+export async function findByIdWithSelect<T extends Prisma.UserSelect>(
+  id: string,
+  select: T
+) {
+  return prisma.user.findUnique({
+    where: { id },
+    select,
+  });
+}
+
+/**
  * Find user by username
  */
 export async function findByUsername(username: string): Promise<User | null> {
@@ -248,6 +261,7 @@ export async function emailExists(email: string): Promise<boolean> {
 // Export as namespace
 export const userRepository = {
   findById,
+  findByIdWithSelect,
   findByUsername,
   findByEmail,
   findAllSummary,

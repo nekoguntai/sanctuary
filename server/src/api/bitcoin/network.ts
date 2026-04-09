@@ -5,19 +5,26 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import * as blockchain from '../../services/bitcoin/blockchain';
 import { getElectrumClient } from '../../services/bitcoin/electrum';
 import { getElectrumPoolAsync } from '../../services/bitcoin/electrumPool';
 import type { PooledConnectionHandle } from '../../services/bitcoin/electrumPool/types';
 import * as mempool from '../../services/bitcoin/mempool';
-import { db as prisma } from '../../repositories/db';
 import { systemSettingRepository } from '../../repositories';
+import { nodeConfigRepository } from '../../repositories/nodeConfigRepository';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { asyncHandler } from '../../errors/errorHandler';
 import { ValidationError } from '../../errors/ApiError';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD } from '../../constants';
 import { SystemSettingSchemas } from '../../utils/safeJson';
+
+/** Recent blocks count (clamps to default 10) */
+const RecentBlocksCountSchema = z.coerce.number().int().min(1).catch(10);
+
+/** Block height (must be a non-negative integer) */
+const BlockHeightSchema = z.coerce.number().int().min(0);
 
 const router = Router();
 const log = createLogger('BITCOIN_NETWORK:ROUTE');
@@ -37,9 +44,7 @@ const MEMPOOL_STALE_TTL = 300000; // 5 minutes for stale fallback
 router.get('/status', async (_req: Request, res: Response) => {
   try {
     // Get the node config first to determine connection strategy
-    const nodeConfig = await prisma.nodeConfig.findFirst({
-      where: { isDefault: true },
-    });
+    const nodeConfig = await nodeConfigRepository.findDefault();
 
     let version: { server: string; protocol: string } | null = null;
     let blockHeight: number | undefined;
@@ -164,7 +169,7 @@ router.get('/mempool', async (_req: Request, res: Response) => {
  * Get recent confirmed blocks
  */
 router.get('/blocks/recent', asyncHandler(async (req, res) => {
-  const count = parseInt(req.query.count as string, 10) || 10;
+  const count = RecentBlocksCountSchema.safeParse(req.query.count).data ?? 10;
   const blocks = await mempool.getRecentBlocks(count);
 
   res.json(blocks);
@@ -175,11 +180,11 @@ router.get('/blocks/recent', asyncHandler(async (req, res) => {
  * Get block information
  */
 router.get('/block/:height', asyncHandler(async (req, res) => {
-  const height = parseInt(req.params.height, 10);
-
-  if (isNaN(height) || height < 0) {
+  const heightResult = BlockHeightSchema.safeParse(req.params.height);
+  if (!heightResult.success) {
     throw new ValidationError('Invalid block height');
   }
+  const height = heightResult.data;
 
   const client = getElectrumClient();
 

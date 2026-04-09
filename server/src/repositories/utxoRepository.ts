@@ -128,6 +128,19 @@ export async function countByWalletId(
 }
 
 /**
+ * Count unspent, unfrozen UTXOs for a wallet
+ */
+export async function countUnspentUnfrozen(walletId: string): Promise<number> {
+  return prisma.uTXO.count({
+    where: {
+      walletId,
+      spent: false,
+      frozen: false,
+    },
+  });
+}
+
+/**
  * Count UTXOs by eligibility categories for payjoin
  * Returns counts for: eligible, total, frozen, unconfirmed, locked
  */
@@ -158,6 +171,177 @@ export async function countEligibility(walletId: string): Promise<{
   return { eligible, total, frozen, unconfirmed, locked };
 }
 
+/**
+ * Find a UTXO by ID with wallet access check
+ */
+export async function findByIdWithAccess(
+  utxoId: string,
+  userId: string
+): Promise<UTXO | null> {
+  return prisma.uTXO.findFirst({
+    where: {
+      id: utxoId,
+      wallet: {
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+    },
+  });
+}
+
+/**
+ * Find a UTXO by ID with wallet and user details
+ */
+export async function findByIdWithWalletAccess(
+  utxoId: string,
+  userId: string
+) {
+  return prisma.uTXO.findFirst({
+    where: {
+      id: utxoId,
+      wallet: {
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+    },
+    include: {
+      wallet: {
+        include: {
+          users: {
+            where: { userId },
+          },
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Find a UTXO by ID (select walletId only)
+ */
+export async function findWalletIdByUtxoId(
+  utxoId: string
+): Promise<string | null> {
+  const utxo = await prisma.uTXO.findUnique({
+    where: { id: utxoId },
+    select: { walletId: true },
+  });
+  return utxo?.walletId ?? null;
+}
+
+/**
+ * Update a UTXO by ID
+ */
+export async function updateById(
+  utxoId: string,
+  data: Prisma.UTXOUpdateInput
+): Promise<UTXO> {
+  return prisma.uTXO.update({
+    where: { id: utxoId },
+    data,
+  });
+}
+
+/**
+ * Aggregate unspent UTXOs for a wallet (count + sum)
+ */
+export async function aggregateUnspent(walletId: string) {
+  return prisma.uTXO.aggregate({
+    where: { walletId, spent: false },
+    _count: { _all: true },
+    _sum: { amount: true },
+  });
+}
+
+/**
+ * Find unspent UTXOs with draft lock details (for UTXO list views)
+ */
+export async function findUnspentWithDraftLocks(
+  walletId: string,
+  options?: { take?: number; skip?: number }
+) {
+  return prisma.uTXO.findMany({
+    where: {
+      walletId,
+      spent: false,
+    },
+    orderBy: { amount: 'desc' },
+    include: {
+      draftLock: {
+        include: {
+          draft: {
+            select: { id: true, label: true },
+          },
+        },
+      },
+    },
+    take: options?.take,
+    skip: options?.skip,
+  });
+}
+
+/**
+ * Find UTXOs by txids for a wallet (for frozen/locked state lookups)
+ */
+export async function findByTxidsUnspent(
+  walletIds: string[],
+  txids: string[]
+) {
+  return prisma.uTXO.findMany({
+    where: {
+      walletId: { in: walletIds },
+      txid: { in: txids },
+      spent: false,
+    },
+    select: {
+      walletId: true,
+      txid: true,
+      frozen: true,
+      draftLock: {
+        include: {
+          draft: {
+            select: { label: true },
+          },
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Aggregate UTXOs by date window (for age profile milestones)
+ */
+export async function aggregateByDateWindow(
+  walletId: string,
+  windowStart: Date,
+  windowEnd: Date
+) {
+  return prisma.uTXO.aggregate({
+    where: { walletId, spent: false, createdAt: { gte: windowStart, lt: windowEnd } },
+    _count: { _all: true },
+    _sum: { amount: true },
+  });
+}
+
+/**
+ * Count UTXOs by IDs that belong to a specific wallet
+ */
+export async function countByIdsInWallet(
+  ids: string[],
+  walletId: string
+): Promise<number> {
+  return prisma.uTXO.count({
+    where: {
+      id: { in: ids },
+      walletId,
+    },
+  });
+}
+
 // Export as namespace
 export const utxoRepository = {
   getUnspentBalance,
@@ -168,7 +352,17 @@ export const utxoRepository = {
   deleteByWalletId,
   deleteByWalletIds,
   countByWalletId,
+  countUnspentUnfrozen,
   countEligibility,
+  findByIdWithAccess,
+  findByIdWithWalletAccess,
+  findWalletIdByUtxoId,
+  updateById,
+  aggregateUnspent,
+  findUnspentWithDraftLocks,
+  findByTxidsUnspent,
+  aggregateByDateWindow,
+  countByIdsInWallet,
 };
 
 export default utxoRepository;

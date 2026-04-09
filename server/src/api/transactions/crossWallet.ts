@@ -6,11 +6,18 @@
  */
 
 import { Router } from 'express';
-import { db as prisma } from '../../repositories/db';
+import { z } from 'zod';
+import { walletRepository, transactionRepository, utxoRepository } from '../../repositories';
 import { buildWalletAccessWhere } from '../../repositories/accessControl';
 import { asyncHandler } from '../../errors/errorHandler';
 import { bigIntToNumber, bigIntToNumberOrZero } from '../../utils/errors';
 import { getCachedBlockHeight, type Network } from '../../services/bitcoin/blockchain';
+
+/** Pagination for recent transactions (max 50, default 10) */
+const RecentTxLimitSchema = z.coerce.number().int().catch(10).transform(v => Math.max(1, Math.min(v, 50)));
+
+/** Total balance param (defaults to 0 for invalid input) */
+const TotalBalanceSchema = z.coerce.number().int().catch(0);
 
 const router = Router();
 
@@ -72,59 +79,7 @@ function getBucketConfig(timeframe: string): { unit: BucketUnit; label: (date: D
   }
 }
 
-async function getBucketedBalanceDeltas(
-  walletIds: string[],
-  startDate: Date,
-  bucketUnit: BucketUnit
-): Promise<Array<{ bucket: Date; amount: bigint }>> {
-  // Each bucket unit has its own fully parameterized query — no Prisma.raw() needed
-  switch (bucketUnit) {
-    case 'hour':
-      return prisma.$queryRaw<Array<{ bucket: Date; amount: bigint }>>`
-        SELECT date_trunc('hour', "blockTime") AS bucket,
-               COALESCE(SUM("amount"), 0) AS amount
-        FROM "transactions"
-        WHERE "walletId" = ANY(${walletIds}::text[])
-          AND "blockTime" IS NOT NULL
-          AND "blockTime" >= ${startDate}
-        GROUP BY bucket
-        ORDER BY bucket ASC
-      `;
-    case 'day':
-      return prisma.$queryRaw<Array<{ bucket: Date; amount: bigint }>>`
-        SELECT date_trunc('day', "blockTime") AS bucket,
-               COALESCE(SUM("amount"), 0) AS amount
-        FROM "transactions"
-        WHERE "walletId" = ANY(${walletIds}::text[])
-          AND "blockTime" IS NOT NULL
-          AND "blockTime" >= ${startDate}
-        GROUP BY bucket
-        ORDER BY bucket ASC
-      `;
-    case 'week':
-      return prisma.$queryRaw<Array<{ bucket: Date; amount: bigint }>>`
-        SELECT date_trunc('week', "blockTime") AS bucket,
-               COALESCE(SUM("amount"), 0) AS amount
-        FROM "transactions"
-        WHERE "walletId" = ANY(${walletIds}::text[])
-          AND "blockTime" IS NOT NULL
-          AND "blockTime" >= ${startDate}
-        GROUP BY bucket
-        ORDER BY bucket ASC
-      `;
-    case 'month':
-      return prisma.$queryRaw<Array<{ bucket: Date; amount: bigint }>>`
-        SELECT date_trunc('month', "blockTime") AS bucket,
-               COALESCE(SUM("amount"), 0) AS amount
-        FROM "transactions"
-        WHERE "walletId" = ANY(${walletIds}::text[])
-          AND "blockTime" IS NOT NULL
-          AND "blockTime" >= ${startDate}
-        GROUP BY bucket
-        ORDER BY bucket ASC
-      `;
-  }
-}
+// getBucketedBalanceDeltas has been moved to transactionRepository
 
 /**
  * GET /api/v1/transactions/recent
@@ -137,19 +92,17 @@ async function getBucketedBalanceDeltas(
  */
 router.get('/transactions/recent', asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
-  const limit = Math.min(parseInt(req.query.limit as string, 10) || 10, 50);
+  const limit = RecentTxLimitSchema.safeParse(req.query.limit).data ?? 10;
   const requestedWalletIds = req.query.walletIds
     ? (req.query.walletIds as string).split(',').filter(Boolean)
     : null;
 
   // Get all wallet IDs the user has access to (include network for block height lookups)
-  const accessibleWallets = await prisma.wallet.findMany({
-    where: {
-      ...buildWalletAccessWhere(userId),
-      ...(requestedWalletIds && { id: { in: requestedWalletIds } }),
-    },
-    select: { id: true, name: true, network: true },
-  });
+  const accessibleWallets = await walletRepository.findAccessibleWithSelect(
+    userId,
+    { id: true, name: true, network: true },
+    requestedWalletIds ? { id: { in: requestedWalletIds } } : undefined,
+  );
 
   if (accessibleWallets.length === 0) {
     return res.json([]);
@@ -159,9 +112,9 @@ router.get('/transactions/recent', asyncHandler(async (req, res) => {
   const walletNameMap = new Map(accessibleWallets.map(w => [w.id, w.name]));
   const walletNetworkMap = new Map(accessibleWallets.map(w => [w.id, w.network as Network]));
 
-  const transactions = await prisma.transaction.findMany({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const transactions: any[] = await transactionRepository.findByWalletIdsWithDetails(walletIds, {
     where: {
-      walletId: { in: walletIds },
       // Exclude replaced RBF transactions which are no longer in mempool
       // These show as "pending" forever since they'll never confirm
       rbfStatus: { not: 'replaced' },
@@ -191,25 +144,7 @@ router.get('/transactions/recent', asyncHandler(async (req, res) => {
   // This lets the UI show lock indicators in Recent Activity.
   const txids = [...new Set(transactions.map(tx => tx.txid))];
   const utxos = txids.length > 0
-    ? await prisma.uTXO.findMany({
-        where: {
-          walletId: { in: walletIds },
-          txid: { in: txids },
-          spent: false,
-        },
-        select: {
-          walletId: true,
-          txid: true,
-          frozen: true,
-          draftLock: {
-            include: {
-              draft: {
-                select: { label: true },
-              },
-            },
-          },
-        },
-      })
+    ? await utxoRepository.findByTxidsUnspent(walletIds, txids)
     : [];
 
   const txStateMap = new Map<string, { isFrozen: boolean; isLocked: boolean; lockedByDraftLabel?: string }>();
@@ -240,7 +175,7 @@ router.get('/transactions/recent', asyncHandler(async (req, res) => {
       blockHeight,
       // Calculate confirmations dynamically from cached block height for this network
       confirmations: currentHeight > 0 ? calculateConfirmations(blockHeight, currentHeight) : tx.confirmations,
-      labels: tx.transactionLabels.map(tl => tl.label),
+      labels: tx.transactionLabels.map((tl: any) => tl.label),
       transactionLabels: undefined,
       walletName: walletNameMap.get(tx.walletId),
       isFrozen: state?.isFrozen ?? false,
@@ -263,10 +198,10 @@ router.get('/transactions/pending', asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
 
   // Get all wallet IDs the user has access to
-  const accessibleWallets = await prisma.wallet.findMany({
-    where: buildWalletAccessWhere(userId),
-    select: { id: true, name: true },
-  });
+  const accessibleWallets = await walletRepository.findAccessibleWithSelect(
+    userId,
+    { id: true, name: true },
+  );
 
   if (accessibleWallets.length === 0) {
     return res.json([]);
@@ -277,9 +212,8 @@ router.get('/transactions/pending', asyncHandler(async (req, res) => {
 
   // Fetch pending (unconfirmed) transactions - those with blockHeight of 0 or null
   // Exclude replaced RBF transactions which are no longer in mempool
-  const pendingTransactions = await prisma.transaction.findMany({
+  const pendingTransactions = await transactionRepository.findByWalletIdsWithDetails(walletIds, {
     where: {
-      walletId: { in: walletIds },
       rbfStatus: { not: 'replaced' },
       OR: [
         { blockHeight: 0 },
@@ -337,19 +271,17 @@ router.get('/transactions/pending', asyncHandler(async (req, res) => {
 router.get('/transactions/balance-history', asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
   const timeframe = (req.query.timeframe as string) || '1W';
-  const totalBalance = parseInt(req.query.totalBalance as string, 10) || 0;
+  const totalBalance = TotalBalanceSchema.safeParse(req.query.totalBalance).data ?? 0;
   const requestedWalletIds = req.query.walletIds
     ? (req.query.walletIds as string).split(',').filter(Boolean)
     : null;
 
   // Get all wallet IDs the user has access to
-  const accessibleWallets = await prisma.wallet.findMany({
-    where: {
-      ...buildWalletAccessWhere(userId),
-      ...(requestedWalletIds && { id: { in: requestedWalletIds } }),
-    },
-    select: { id: true },
-  });
+  const accessibleWallets = await walletRepository.findAccessibleWithSelect(
+    userId,
+    { id: true },
+    requestedWalletIds ? { id: { in: requestedWalletIds } } : undefined,
+  );
 
   if (accessibleWallets.length === 0) {
     return res.json([
@@ -362,7 +294,7 @@ router.get('/transactions/balance-history', asyncHandler(async (req, res) => {
   const startDate = getTimeframeStartDate(timeframe);
 
   const bucketConfig = getBucketConfig(timeframe);
-  const bucketed = await getBucketedBalanceDeltas(walletIds, startDate, bucketConfig.unit);
+  const bucketed = await transactionRepository.getBucketedBalanceDeltas(walletIds, startDate, bucketConfig.unit);
 
   if (bucketed.length === 0) {
     // No transactions in range - return flat line

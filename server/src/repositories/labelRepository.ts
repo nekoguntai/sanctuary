@@ -362,6 +362,22 @@ export async function removeLabelFromAddress(
   });
 }
 
+/**
+ * Find label names for a wallet (for AI context)
+ */
+export async function findNamesByWalletId(
+  walletId: string,
+  options?: { take?: number }
+): Promise<string[]> {
+  const labels = await prisma.label.findMany({
+    where: { walletId },
+    select: { name: true },
+    orderBy: { createdAt: 'desc' },
+    take: options?.take,
+  });
+  return labels.map(l => l.name);
+}
+
 // Export all functions as namespace
 export const labelRepository = {
   // Label CRUD
@@ -385,6 +401,7 @@ export const labelRepository = {
   addLabelsToAddress,
   replaceAddressLabels,
   removeLabelFromAddress,
+  findNamesByWalletId,
 };
 
 export default labelRepository;

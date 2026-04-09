@@ -9,6 +9,7 @@ import * as jwt from 'jsonwebtoken';
 import * as fs from 'fs';
 import { BasePushProvider } from './base';
 import { createLogger } from '../../../utils/logger';
+import { getErrorMessage } from '../../../utils/errors';
 import { safeJsonParseUntyped } from '../../../utils/safeJson';
 import { createCircuitBreaker, type CircuitBreaker } from '../../circuitBreaker';
 import type { PushMessage, PushResult } from '../types';
@@ -63,7 +64,8 @@ export class FCMPushProvider extends BasePushProvider {
       if (this.configuredCache) {
         log.debug('FCM service account loaded and cached');
       }
-    } catch {
+    } catch (error) {
+      log.debug('Failed to load FCM service account', { error: getErrorMessage(error) });
       this.configuredCache = false;
     }
   }
@@ -224,7 +226,8 @@ export function isFCMConfigured(): boolean {
     fs.accessSync(serviceAccountPath, fs.constants.R_OK);
     _fcmConfiguredCache = true;
     return true;
-  } catch {
+  } catch (error) {
+    log.debug('FCM service account not accessible', { error: getErrorMessage(error) });
     _fcmConfiguredCache = false;
     return false;
   }

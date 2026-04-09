@@ -5,6 +5,9 @@ import * as crypto from 'crypto';
 import { z } from 'zod';
 import { encrypt, decryptIfEncrypted } from '../utils/encryption';
 import { safeJsonParse } from '../utils/safeJson';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('TWO_FACTOR:SVC');
 
 const ISSUER = 'Sanctuary';
 const BACKUP_CODE_COUNT = 10;
@@ -56,7 +59,8 @@ export function verifyToken(secret: string, token: string): boolean {
       guardrails: TOTP_GUARDRAILS,
     });
     return result.valid;
-  } catch {
+  } catch (error) {
+    log.debug('TOTP verification failed', { error: String(error) });
     return false;
   }
 }

@@ -118,8 +118,8 @@ export async function isTokenRevoked(jti: string): Promise<boolean> {
     if (cached !== null && typeof cached === 'object' && 'revoked' in cached) {
       return cached.revoked;
     }
-  } catch {
-    // Cache miss or error, continue to DB
+  } catch (error) {
+    log.debug('Revocation cache lookup failed, continuing to DB', { error: getErrorMessage(error) });
   }
 
   try {
@@ -133,8 +133,8 @@ export async function isTokenRevoked(jti: string): Promise<boolean> {
     // Cache the result in distributed cache
     try {
       await cache.set<CachedRevocationStatus>(jti, { revoked: isRevoked }, CACHE_TTL_SECONDS);
-    } catch {
-      // Cache set failed, continue without caching
+    } catch (error) {
+      log.debug('Failed to cache revocation status', { error: getErrorMessage(error) });
     }
 
     return isRevoked;

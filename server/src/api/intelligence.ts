@@ -6,6 +6,7 @@
  */
 
 import { Router } from 'express';
+import { z } from 'zod';
 import { authenticate } from '../middleware/auth';
 import { requireAllFeatures } from '../middleware/featureGate';
 import { asyncHandler } from '../errors/errorHandler';
@@ -19,6 +20,17 @@ import {
 import { findByIdWithAccess } from '../repositories/walletRepository';
 
 const router = Router();
+
+/** Pagination with clamping and defaults (never rejects, always returns valid values) */
+const InsightPaginationSchema = z.object({
+  limit: z.coerce.number().int().catch(50).transform(v => Math.max(1, Math.min(v, 100))),
+  offset: z.coerce.number().int().catch(0).transform(v => Math.max(0, v)),
+});
+
+const ConversationPaginationSchema = z.object({
+  limit: z.coerce.number().int().catch(20).transform(v => Math.max(1, Math.min(v, 100))),
+  offset: z.coerce.number().int().catch(0).transform(v => Math.max(0, v)),
+});
 
 // All routes require both feature flags
 router.use(authenticate);
@@ -64,11 +76,14 @@ router.get('/insights', asyncHandler(async (req, res) => {
   if (typeof type === 'string') filters.type = type as import('../services/intelligence/types').InsightType;
   if (typeof severity === 'string') filters.severity = severity as import('../services/intelligence/types').InsightSeverity;
 
+  const { limit: parsedLimit, offset: parsedOffset } = InsightPaginationSchema.safeParse({ limit, offset }).data
+    ?? { limit: 50, offset: 0 };
+
   const insights = await insightService.getInsightsByWallet(
     walletId,
     filters,
-    typeof limit === 'string' ? parseInt(limit, 10) : 50,
-    typeof offset === 'string' ? parseInt(offset, 10) : 0
+    parsedLimit,
+    parsedOffset,
   );
 
   res.json({ insights });
@@ -136,8 +151,8 @@ router.patch('/insights/:id', asyncHandler(async (req, res) => {
  */
 router.get('/conversations', asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
-  const limit = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : 20;
-  const offset = typeof req.query.offset === 'string' ? parseInt(req.query.offset, 10) : 0;
+  const { limit, offset } = ConversationPaginationSchema.safeParse(req.query).data
+    ?? { limit: 20, offset: 0 };
 
   const conversations = await conversationService.getConversations(userId, limit, offset);
   res.json({ conversations });

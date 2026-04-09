@@ -15,7 +15,10 @@ export type ScriptType = 'p2wpkh' | 'p2sh-p2wpkh' | 'p2pkh' | 'p2tr';
  * Handles both apostrophe (') and 'h' hardened notation.
  */
 export function isTestnetPath(path: string): boolean {
-  return path.includes("/1'") || path.includes("/1h");
+  const normalized = normalizeDerivationPath(path);
+  const parts = normalized.split('/');
+  // Coin type is the second component: m/purpose'/coin_type'/...
+  return parts.length > 2 && parts[2] === "1'";
 }
 
 /**

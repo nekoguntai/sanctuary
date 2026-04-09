@@ -6,7 +6,7 @@
 
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
-import { db as prisma } from '../../../repositories/db';
+import { userRepository } from '../../../repositories';
 import { createLogger } from '../../../utils/logger';
 import { generateToken, verify2FAToken } from '../../../utils/jwt';
 import * as twoFactorService from '../../../services/twoFactorService';
@@ -44,9 +44,7 @@ export function createVerifyRouter(twoFactorLimiter: RequestHandler): Router {
       throw new UnauthorizedError('Invalid or expired temporary token');
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
+    const user = await userRepository.findById(decoded.userId);
 
     if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
       throw new UnauthorizedError('Invalid authentication state');
@@ -64,10 +62,7 @@ export function createVerifyRouter(twoFactorLimiter: RequestHandler): Router {
         usedBackupCode = true;
         // Update backup codes (mark as used)
         if (backupResult.updatedCodesJson) {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { twoFactorBackupCodes: backupResult.updatedCodesJson },
-          });
+          await userRepository.update(user.id, { twoFactorBackupCodes: backupResult.updatedCodesJson });
         }
       }
     } else {

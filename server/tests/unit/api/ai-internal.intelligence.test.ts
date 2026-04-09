@@ -19,6 +19,27 @@ import {
   createMockResponse,
 } from '../../helpers/testUtils';
 
+const {
+  sharedMockPrisma,
+  mockGetUtxoHealthProfile,
+  mockGetRecentFees,
+  mockGetLatestFeeSnapshot,
+  mockGetUtxoAgeDistribution,
+} = vi.hoisted(() => ({
+  sharedMockPrisma: {
+    wallet: { findFirst: vi.fn() },
+    transaction: { findFirst: vi.fn(), count: vi.fn(), aggregate: vi.fn() },
+    address: { count: vi.fn() },
+    label: { findMany: vi.fn() },
+    uTXO: { count: vi.fn(), aggregate: vi.fn() },
+    walletUser: { findMany: vi.fn() },
+  },
+  mockGetUtxoHealthProfile: vi.fn(),
+  mockGetRecentFees: vi.fn(),
+  mockGetLatestFeeSnapshot: vi.fn(),
+  mockGetUtxoAgeDistribution: vi.fn(),
+}));
+
 // Mock logger
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
@@ -65,59 +86,28 @@ vi.mock('../../../src/websocket/notifications', () => ({
   },
 }));
 
-// Mock Prisma
+// Mock Prisma - shared object via vi.hoisted for both mock factories
 vi.mock('../../../src/repositories/db', () => ({
-  db: {
-    wallet: { findFirst: vi.fn() },
-    transaction: {
-      findFirst: vi.fn(),
-      count: vi.fn(),
-      aggregate: vi.fn(),
-    },
-    address: { count: vi.fn() },
-    label: { findMany: vi.fn() },
-    uTXO: {
-      count: vi.fn(),
-      aggregate: vi.fn(),
-    },
-    walletUser: { findMany: vi.fn() },
-  },
+  db: sharedMockPrisma,
 }));
 
-// Need to also mock models/prisma since db.ts re-exports from it
+// Also mock models/prisma since repositories import from it
 vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
-  default: {
-    wallet: { findFirst: vi.fn() },
-    transaction: {
-      findFirst: vi.fn(),
-      count: vi.fn(),
-      aggregate: vi.fn(),
-    },
-    address: { count: vi.fn() },
-    label: { findMany: vi.fn() },
-    uTXO: {
-      count: vi.fn(),
-      aggregate: vi.fn(),
-    },
-  },
+  default: sharedMockPrisma,
 }));
 
 // Mock autopilot services (dynamic imports in the source)
-const mockGetUtxoHealthProfile = vi.fn();
 vi.mock('../../../src/services/autopilot/utxoHealth', () => ({
   getUtxoHealthProfile: mockGetUtxoHealthProfile,
 }));
 
-const mockGetRecentFees = vi.fn();
-const mockGetLatestFeeSnapshot = vi.fn();
 vi.mock('../../../src/services/autopilot/feeMonitor', () => ({
   getRecentFees: mockGetRecentFees,
   getLatestFeeSnapshot: mockGetLatestFeeSnapshot,
 }));
 
 // Mock intelligenceRepository (dynamic import in utxo-age-profile)
-const mockGetUtxoAgeDistribution = vi.fn();
 vi.mock('../../../src/repositories/intelligenceRepository', () => ({
   intelligenceRepository: {
     getUtxoAgeDistribution: mockGetUtxoAgeDistribution,

@@ -12,7 +12,7 @@ import { InvalidInputError } from '../../errors/ApiError';
 import { createLogger } from '../../utils/logger';
 import { backupService, SanctuaryBackup } from '../../services/backupService';
 import { auditService, AuditAction, AuditCategory } from '../../services/auditService';
-import { db as prisma } from '../../repositories/db';
+import { userRepository } from '../../repositories';
 import { verifyPassword } from '../../utils/password';
 
 const router = Router();
@@ -41,10 +41,7 @@ router.post('/encryption-keys', authenticate, requireAdmin, asyncHandler(async (
     throw new InvalidInputError('Password confirmation required to view encryption keys');
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: req.user!.userId },
-    select: { password: true },
-  });
+  const user = await userRepository.findByIdWithSelect(req.user!.userId, { password: true });
 
   if (!user || !(await verifyPassword(password, user.password))) {
     return res.status(401).json({

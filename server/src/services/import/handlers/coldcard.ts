@@ -8,6 +8,9 @@
 import type { ImportFormatHandler, FormatDetectionResult, ImportParseResult } from '../types';
 import { parseColdcardExport } from '../../bitcoin/descriptorParser';
 import { ColdcardDetectionSchema } from '../schemas';
+import { createLogger } from '../../../utils/logger';
+
+const log = createLogger('IMPORT:COLDCARD');
 
 export const coldcardHandler: ImportFormatHandler = {
   id: 'coldcard',
@@ -43,7 +46,8 @@ export const coldcardHandler: ImportFormatHandler = {
       }
 
       return { detected: false, confidence: 0 };
-    } catch {
+    } catch (error) {
+      log.debug('Failed to parse input as Coldcard JSON', { error: String(error) });
       return { detected: false, confidence: 0 };
     }
   },
@@ -52,7 +56,8 @@ export const coldcardHandler: ImportFormatHandler = {
     let json: unknown;
     try {
       json = JSON.parse(input.trim());
-    } catch {
+    } catch (error) {
+      log.debug('Invalid JSON in Coldcard export parse', { error: String(error) });
       throw new Error('Invalid JSON in Coldcard export input');
     }
     const typedJson = json as Record<string, unknown>;
@@ -69,7 +74,8 @@ export const coldcardHandler: ImportFormatHandler = {
     try {
       const json = JSON.parse(input.trim());
       return json.name || json.label;
-    } catch {
+    } catch (error) {
+      log.debug('Failed to extract Coldcard export name', { error: String(error) });
       return undefined;
     }
   },

@@ -342,8 +342,8 @@ export async function getElectrumClientIfActive(): Promise<ElectrumClient | null
         // Return the dedicated subscription connection
         return await pool.getSubscriptionConnection();
       }
-    } catch {
-      // Pool not available, fall back to singleton
+    } catch (error) {
+      log.debug('Pool not available, falling back to singleton', { error: String(error) });
     }
   }
 

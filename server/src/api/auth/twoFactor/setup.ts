@@ -5,7 +5,7 @@
  */
 
 import { Router } from 'express';
-import { db as prisma } from '../../../repositories/db';
+import { userRepository } from '../../../repositories';
 import * as twoFactorService from '../../../services/twoFactorService';
 import { auditService, AuditAction, AuditCategory } from '../../../services/auditService';
 import { authenticate } from '../../../middleware/auth';
@@ -23,9 +23,7 @@ export function createSetupRouter(): Router {
    * Start 2FA setup - generates secret and QR code
    */
   router.post('/2fa/setup', authenticate, asyncHandler(async (req, res) => {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
-    });
+    const user = await userRepository.findById(req.user!.userId);
 
     if (!user) {
       throw new NotFoundError('User not found');
@@ -39,10 +37,7 @@ export function createSetupRouter(): Router {
     const { secret, qrCodeDataUrl } = await twoFactorService.generateSecret(user.username);
 
     // Store secret temporarily (not enabled yet)
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { twoFactorSecret: secret },
-    });
+    await userRepository.update(user.id, { twoFactorSecret: secret });
 
     // Audit 2FA setup started
     await auditService.logFromRequest(req, AuditAction.TWO_FACTOR_SETUP, AuditCategory.AUTH, {
@@ -63,9 +58,7 @@ export function createSetupRouter(): Router {
       throw new InvalidInputError('Verification token is required');
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
-    });
+    const user = await userRepository.findById(req.user!.userId);
 
     if (!user) {
       throw new NotFoundError('User not found');
@@ -91,12 +84,9 @@ export function createSetupRouter(): Router {
     const hashedBackupCodes = await twoFactorService.hashBackupCodes(backupCodes);
 
     // Enable 2FA
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        twoFactorEnabled: true,
-        twoFactorBackupCodes: hashedBackupCodes,
-      },
+    await userRepository.update(user.id, {
+      twoFactorEnabled: true,
+      twoFactorBackupCodes: hashedBackupCodes,
     });
 
     // Audit 2FA enabled

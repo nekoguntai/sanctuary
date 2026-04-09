@@ -237,6 +237,36 @@ export async function findUtxoBalancesByAddresses(walletId: string, addresses: s
   });
 }
 
+/**
+ * Find addresses by address strings for user's accessible wallets (for address-lookup)
+ */
+export async function findByAddressesForUser(
+  addresses: string[],
+  userId: string
+) {
+  return prisma.address.findMany({
+    where: {
+      address: { in: addresses },
+      wallet: {
+        users: {
+          some: {
+            userId,
+          },
+        },
+      },
+    },
+    select: {
+      address: true,
+      wallet: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  });
+}
+
 // Export as namespace
 export const addressRepository = {
   resetUsedFlags,
@@ -252,6 +282,7 @@ export const addressRepository = {
   findDerivationPaths,
   getAddressSummary,
   findUtxoBalancesByAddresses,
+  findByAddressesForUser,
 };
 
 export default addressRepository;

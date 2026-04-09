@@ -6,6 +6,7 @@
  */
 
 import { Router } from 'express';
+import { z } from 'zod';
 import { requireWalletAccess } from '../../middleware/walletAccess';
 import { asyncHandler } from '../../errors/errorHandler';
 import { InvalidInputError, NotFoundError } from '../../errors/ApiError';
@@ -19,6 +20,12 @@ const router = Router();
 
 const MAX_PAGE_LIMIT = 200;
 
+/** Pagination with clamping for policy events (max 200) */
+const PolicyEventPaginationSchema = z.object({
+  limit: z.coerce.number().int().catch(50).transform(v => Math.max(1, Math.min(v, MAX_PAGE_LIMIT))),
+  offset: z.coerce.number().int().catch(0).transform(v => Math.max(0, v)),
+});
+
 // ========================================
 // POLICY EVENTS (must be before /:policyId to avoid "events" matching as policyId)
 // ========================================
@@ -30,10 +37,8 @@ router.get('/:walletId/policies/events', requireWalletAccess('view'), asyncHandl
   const walletId = req.params.walletId;
   const { policyId, eventType, from, to, limit, offset } = req.query;
 
-  const parsedLimit = limit ? parseInt(limit as string, 10) : 50;
-  const parsedOffset = offset ? parseInt(offset as string, 10) : 0;
-  const clampedLimit = Number.isNaN(parsedLimit) ? 50 : Math.min(Math.max(parsedLimit, 1), MAX_PAGE_LIMIT);
-  const clampedOffset = Number.isNaN(parsedOffset) ? 0 : Math.max(parsedOffset, 0);
+  const { limit: clampedLimit, offset: clampedOffset } = PolicyEventPaginationSchema.safeParse({ limit, offset }).data
+    ?? { limit: 50, offset: 0 };
 
   const result = await policyRepository.findPolicyEvents(walletId, {
     policyId: policyId as string | undefined,

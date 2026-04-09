@@ -153,6 +153,15 @@ export async function getAll(): Promise<SystemSetting[]> {
 }
 
 /**
+ * Find settings by keys
+ */
+export async function findByKeys(keys: string[]): Promise<SystemSetting[]> {
+  return prisma.systemSetting.findMany({
+    where: { key: { in: keys } },
+  });
+}
+
+/**
  * Get settings by prefix
  */
 export async function getByPrefix(prefix: string): Promise<SystemSetting[]> {
@@ -277,6 +286,7 @@ export const systemSettingRepository = {
   getJson,
   getParsed,
   getAll,
+  findByKeys,
   getByPrefix,
   getAllAsMap,
   set,

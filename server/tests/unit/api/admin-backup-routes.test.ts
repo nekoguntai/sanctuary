@@ -69,6 +69,15 @@ vi.mock('../../../src/repositories/db', () => ({
   },
 }));
 
+vi.mock('../../../src/models/prisma', () => ({
+  __esModule: true,
+  default: {
+    user: {
+      findUnique: mockPrismaUserFindUnique,
+    },
+  },
+}));
+
 vi.mock('../../../src/utils/password', () => ({
   verifyPassword: mockVerifyPassword,
 }));

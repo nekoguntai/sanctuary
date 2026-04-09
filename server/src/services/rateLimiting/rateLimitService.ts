@@ -197,7 +197,8 @@ class RateLimitService implements IRateLimitService {
         backend: limiter.getType(),
         latencyMs,
       };
-    } catch {
+    } catch (error) {
+      log.debug('Rate limiter health check failed', { error: String(error) });
       return {
         healthy: false,
         backend: 'redis',

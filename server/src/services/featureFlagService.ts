@@ -224,8 +224,8 @@ class FeatureFlagService {
         this.localCache.set(key, cached[key]);
         return cached[key];
       }
-    } catch {
-      // Continue to database lookup
+    } catch (error) {
+      log.debug('Cache lookup failed, continuing to database', { error: getErrorMessage(error) });
     }
 
     // Fall back to database
@@ -235,8 +235,8 @@ class FeatureFlagService {
         this.localCache.set(key, flag.enabled);
         return flag.enabled;
       }
-    } catch {
-      // Continue to environment fallback
+    } catch (error) {
+      log.debug('Database lookup failed, continuing to environment fallback', { error: getErrorMessage(error) });
     }
 
     // Final fallback: environment config

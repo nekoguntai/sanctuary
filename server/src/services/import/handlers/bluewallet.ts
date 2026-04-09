@@ -14,6 +14,9 @@ import {
   parseBlueWalletTextImport,
   isBlueWalletTextFormat,
 } from '../../bitcoin/descriptorParser';
+import { createLogger } from '../../../utils/logger';
+
+const log = createLogger('IMPORT:BLUEWALLET');
 
 export const bluewalletHandler: ImportFormatHandler = {
   id: 'bluewallet_text',
@@ -57,7 +60,8 @@ export const bluewalletHandler: ImportFormatHandler = {
     try {
       const result = parseBlueWalletText(input.trim());
       return result.name;
-    } catch {
+    } catch (error) {
+      log.debug('Failed to extract BlueWallet name', { error: String(error) });
       return undefined;
     }
   },

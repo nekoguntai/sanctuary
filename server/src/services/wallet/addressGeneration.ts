@@ -4,7 +4,7 @@
  * Address derivation and gap limit management for wallets.
  */
 
-import { db as prisma } from '../../repositories/db';
+import prisma from '../../models/prisma';
 import * as addressDerivation from '../bitcoin/addressDerivation';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';

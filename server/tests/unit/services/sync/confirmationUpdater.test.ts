@@ -21,8 +21,8 @@ const {
   },
 }));
 
-vi.mock('../../../../src/repositories/db', () => ({
-  db: {
+vi.mock('../../../../src/models/prisma', () => ({
+  default: {
     transaction: {
       findMany: (...args: unknown[]) => mockFindMany(...args),
     },

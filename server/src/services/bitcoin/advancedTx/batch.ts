@@ -8,7 +8,7 @@
 
 import * as bitcoin from 'bitcoinjs-lib';
 import { getNetwork, estimateTransactionSize, calculateFee } from '../utils';
-import { db as prisma } from '../../../repositories/db';
+import { utxoRepository, addressRepository } from '../../../repositories';
 import { RBF_SEQUENCE, getDustThreshold } from './shared';
 
 /**
@@ -36,13 +36,7 @@ export async function createBatchTransaction(
   const dustThreshold = await getDustThreshold();
 
   // Get available UTXOs
-  let utxos = await prisma.uTXO.findMany({
-    where: {
-      walletId,
-      spent: false,
-    },
-    orderBy: { amount: 'desc' },
-  });
+  let utxos = await utxoRepository.findUnspent(walletId);
 
   // Filter by selected UTXOs if provided
   if (selectedUtxoIds && selectedUtxoIds.length > 0) {
@@ -131,13 +125,7 @@ export async function createBatchTransaction(
   // Add change output
   if (changeAmount >= dustThreshold) {
     // Get a change address from the wallet
-    const changeAddress = await prisma.address.findFirst({
-      where: {
-        walletId,
-        used: false,
-      },
-      orderBy: { index: 'asc' },
-    });
+    const changeAddress = await addressRepository.findNextUnused(walletId);
 
     if (!changeAddress) {
       throw new Error('No change address available');

@@ -89,6 +89,22 @@ vi.mock('../../../src/models/prisma', () => ({
   default: mockPrismaClient,
 }));
 
+// Mock repositories used by sync service modules
+vi.mock('../../../src/repositories', () => ({
+  walletRepository: {
+    findByUserId: (...args: unknown[]) => mockPrismaClient.wallet.findMany(...args),
+    findByIdWithSelect: (id: string, select: unknown) => mockPrismaClient.wallet.findUnique({ where: { id }, select }),
+    findById: (id: string) => mockPrismaClient.wallet.findUnique({ where: { id } }),
+    findNetwork: (id: string) => mockPrismaClient.wallet.findUnique({ where: { id }, select: { network: true } }).then((w: any) => w?.network ?? null),
+    update: (id: string, data: unknown) => mockPrismaClient.wallet.update({ where: { id }, data }),
+    updateSyncState: (id: string, state: unknown) => mockPrismaClient.wallet.update({ where: { id }, data: state }),
+  },
+  addressRepository: {
+    findAddressStrings: (walletId: string) => mockPrismaClient.address.findMany({ where: { walletId }, select: { address: true } }).then((addrs: any[]) => addrs.map((a: any) => a.address)),
+    findByWalletId: (walletId: string) => mockPrismaClient.address.findMany({ where: { walletId } }),
+  },
+}));
+
 // Mock logger
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
@@ -459,15 +475,9 @@ describe('SyncService', () => {
 
       await syncService.queueUserWallets('user-1', 'high');
 
-      expect(mockPrismaClient.wallet.findMany).toHaveBeenCalledWith({
-        where: {
-          OR: [
-            { users: { some: { userId: 'user-1' } } },
-            { group: { members: { some: { userId: 'user-1' } } } },
-          ],
-        },
-        select: { id: true },
-      });
+      // Production calls walletRepository.findByUserId(userId) which is
+      // mocked to forward to mockPrismaClient.wallet.findMany(userId)
+      expect(mockPrismaClient.wallet.findMany).toHaveBeenCalledWith('user-1');
     });
   });
 

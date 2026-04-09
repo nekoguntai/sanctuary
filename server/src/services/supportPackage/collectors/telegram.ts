@@ -6,7 +6,7 @@
  * automatically detecting common misconfiguration issues.
  */
 
-import { db as prisma } from '../../../repositories/db';
+import prisma from '../../../models/prisma';
 import { circuitBreakerRegistry } from '../../circuitBreaker';
 import { deadLetterQueue } from '../../deadLetterQueue';
 import { registerCollector } from './registry';

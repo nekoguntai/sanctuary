@@ -38,7 +38,7 @@
 import { EventEmitter } from 'events';
 import { createLogger } from '../../../utils/logger';
 import { getErrorMessage } from '../../../utils/errors';
-import { db as prisma } from '../../../repositories/db';
+import { nodeConfigRepository } from '../../../repositories';
 import { CircuitBreaker, createCircuitBreaker } from '../../circuitBreaker';
 import { updateElectrumPoolMetrics } from '../../../observability/metrics';
 
@@ -274,18 +274,12 @@ export class ElectrumPool extends EventEmitter {
    */
   async reloadServers(): Promise<void> {
     try {
-      const nodeConfig = await prisma.nodeConfig.findFirst({
-        where: { isDefault: true, type: 'electrum' },
-        include: {
-          servers: {
-            where: { enabled: true },
-            orderBy: { priority: 'asc' },
-          },
-        },
-      });
+      const nodeConfig = await nodeConfigRepository.findDefaultWithServers();
 
-      if (nodeConfig) {
-        const servers: ServerConfig[] = nodeConfig.servers.map((s: { id: string; label: string; host: string; port: number; useSsl: boolean; priority: number; enabled: boolean; supportsVerbose: boolean | null }) => ({
+      if (nodeConfig && nodeConfig.type === 'electrum') {
+        // Filter to only enabled servers (findDefaultWithServers returns all servers)
+        const enabledServers = nodeConfig.servers.filter((s: { enabled: boolean }) => s.enabled);
+        const servers: ServerConfig[] = enabledServers.map((s: { id: string; label: string; host: string; port: number; useSsl: boolean; priority: number; enabled: boolean; supportsVerbose: boolean | null }) => ({
           id: s.id,
           label: s.label,
           host: s.host,

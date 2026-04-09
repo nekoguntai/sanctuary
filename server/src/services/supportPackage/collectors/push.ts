@@ -6,7 +6,7 @@
  */
 
 import { getPushService } from '../../push/pushService';
-import { db as prisma } from '../../../repositories/db';
+import { maintenanceRepository } from '../../../repositories';
 import { getErrorMessage } from '../../../utils/errors';
 import { registerCollector } from './registry';
 
@@ -16,10 +16,7 @@ registerCollector('push', async () => {
     const health = await pushService.healthCheck();
 
     // Get device registration counts by platform (no PII)
-    const deviceCounts = await prisma.pushDevice.groupBy({
-      by: ['platform'],
-      _count: { _all: true },
-    });
+    const deviceCounts = await maintenanceRepository.getPushDeviceCountsByPlatform();
 
     const devices: Record<string, number> = {};
     for (const group of deviceCounts) {

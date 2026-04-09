@@ -4,8 +4,7 @@
  * Strategies and algorithms for selecting UTXOs for transactions.
  */
 
-import { db as prisma } from '../../repositories/db';
-import { systemSettingRepository } from '../../repositories';
+import { utxoRepository, systemSettingRepository } from '../../repositories';
 import { estimateTransactionSize, calculateFee } from './utils';
 import { DEFAULT_CONFIRMATION_THRESHOLD } from '../../constants';
 import { SystemSettingSchemas } from '../../utils/safeJson';
@@ -62,22 +61,16 @@ export async function selectUTXOs(
   const confirmationThreshold = await systemSettingRepository.getParsed('confirmationThreshold', SystemSettingSchemas.number, DEFAULT_CONFIRMATION_THRESHOLD);
 
   // Get available UTXOs (exclude frozen, unconfirmed, and locked-by-draft UTXOs)
-  let utxos = await prisma.uTXO.findMany({
-    where: {
-      walletId,
-      spent: false,
-      frozen: false, // Frozen UTXOs cannot be spent
-      confirmations: { gte: confirmationThreshold }, // Must have enough confirmations
-      // Exclude UTXOs locked by other drafts (unless user explicitly selected them)
-      ...(selectedUtxoIds && selectedUtxoIds.length > 0
-        ? {} // Don't filter locks if user selected specific UTXOs
-        : { draftLock: null }), // Auto-selection: exclude locked UTXOs
-    },
-    orderBy:
-      strategy === UTXOSelectionStrategy.LARGEST_FIRST
-        ? { amount: 'desc' }
-        : { amount: 'asc' },
+  let utxos = await utxoRepository.findAvailableForSpending(walletId, {
+    minConfirmations: confirmationThreshold,
+    // Exclude UTXOs locked by other drafts (unless user explicitly selected them)
+    excludeDraftLocked: !(selectedUtxoIds && selectedUtxoIds.length > 0),
   });
+
+  // Sort by strategy (findAvailableForSpending returns desc by default)
+  if (strategy === UTXOSelectionStrategy.SMALLEST_FIRST) {
+    utxos.sort((a, b) => Number(a.amount - b.amount));
+  }
 
   // Filter by selected UTXOs if provided
   if (selectedUtxoIds && selectedUtxoIds.length > 0) {
@@ -176,13 +169,7 @@ export async function getSpendableUTXOs(
   walletId: string,
   selectedUtxoIds?: string[]
 ): Promise<SelectedUTXO[]> {
-  let utxos = await prisma.uTXO.findMany({
-    where: {
-      walletId,
-      spent: false,
-      frozen: false,
-    },
-  });
+  let utxos = await utxoRepository.findUnspent(walletId, { excludeFrozen: true });
 
   // Filter by selected UTXOs if provided
   if (selectedUtxoIds && selectedUtxoIds.length > 0) {

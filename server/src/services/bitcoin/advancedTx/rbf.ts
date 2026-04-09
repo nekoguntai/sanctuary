@@ -12,7 +12,7 @@ import bip32 from '../bip32';
 import { getNetwork, calculateFee } from '../utils';
 import { parseDescriptor } from '../addressDerivation';
 import { getNodeClient } from '../nodeClient';
-import { db as prisma } from '../../../repositories/db';
+import { walletRepository, addressRepository } from '../../../repositories';
 import { getErrorMessage } from '../../../utils/errors';
 import { normalizeDerivationPath } from '../../../../../shared/utils/bitcoin';
 import { log, RBF_SEQUENCE, MIN_RBF_FEE_BUMP, getDustThreshold } from './shared';
@@ -140,16 +140,7 @@ export async function createRBFTransaction(
   const dustThreshold = await getDustThreshold();
 
   // Get wallet with devices for fingerprint and xpub
-  const wallet = await prisma.wallet.findUnique({
-    where: { id: walletId },
-    include: {
-      devices: {
-        include: {
-          device: true,
-        },
-      },
-    },
-  });
+  const wallet = await walletRepository.findByIdWithSigningDevices(walletId);
 
   if (!wallet) {
     throw new Error('Wallet not found');
@@ -204,13 +195,7 @@ export async function createRBFTransaction(
   const psbt = new bitcoin.Psbt({ network: networkObj });
 
   // Get addresses with derivation paths for bip32Derivation
-  const addressRecords = await prisma.address.findMany({
-    where: { walletId },
-    select: {
-      address: true,
-      derivationPath: true,
-    },
-  });
+  const addressRecords = await addressRepository.findByWalletId(walletId);
   const addressPathMap = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
 
   // Parse account xpub for deriving public keys
@@ -315,11 +300,8 @@ export async function createRBFTransaction(
   let totalOutput = 0;
 
   // Get wallet addresses to identify change output
-  const walletAddresses = await prisma.address.findMany({
-    where: { walletId },
-    select: { address: true },
-  });
-  const walletAddressSet = new Set(walletAddresses.map(a => a.address));
+  const walletAddressStrings = await addressRepository.findAddressStrings(walletId);
+  const walletAddressSet = new Set(walletAddressStrings);
 
   let changeOutputIndex = -1;
   for (let i = 0; i < tx.outs.length; i++) {

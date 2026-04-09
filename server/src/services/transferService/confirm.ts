@@ -6,7 +6,8 @@
  * serializable transactions.
  */
 
-import { db as prisma } from '../../repositories/db';
+import { transferRepository } from '../../repositories';
+import prisma from '../../models/prisma';
 import type { OwnershipTransfer } from '../../generated/prisma/client';
 import { createLogger } from '../../utils/logger';
 import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError } from '../../errors';
@@ -25,9 +26,7 @@ export async function confirmTransfer(
   transferId: string
 ): Promise<Transfer> {
   // First check basic validations outside transaction for better error messages
-  const transfer = await prisma.ownershipTransfer.findUnique({
-    where: { id: transferId },
-  });
+  const transfer = await transferRepository.findById(transferId);
 
   if (!transfer) {
     throw new NotFoundError(`Transfer '${transferId}' not found`);
@@ -72,13 +71,7 @@ export async function confirmTransfer(
   });
 
   // Fetch updated transfer for return
-  const updated = await prisma.ownershipTransfer.findUnique({
-    where: { id: transferId },
-    include: {
-      fromUser: { select: { id: true, username: true } },
-      toUser: { select: { id: true, username: true } },
-    },
-  });
+  const updated = await transferRepository.findByIdWithUsers(transferId);
 
   if (!updated) {
     throw new NotFoundError(`Transfer '${transferId}' not found`);

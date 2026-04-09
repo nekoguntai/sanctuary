@@ -13,7 +13,8 @@
  * - subscriptionManager.ts: Electrum real-time subscriptions
  */
 
-import { db as prisma } from '../../repositories/db';
+import { walletRepository } from '../../repositories';
+import prisma from '../../models/prisma';
 import { updateTransactionConfirmations, populateMissingTransactionFields } from '../bitcoin/blockchain';
 import { getNotificationService } from '../../websocket/notifications';
 import { createLogger } from '../../utils/logger';
@@ -279,15 +280,7 @@ class SyncService {
    * Queue all user's wallets for sync (called on login/page load)
    */
   async queueUserWallets(userId: string, priority: 'high' | 'normal' | 'low' = 'normal'): Promise<void> {
-    const wallets = await prisma.wallet.findMany({
-      where: {
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-      select: { id: true },
-    });
+    const wallets = await walletRepository.findByUserId(userId);
 
     for (const wallet of wallets) {
       this.queueSync(wallet.id, priority);
@@ -306,13 +299,10 @@ class SyncService {
     isStale: boolean;
     queuePosition: number | null;
   }> {
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-      select: {
-        lastSyncedAt: true,
-        lastSyncStatus: true,
-        syncInProgress: true,
-      },
+    const wallet = await walletRepository.findByIdWithSelect(walletId, {
+      lastSyncedAt: true,
+      lastSyncStatus: true,
+      syncInProgress: true,
     });
 
     if (!wallet) {
@@ -552,10 +542,7 @@ class SyncService {
       for (const wallet of stuckWallets) {
         if (!this.state.activeSyncs.has(wallet.id)) {
           log.warn(`[SYNC] Auto-unstuck wallet ${wallet.name || wallet.id} (was stuck with syncInProgress=true)`);
-          await prisma.wallet.update({
-            where: { id: wallet.id },
-            data: { syncInProgress: false },
-          });
+          await walletRepository.update(wallet.id, { syncInProgress: false });
           unstuckCount++;
         }
       }

@@ -20,6 +20,17 @@ vi.mock('../../../src/models/prisma', () => ({
   },
 }));
 
+vi.mock('../../../src/repositories', () => ({
+  walletRepository: {
+    findNetwork: vi.fn().mockResolvedValue(null),
+    findById: vi.fn().mockResolvedValue(null),
+  },
+  addressRepository: {
+    findAddressStrings: vi.fn().mockResolvedValue([]),
+    findByWalletId: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 // Mock the electrum client
 vi.mock('../../../src/services/bitcoin/electrum', () => ({
   getElectrumClientForNetwork: vi.fn(),
@@ -54,6 +65,7 @@ vi.mock('../../../src/infrastructure', () => ({
 }));
 
 import prisma from '../../../src/models/prisma';
+import { walletRepository, addressRepository } from '../../../src/repositories';
 import { acquireLock, extendLock, releaseLock } from '../../../src/infrastructure';
 import { closeAllElectrumClients, getElectrumClientForNetwork } from '../../../src/services/bitcoin/electrum';
 import { setCachedBlockHeight } from '../../../src/services/bitcoin/blockchain';
@@ -314,11 +326,8 @@ describe('ElectrumSubscriptionManager', () => {
 
       (manager as unknown as { networks: Map<string, unknown> }).networks.set('mainnet', state);
 
-      vi.mocked(prisma.wallet.findUnique).mockResolvedValueOnce({ network: 'mainnet' } as any);
-      vi.mocked(prisma.address.findMany).mockResolvedValueOnce([
-        { address: 'addr1' },
-        { address: 'addr2' },
-      ] as any);
+      vi.mocked(walletRepository.findNetwork).mockResolvedValueOnce('mainnet');
+      vi.mocked(addressRepository.findAddressStrings).mockResolvedValueOnce(['addr1', 'addr2']);
 
       await manager.subscribeWalletAddresses('wallet1');
 
@@ -330,11 +339,11 @@ describe('ElectrumSubscriptionManager', () => {
     });
 
     it('returns when wallet does not exist', async () => {
-      vi.mocked(prisma.wallet.findUnique).mockResolvedValueOnce(null);
+      vi.mocked(walletRepository.findNetwork).mockResolvedValueOnce(null);
 
       await manager.subscribeWalletAddresses('missing-wallet');
 
-      expect(prisma.address.findMany).not.toHaveBeenCalled();
+      expect(addressRepository.findAddressStrings).not.toHaveBeenCalled();
       expect(mockClient.subscribeAddressBatch).not.toHaveBeenCalled();
     });
 
@@ -352,8 +361,9 @@ describe('ElectrumSubscriptionManager', () => {
 
       (manager as unknown as { networks: Map<string, unknown> }).networks.set('mainnet', state);
 
-      vi.mocked(prisma.wallet.findUnique).mockResolvedValueOnce({ network: undefined } as any);
-      vi.mocked(prisma.address.findMany).mockResolvedValueOnce([{ address: 'addr-default' }] as any);
+      // findNetwork returns 'mainnet' explicitly (the repository resolves the network)
+      vi.mocked(walletRepository.findNetwork).mockResolvedValueOnce('mainnet');
+      vi.mocked(addressRepository.findAddressStrings).mockResolvedValueOnce(['addr-default']);
 
       await manager.subscribeWalletAddresses('wallet-default');
 
@@ -375,10 +385,10 @@ describe('ElectrumSubscriptionManager', () => {
         reconnectAttempts: 0,
       });
 
-      vi.mocked(prisma.wallet.findUnique).mockResolvedValueOnce({ network: 'testnet' } as any);
+      vi.mocked(walletRepository.findNetwork).mockResolvedValueOnce('testnet');
       await manager.subscribeWalletAddresses('wallet1');
 
-      expect(prisma.address.findMany).not.toHaveBeenCalled();
+      expect(addressRepository.findAddressStrings).not.toHaveBeenCalled();
       expect(mockClient.subscribeAddressBatch).not.toHaveBeenCalled();
     });
   });

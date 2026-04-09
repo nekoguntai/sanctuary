@@ -12,11 +12,9 @@ vi.mock('../../../../src/services/push/pushService', () => ({
   }),
 }));
 
-vi.mock('../../../../src/repositories/db', () => ({
-  db: {
-    pushDevice: {
-      groupBy: (...args: unknown[]) => mockGroupBy(...args),
-    },
+vi.mock('../../../../src/repositories', () => ({
+  maintenanceRepository: {
+    getPushDeviceCountsByPlatform: (...args: unknown[]) => mockGroupBy(...args),
   },
 }));
 

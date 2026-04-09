@@ -5,7 +5,8 @@
  * Uses serializable transaction isolation to prevent race conditions.
  */
 
-import { db as prisma } from '../../repositories/db';
+import { userRepository } from '../../repositories';
+import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { ForbiddenError, InvalidInputError, ConflictError, UserNotFoundError } from '../../errors';
 import { calculateExpiryDate, checkResourceOwnership, formatTransfer } from './helpers';
@@ -29,10 +30,7 @@ export async function initiateTransfer(
   }
 
   // Validation: check target user exists (this can be done outside transaction)
-  const targetUser = await prisma.user.findUnique({
-    where: { id: toUserId },
-    select: { id: true, username: true },
-  });
+  const targetUser = await userRepository.findByIdWithSelect(toUserId, { id: true, username: true });
   if (!targetUser) {
     throw new UserNotFoundError(toUserId);
   }

@@ -5,7 +5,7 @@
  * initial address generation, and audit hook execution.
  */
 
-import { db as prisma } from '../../repositories/db';
+import prisma from '../../models/prisma';
 import * as descriptorBuilder from '../bitcoin/descriptorBuilder';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';

@@ -5,7 +5,7 @@
  * aggregate queries for balance computation.
  */
 
-import { db as prisma } from '../../repositories/db';
+import prisma from '../../models/prisma';
 import { WalletNotFoundError } from '../../errors';
 import { EDIT_ROLES } from './types';
 import type { WalletRole, WalletWithBalance } from './types';

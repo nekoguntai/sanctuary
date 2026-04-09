@@ -6,7 +6,7 @@
  */
 
 import { Router } from 'express';
-import { db as prisma } from '../../repositories/db';
+import { nodeConfigRepository } from '../../repositories';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { asyncHandler } from '../../errors/errorHandler';
 import { InvalidInputError } from '../../errors/ApiError';
@@ -26,14 +26,7 @@ const log = createLogger('ADMIN_NODE_CONFIG:ROUTE');
  */
 router.get('/node-config', authenticate, requireAdmin, asyncHandler(async (_req, res) => {
   // Get the default node config with servers
-  const nodeConfig = await prisma.nodeConfig.findFirst({
-    where: { isDefault: true },
-    include: {
-      servers: {
-        orderBy: { priority: 'asc' },
-      },
-    },
-  });
+  const nodeConfig = await nodeConfigRepository.findDefaultWithServers();
 
   if (!nodeConfig) {
     // Return default configuration if none exists - use public Blockstream server
@@ -111,29 +104,22 @@ router.put('/node-config', authenticate, requireAdmin, asyncHandler(async (req, 
   const configData = buildNodeConfigData(req.body);
 
   // Check if a default config exists
-  const existingConfig = await prisma.nodeConfig.findFirst({
-    where: { isDefault: true },
-  });
+  const existingConfig = await nodeConfigRepository.findDefault();
 
   let nodeConfig;
 
   if (existingConfig) {
     // Update existing config
-    nodeConfig = await prisma.nodeConfig.update({
-      where: { id: existingConfig.id },
-      data: {
-        ...configData,
-        updatedAt: new Date(),
-      },
+    nodeConfig = await nodeConfigRepository.update(existingConfig.id, {
+      ...configData,
+      updatedAt: new Date(),
     });
   } else {
     // Create new config
-    nodeConfig = await prisma.nodeConfig.create({
-      data: {
-        id: 'default',
-        ...configData,
-        isDefault: true,
-      },
+    nodeConfig = await nodeConfigRepository.findOrCreateDefault({
+      id: 'default',
+      ...configData,
+      isDefault: true,
     });
   }
 

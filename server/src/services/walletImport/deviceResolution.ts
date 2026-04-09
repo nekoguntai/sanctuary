@@ -5,7 +5,7 @@
  * resolution against existing user devices during wallet import.
  */
 
-import { db as prisma } from '../../repositories/db';
+import prisma from '../../models/prisma';
 import type { ParsedDevice, JsonImportDevice } from '../bitcoin/descriptorParser';
 import type { DeviceResolution } from './types';
 

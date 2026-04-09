@@ -50,13 +50,12 @@ vi.mock('../../../../src/config', () => ({
   }),
 }));
 
-vi.mock('../../../../src/repositories/db', () => ({
-  db: {
-    nodeConfig: {
-      findFirst: nodeConfigFindFirstMock,
-    },
+vi.mock('../../../../src/repositories', () => ({
+  nodeConfigRepository: {
+    findDefault: nodeConfigFindFirstMock,
+    findDefaultWithServers: nodeConfigFindFirstMock,
     electrumServer: {
-      update: vi.fn().mockResolvedValue({}),
+      updateHealth: vi.fn().mockResolvedValue(undefined),
     },
   },
 }));

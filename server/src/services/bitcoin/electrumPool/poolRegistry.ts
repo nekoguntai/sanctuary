@@ -7,7 +7,7 @@
  */
 
 import { createLogger } from '../../../utils/logger';
-import { db as prisma } from '../../../repositories/db';
+import { nodeConfigRepository } from '../../../repositories';
 import { getErrorMessage } from '../../../utils/errors';
 import { ElectrumPool } from './electrumPool';
 import type {
@@ -39,18 +39,14 @@ async function loadPoolConfigFromDatabase(network: NetworkType = 'mainnet'): Pro
   proxy: ProxyConfig | null;
 }> {
   try {
-    const nodeConfig = await prisma.nodeConfig.findFirst({
-      where: { isDefault: true, type: 'electrum' },
-      include: {
-        servers: {
-          where: { enabled: true, network: network },
-          orderBy: { priority: 'asc' },
-        },
-      },
-    });
+    const nodeConfig = await nodeConfigRepository.findDefaultWithServers();
 
-    if (nodeConfig) {
-      const servers: ServerConfig[] = nodeConfig.servers.map((s: { id: string; label: string; host: string; port: number; useSsl: boolean; priority: number; enabled: boolean; supportsVerbose: boolean | null }) => ({
+    if (nodeConfig && nodeConfig.type === 'electrum') {
+      // Filter to enabled servers for the requested network
+      const filteredServers = nodeConfig.servers
+        .filter((s: { enabled: boolean; network: string }) => s.enabled && s.network === network)
+        .sort((a: { priority: number }, b: { priority: number }) => a.priority - b.priority);
+      const servers: ServerConfig[] = filteredServers.map((s: { id: string; label: string; host: string; port: number; useSsl: boolean; priority: number; enabled: boolean; supportsVerbose: boolean | null }) => ({
         id: s.id,
         label: s.label,
         host: s.host,

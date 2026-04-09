@@ -5,9 +5,9 @@ const { mockQueryRaw, collectorMap } = vi.hoisted(() => ({
   collectorMap: new Map<string, (ctx: any) => Promise<Record<string, unknown>>>(),
 }));
 
-vi.mock('../../../../src/repositories/db', () => ({
-  db: {
-    $queryRaw: mockQueryRaw,
+vi.mock('../../../../src/repositories', () => ({
+  maintenanceRepository: {
+    getTableStats: mockQueryRaw,
   },
 }));
 

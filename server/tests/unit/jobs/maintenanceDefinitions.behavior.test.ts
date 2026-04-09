@@ -30,14 +30,22 @@ const {
   mockLogDebug: vi.fn(),
 }));
 
-vi.mock('../../../src/repositories/db', () => ({
-  db: {
-    priceData: { deleteMany: mockDeletePriceData },
-    feeEstimate: { deleteMany: mockDeleteFeeEstimates },
-    draftTransaction: { deleteMany: mockDeleteDrafts },
-    refreshToken: { deleteMany: mockDeleteRefreshTokens },
-    pushDevice: { deleteMany: mockDeletePushDevices },
+vi.mock('../../../src/models/prisma', () => ({
+  default: {
     $executeRaw: mockExecuteRaw,
+  },
+}));
+
+vi.mock('../../../src/repositories', () => ({
+  maintenanceRepository: {
+    deletePriceDataBefore: (...args: unknown[]) => mockDeletePriceData(...args),
+    deleteFeeEstimatesBefore: (...args: unknown[]) => mockDeleteFeeEstimates(...args),
+    deleteExpiredDrafts: (...args: unknown[]) => mockDeleteDrafts(...args),
+    deleteExpiredRefreshTokens: (...args: unknown[]) => mockDeleteRefreshTokens(...args),
+    deleteOrphanedDrafts: mockExecuteRaw,
+  },
+  pushDeviceRepository: {
+    deleteStale: (...args: unknown[]) => mockDeletePushDevices(...args),
   },
 }));
 
@@ -87,11 +95,11 @@ function sqlFromCall(call: any[]): string {
 describe('Maintenance job definitions behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDeletePriceData.mockResolvedValue({ count: 0 });
-    mockDeleteFeeEstimates.mockResolvedValue({ count: 0 });
-    mockDeleteDrafts.mockResolvedValue({ count: 0 });
-    mockDeleteRefreshTokens.mockResolvedValue({ count: 0 });
-    mockDeletePushDevices.mockResolvedValue({ count: 0 });
+    mockDeletePriceData.mockResolvedValue(0);
+    mockDeleteFeeEstimates.mockResolvedValue(0);
+    mockDeleteDrafts.mockResolvedValue(0);
+    mockDeleteRefreshTokens.mockResolvedValue(0);
+    mockDeletePushDevices.mockResolvedValue(0);
     mockExecuteRaw.mockResolvedValue(0);
     mockAuditCleanup.mockResolvedValue(0);
     mockAuditLog.mockResolvedValue(undefined);
@@ -100,8 +108,8 @@ describe('Maintenance job definitions behavior', () => {
 
   it('runs cleanup jobs and returns counts with configured defaults', async () => {
     mockAuditCleanup.mockResolvedValueOnce(5);
-    mockDeletePriceData.mockResolvedValueOnce({ count: 3 });
-    mockDeleteFeeEstimates.mockResolvedValueOnce({ count: 2 });
+    mockDeletePriceData.mockResolvedValueOnce(3);
+    mockDeleteFeeEstimates.mockResolvedValueOnce(2);
 
     const auditCount = await cleanupAuditLogsJob.handler({ data: {} } as any);
     const priceCount = await cleanupPriceDataJob.handler({ data: {} } as any);
@@ -111,25 +119,13 @@ describe('Maintenance job definitions behavior', () => {
     expect(priceCount).toBe(3);
     expect(feeCount).toBe(2);
     expect(mockAuditCleanup).toHaveBeenCalledWith(expect.any(Date));
-    expect(mockDeletePriceData).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          createdAt: expect.objectContaining({ lt: expect.any(Date) }),
-        }),
-      })
-    );
-    expect(mockDeleteFeeEstimates).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          createdAt: expect.objectContaining({ lt: expect.any(Date) }),
-        }),
-      })
-    );
+    expect(mockDeletePriceData).toHaveBeenCalledWith(expect.any(Date));
+    expect(mockDeleteFeeEstimates).toHaveBeenCalledWith(expect.any(Date));
   });
 
   it('cleans up expired drafts and audits only when rows were deleted', async () => {
-    mockDeleteDrafts.mockResolvedValueOnce({ count: 4 });
-    mockDeleteDrafts.mockResolvedValueOnce({ count: 0 });
+    mockDeleteDrafts.mockResolvedValueOnce(4);
+    mockDeleteDrafts.mockResolvedValueOnce(0);
 
     const first = await cleanupExpiredDraftsJob.handler();
     const second = await cleanupExpiredDraftsJob.handler();
@@ -166,18 +162,12 @@ describe('Maintenance job definitions behavior', () => {
   });
 
   it('cleans up expired refresh tokens and returns deleted count', async () => {
-    mockDeleteRefreshTokens.mockResolvedValueOnce({ count: 7 });
+    mockDeleteRefreshTokens.mockResolvedValueOnce(7);
 
     const deleted = await cleanupExpiredTokensJob.handler();
 
     expect(deleted).toBe(7);
-    expect(mockDeleteRefreshTokens).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          expiresAt: expect.objectContaining({ lt: expect.any(Date) }),
-        }),
-      })
-    );
+    expect(mockDeleteRefreshTokens).toHaveBeenCalled();
   });
 
   it('returns zero when cleanup jobs find no records to delete', async () => {
@@ -271,14 +261,9 @@ describe('Maintenance job definitions behavior', () => {
 
   it('runs monthly cleanup job, reports progress, and returns summary', async () => {
     const updateProgress = vi.fn().mockResolvedValue(undefined);
-    mockDeletePushDevices.mockResolvedValueOnce({ count: 6 });
-    mockExecuteRaw.mockImplementation(async (template: TemplateStringsArray) => {
-      const sql = template.join('?');
-      if (sql.includes('DELETE FROM "DraftTransaction"')) {
-        return 3;
-      }
-      return 0;
-    });
+    mockDeletePushDevices.mockResolvedValueOnce(6);
+    // deleteOrphanedDrafts is wired to mockExecuteRaw in the repository mock
+    mockExecuteRaw.mockResolvedValueOnce(3);
 
     const result = await monthlyCleanupJob.handler({
       data: {},
@@ -304,7 +289,7 @@ describe('Maintenance job definitions behavior', () => {
 
   it('returns zero monthly cleanup counts when no stale records exist', async () => {
     const updateProgress = vi.fn().mockResolvedValue(undefined);
-    mockDeletePushDevices.mockResolvedValueOnce({ count: 0 });
+    mockDeletePushDevices.mockResolvedValueOnce(0);
     mockExecuteRaw.mockResolvedValueOnce(0);
 
     const result = await monthlyCleanupJob.handler({

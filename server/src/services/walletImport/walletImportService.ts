@@ -5,7 +5,7 @@
  * the top-level auto-detect import orchestrator.
  */
 
-import { db as prisma } from '../../repositories/db';
+import prisma from '../../models/prisma';
 import type {
   ParsedDescriptor,
   JsonImportConfig,

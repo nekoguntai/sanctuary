@@ -17,13 +17,18 @@ const {
   },
 }));
 
-vi.mock('../../../../src/repositories/db', () => ({
-  db: {
+vi.mock('../../../../src/models/prisma', () => ({
+  default: {
     wallet: {
       findMany: (...args: unknown[]) => mockWalletFindMany(...args),
-      update: (...args: unknown[]) => mockWalletUpdate(...args),
       updateMany: (...args: unknown[]) => mockWalletUpdateMany(...args),
     },
+  },
+}));
+
+vi.mock('../../../../src/repositories', () => ({
+  walletRepository: {
+    update: (id: string, data: unknown) => mockWalletUpdate(id, data),
   },
 }));
 
@@ -131,10 +136,7 @@ describe('staleWalletChecker', () => {
 
       // Only w1 should be unstuck (w2 is genuinely syncing)
       expect(mockWalletUpdate).toHaveBeenCalledTimes(1);
-      expect(mockWalletUpdate).toHaveBeenCalledWith({
-        where: { id: 'w1' },
-        data: { syncInProgress: false },
-      });
+      expect(mockWalletUpdate).toHaveBeenCalledWith('w1', { syncInProgress: false });
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Auto-unstuck 1 wallets'),
       );

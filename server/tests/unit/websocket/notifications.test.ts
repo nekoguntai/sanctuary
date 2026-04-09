@@ -62,6 +62,16 @@ vi.mock('../../../src/models/prisma', () => ({
   },
 }));
 
+vi.mock('../../../src/repositories', () => ({
+  addressRepository: {
+    findAddressStrings: vi.fn().mockResolvedValue([]),
+    findByWalletId: vi.fn().mockResolvedValue([]),
+  },
+  walletRepository: {
+    findById: vi.fn().mockResolvedValue(null),
+  },
+}));
+
 vi.mock('../../../src/services/walletLogBuffer', () => ({
   walletLogBuffer: {
     add: vi.fn(),
@@ -69,6 +79,7 @@ vi.mock('../../../src/services/walletLogBuffer', () => ({
 }));
 
 import prisma from '../../../src/models/prisma';
+import { addressRepository, walletRepository } from '../../../src/repositories';
 import {
   NotificationService,
   notificationService,
@@ -122,31 +133,28 @@ describe('NotificationService', () => {
 
   describe('unsubscribeWalletAddresses', () => {
     it('should unsubscribe all addresses for a wallet', async () => {
-      (prisma.address.findMany as Mock).mockResolvedValue([
-        { address: 'bc1q123' },
-        { address: 'bc1q456' },
+      (addressRepository.findAddressStrings as Mock).mockResolvedValue([
+        'bc1q123',
+        'bc1q456',
       ]);
 
       await service.unsubscribeWalletAddresses('wallet-123');
 
-      expect(prisma.address.findMany).toHaveBeenCalledWith({
-        where: { walletId: 'wallet-123' },
-        select: { address: true },
-      });
+      expect(addressRepository.findAddressStrings).toHaveBeenCalledWith('wallet-123');
     });
 
     it('should handle empty address list', async () => {
-      (prisma.address.findMany as Mock).mockResolvedValue([]);
+      (addressRepository.findAddressStrings as Mock).mockResolvedValue([]);
 
       await service.unsubscribeWalletAddresses('wallet-123');
       // Should complete without error
     });
 
     it('should remove tracked subscriptions and log count', async () => {
-      (prisma.address.findMany as Mock).mockResolvedValue([
-        { address: 'bc1q123' },
-        { address: 'bc1q456' },
-        { address: 'bc1q999' },
+      (addressRepository.findAddressStrings as Mock).mockResolvedValue([
+        'bc1q123',
+        'bc1q456',
+        'bc1q999',
       ]);
       (service as any).subscribedAddresses.add('bc1q123');
       (service as any).subscribedAddresses.add('bc1q456');
@@ -161,7 +169,7 @@ describe('NotificationService', () => {
     });
 
     it('should handle database error', async () => {
-      (prisma.address.findMany as Mock).mockRejectedValue(new Error('DB error'));
+      (addressRepository.findAddressStrings as Mock).mockRejectedValue(new Error('DB error'));
 
       await service.unsubscribeWalletAddresses('wallet-123');
       // Should not throw, just log warning
@@ -222,7 +230,7 @@ describe('NotificationService', () => {
 
   describe('subscribeWallet', () => {
     it('should subscribe to all wallet addresses', async () => {
-      (prisma.address.findMany as Mock).mockResolvedValue([
+      (addressRepository.findByWalletId as Mock).mockResolvedValue([
         { address: 'bc1q123' },
         { address: 'bc1q456' },
         { address: 'bc1q789' },
@@ -230,21 +238,19 @@ describe('NotificationService', () => {
 
       await service.subscribeWallet('wallet-123');
 
-      expect(prisma.address.findMany).toHaveBeenCalledWith({
-        where: { walletId: 'wallet-123' },
-      });
+      expect(addressRepository.findByWalletId).toHaveBeenCalledWith('wallet-123');
       expect(mockSubscribeAddress).toHaveBeenCalledTimes(3);
     });
 
     it('should handle wallet with no addresses', async () => {
-      (prisma.address.findMany as Mock).mockResolvedValue([]);
+      (addressRepository.findByWalletId as Mock).mockResolvedValue([]);
 
       await service.subscribeWallet('empty-wallet');
       // Should complete without error
     });
 
     it('should handle database error', async () => {
-      (prisma.address.findMany as Mock).mockRejectedValue(new Error('DB error'));
+      (addressRepository.findByWalletId as Mock).mockRejectedValue(new Error('DB error'));
 
       await service.subscribeWallet('wallet-123');
       // Should not throw, just log error
@@ -271,7 +277,7 @@ describe('NotificationService', () => {
         { tx_hash: 'tx-new-2' },
       ]);
       (prisma.transaction.findFirst as Mock).mockResolvedValue(null);
-      (prisma.wallet.findUnique as Mock).mockResolvedValue({ id: 'wallet-123' });
+      (walletRepository.findById as Mock).mockResolvedValue({ id: 'wallet-123' });
       mockGetAddressBalance.mockResolvedValueOnce({ confirmed: 250000, unconfirmed: 5000 });
 
       await handleAddressUpdate('bc1q123', 'wallet-ignored');
@@ -330,7 +336,7 @@ describe('NotificationService', () => {
     });
 
     it('should skip and error-handle balance updates when wallet lookup fails', async () => {
-      (prisma.wallet.findUnique as Mock).mockResolvedValueOnce(null);
+      (walletRepository.findById as Mock).mockResolvedValueOnce(null);
 
       await handleBalanceUpdate('wallet-missing', {
         confirmed: 1000,
@@ -338,7 +344,7 @@ describe('NotificationService', () => {
       });
       expect(mockBroadcast).not.toHaveBeenCalled();
 
-      (prisma.wallet.findUnique as Mock).mockRejectedValueOnce(new Error('wallet lookup failed'));
+      (walletRepository.findById as Mock).mockRejectedValueOnce(new Error('wallet lookup failed'));
       await expect(
         handleBalanceUpdate('wallet-fail', { confirmed: 1000, unconfirmed: 0 })
       ).resolves.toBeUndefined();

@@ -16,8 +16,8 @@ const {
 }));
 
 // Mock prisma
-vi.mock('../../../../src/repositories/db', () => ({
-  db: {
+vi.mock('../../../../src/models/prisma', () => ({
+  default: {
     user: { findMany: (...args: unknown[]) => mockFindManyUsers(...args) },
     wallet: { findMany: (...args: unknown[]) => mockFindManyWallets(...args) },
   },

@@ -7,7 +7,7 @@
 
 import { createLogger } from '../../../utils/logger';
 import { getErrorMessage } from '../../../utils/errors';
-import { db as prisma } from '../../../repositories/db';
+import { nodeConfigRepository } from '../../../repositories';
 import {
   electrumPoolHealthCheckFailures,
 } from '../../../observability/metrics';
@@ -59,20 +59,12 @@ export async function updateServerHealthInDb(
   failCount?: number,
   errorMessage?: string,
 ): Promise<void> {
-  try {
-    await prisma.electrumServer.update({
-      where: { id: serverId },
-      data: {
-        isHealthy,
-        lastHealthCheck: new Date(),
-        lastHealthCheckError: isHealthy ? null : (errorMessage || null),
-        ...(failCount !== undefined ? { healthCheckFails: failCount } : {}),
-      },
-    });
-  } catch (error) {
-    // Don't log loudly - this is a background operation
-    log.debug(`Failed to update server health in db: ${error}`);
-  }
+  await nodeConfigRepository.electrumServer.updateHealth(serverId, {
+    isHealthy,
+    lastHealthCheck: new Date(),
+    lastHealthCheckError: isHealthy ? null : (errorMessage || null),
+    healthCheckFails: failCount,
+  });
 }
 
 /**

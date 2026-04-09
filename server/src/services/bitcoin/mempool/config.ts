@@ -4,7 +4,7 @@
  * Resolves the mempool API base URL from node configuration.
  */
 
-import { db as prisma } from '../../../repositories/db';
+import { nodeConfigRepository } from '../../../repositories';
 import { createLogger } from '../../../utils/logger';
 import { getErrorMessage } from '../../../utils/errors';
 
@@ -19,9 +19,7 @@ const DEFAULT_MEMPOOL_API = 'https://mempool.space/api';
  */
 export async function getMempoolApiBase(): Promise<string> {
   try {
-    const nodeConfig = await prisma.nodeConfig.findFirst({
-      where: { isDefault: true },
-    });
+    const nodeConfig = await nodeConfigRepository.findDefault();
 
     // Use dedicated fee estimator URL if configured
     if (nodeConfig?.feeEstimatorUrl) {
@@ -47,9 +45,7 @@ export async function getMempoolApiBase(): Promise<string> {
  */
 export async function getMempoolEstimatorType(): Promise<'simple' | 'mempool_space'> {
   try {
-    const nodeConfig = await prisma.nodeConfig.findFirst({
-      where: { isDefault: true },
-    });
+    const nodeConfig = await nodeConfigRepository.findDefault();
     return (nodeConfig?.mempoolEstimator as 'simple' | 'mempool_space') || 'mempool_space';
   } catch (error) {
     log.warn('Could not fetch mempool estimator config, using mempool_space', { error: getErrorMessage(error) });

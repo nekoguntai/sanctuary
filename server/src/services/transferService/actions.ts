@@ -6,7 +6,7 @@
  * All use atomic updates with WHERE clauses to prevent race conditions.
  */
 
-import { db as prisma } from '../../repositories/db';
+import { transferRepository } from '../../repositories';
 import { createLogger } from '../../utils/logger';
 import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError } from '../../errors';
 import { isExpired, formatTransfer } from './helpers';
@@ -23,9 +23,7 @@ export async function acceptTransfer(
   transferId: string
 ): Promise<Transfer> {
   // First check if transfer exists and get details for error messages
-  const transfer = await prisma.ownershipTransfer.findUnique({
-    where: { id: transferId },
-  });
+  const transfer = await transferRepository.findById(transferId);
 
   if (!transfer) {
     throw new NotFoundError(`Transfer '${transferId}' not found`);
@@ -39,33 +37,32 @@ export async function acceptTransfer(
   // Check if already expired
   if (isExpired(transfer.expiresAt)) {
     // Mark as expired atomically
-    await prisma.ownershipTransfer.updateMany({
-      where: { id: transferId, status: { in: ['pending', 'accepted'] } },
-      data: { status: 'expired' },
-    });
+    await transferRepository.atomicStatusUpdate(
+      transferId,
+      { status: { in: ['pending', 'accepted'] } },
+      { status: 'expired' }
+    );
     throw new InvalidInputError('Transfer has expired');
   }
 
   // Atomic update: only succeeds if status is still 'pending'
   // This prevents race conditions where two requests both try to accept
-  const result = await prisma.ownershipTransfer.updateMany({
-    where: {
-      id: transferId,
-      toUserId: recipientId,  // Ensure recipient check is also atomic
-      status: 'pending',      // Only update if still pending
-      expiresAt: { gt: new Date() },  // Not expired
+  const result = await transferRepository.atomicStatusUpdate(
+    transferId,
+    {
+      toUserId: recipientId,
+      status: 'pending',
+      expiresAt: { gt: new Date() },
     },
-    data: {
+    {
       status: 'accepted',
       acceptedAt: new Date(),
-    },
-  });
+    }
+  );
 
-  if (result.count === 0) {
+  if (result === 0) {
     // Refresh to get current status for error message
-    const current = await prisma.ownershipTransfer.findUnique({
-      where: { id: transferId },
-    });
+    const current = await transferRepository.findById(transferId);
     if (current?.status === 'accepted') {
       throw new ConflictError('Transfer has already been accepted');
     }
@@ -73,13 +70,7 @@ export async function acceptTransfer(
   }
 
   // Fetch updated record for return
-  const updated = await prisma.ownershipTransfer.findUnique({
-    where: { id: transferId },
-    include: {
-      fromUser: { select: { id: true, username: true } },
-      toUser: { select: { id: true, username: true } },
-    },
-  });
+  const updated = await transferRepository.findByIdWithUsers(transferId);
 
   if (!updated) {
     throw new NotFoundError(`Transfer '${transferId}' not found`);
@@ -102,9 +93,7 @@ export async function declineTransfer(
   transferId: string,
   reason?: string
 ): Promise<Transfer> {
-  const transfer = await prisma.ownershipTransfer.findUnique({
-    where: { id: transferId },
-  });
+  const transfer = await transferRepository.findById(transferId);
 
   if (!transfer) {
     throw new NotFoundError(`Transfer '${transferId}' not found`);
@@ -116,33 +105,18 @@ export async function declineTransfer(
   }
 
   // Atomic update: only succeeds if status is still 'pending'
-  const result = await prisma.ownershipTransfer.updateMany({
-    where: {
-      id: transferId,
-      toUserId: recipientId,
-      status: 'pending',
-    },
-    data: {
-      status: 'declined',
-      declineReason: reason || null,
-      cancelledAt: new Date(),
-    },
-  });
+  const result = await transferRepository.atomicStatusUpdate(
+    transferId,
+    { toUserId: recipientId, status: 'pending' },
+    { status: 'declined', declineReason: reason || null, cancelledAt: new Date() }
+  );
 
-  if (result.count === 0) {
-    const current = await prisma.ownershipTransfer.findUnique({
-      where: { id: transferId },
-    });
+  if (result === 0) {
+    const current = await transferRepository.findById(transferId);
     throw new InvalidInputError(`Transfer cannot be declined (current status: ${current?.status || 'unknown'})`);
   }
 
-  const updated = await prisma.ownershipTransfer.findUnique({
-    where: { id: transferId },
-    include: {
-      fromUser: { select: { id: true, username: true } },
-      toUser: { select: { id: true, username: true } },
-    },
-  });
+  const updated = await transferRepository.findByIdWithUsers(transferId);
 
   if (!updated) {
     throw new NotFoundError(`Transfer '${transferId}' not found`);
@@ -166,9 +140,7 @@ export async function cancelTransfer(
   ownerId: string,
   transferId: string
 ): Promise<Transfer> {
-  const transfer = await prisma.ownershipTransfer.findUnique({
-    where: { id: transferId },
-  });
+  const transfer = await transferRepository.findById(transferId);
 
   if (!transfer) {
     throw new NotFoundError(`Transfer '${transferId}' not found`);
@@ -180,32 +152,18 @@ export async function cancelTransfer(
   }
 
   // Atomic update: only succeeds if status is still cancellable
-  const result = await prisma.ownershipTransfer.updateMany({
-    where: {
-      id: transferId,
-      fromUserId: ownerId,
-      status: { in: ['pending', 'accepted'] },
-    },
-    data: {
-      status: 'cancelled',
-      cancelledAt: new Date(),
-    },
-  });
+  const result = await transferRepository.atomicStatusUpdate(
+    transferId,
+    { fromUserId: ownerId, status: { in: ['pending', 'accepted'] } },
+    { status: 'cancelled', cancelledAt: new Date() }
+  );
 
-  if (result.count === 0) {
-    const current = await prisma.ownershipTransfer.findUnique({
-      where: { id: transferId },
-    });
+  if (result === 0) {
+    const current = await transferRepository.findById(transferId);
     throw new InvalidInputError(`Transfer cannot be cancelled (current status: ${current?.status || 'unknown'})`);
   }
 
-  const updated = await prisma.ownershipTransfer.findUnique({
-    where: { id: transferId },
-    include: {
-      fromUser: { select: { id: true, username: true } },
-      toUser: { select: { id: true, username: true } },
-    },
-  });
+  const updated = await transferRepository.findByIdWithUsers(transferId);
 
   if (!updated) {
     throw new NotFoundError(`Transfer '${transferId}' not found`);

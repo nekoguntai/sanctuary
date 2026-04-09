@@ -8,7 +8,8 @@
  * - Address-to-wallet mapping with periodic reconciliation
  */
 
-import { db as prisma } from '../../repositories/db';
+import { walletRepository, addressRepository } from '../../repositories';
+import prisma from '../../models/prisma';
 import { setCachedBlockHeight } from '../bitcoin/blockchain';
 import { getNodeClient, getElectrumClientIfActive } from '../bitcoin/nodeClient';
 import { getNotificationService } from '../../websocket/notifications';
@@ -353,12 +354,9 @@ export async function subscribeNewWalletAddresses(state: SyncState, walletId: st
   const electrumClient = await getElectrumClientIfActive();
   if (!electrumClient) return;
 
-  const addresses = await prisma.address.findMany({
-    where: { walletId },
-    select: { address: true },
-  });
+  const addressStrings = await addressRepository.findAddressStrings(walletId);
 
-  for (const { address } of addresses) {
+  for (const address of addressStrings) {
     try {
       if (!state.addressToWalletMap.has(address)) {
         await electrumClient.subscribeAddress(address);
@@ -369,7 +367,7 @@ export async function subscribeNewWalletAddresses(state: SyncState, walletId: st
     }
   }
 
-  log.info(`[SYNC] Subscribed to ${addresses.length} addresses for new wallet ${walletId}`);
+  log.info(`[SYNC] Subscribed to ${addressStrings.length} addresses for new wallet ${walletId}`);
 }
 
 /**
@@ -403,20 +401,14 @@ export async function teardownRealTimeSubscriptions(state: SyncState): Promise<v
  */
 export async function subscribeWalletAddresses(walletId: string): Promise<void> {
   // Get wallet to determine network
-  const wallet = await prisma.wallet.findUnique({
-    where: { id: walletId },
-    select: { network: true }
-  });
-  const network = (wallet?.network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
+  const network = await walletRepository.findNetwork(walletId) as 'mainnet' | 'testnet' | 'signet' | 'regtest' | null;
+  const resolvedNetwork = network || 'mainnet';
 
-  const addresses = await prisma.address.findMany({
-    where: { walletId },
-    select: { address: true },
-  });
+  const addressStrings = await addressRepository.findAddressStrings(walletId);
 
-  const client = await getNodeClient(network);
+  const client = await getNodeClient(resolvedNetwork);
 
-  for (const { address } of addresses) {
+  for (const address of addressStrings) {
     try {
       // Subscribe to address - Electrum/RPC will notify on changes (if supported)
       await client.subscribeAddress(address);
@@ -425,7 +417,7 @@ export async function subscribeWalletAddresses(walletId: string): Promise<void> 
     }
   }
 
-  log.info(`[SYNC] Subscribed to ${addresses.length} addresses for wallet ${walletId}`);
+  log.info(`[SYNC] Subscribed to ${addressStrings.length} addresses for wallet ${walletId}`);
 }
 
 /**

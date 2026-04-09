@@ -6,7 +6,7 @@
  * and broadcasts changes via events and WebSocket notifications.
  */
 
-import { db as prisma } from '../../repositories/db';
+import prisma from '../../models/prisma';
 import { updateTransactionConfirmations, populateMissingTransactionFields } from '../bitcoin/blockchain';
 import { getNotificationService } from '../../websocket/notifications';
 import { createLogger } from '../../utils/logger';

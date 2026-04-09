@@ -7,7 +7,8 @@
 
 import { getWebSocketServer } from '../server';
 import { getElectrumClient } from '../../services/bitcoin/electrum';
-import { db as prisma } from '../../repositories/db';
+import { addressRepository, walletRepository } from '../../repositories';
+import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import {
   broadcastTransactionNotification,
@@ -77,13 +78,10 @@ export async function unsubscribeWalletAddresses(
 ): Promise<void> {
   try {
     // Get all addresses for this wallet from the database
-    const addresses = await prisma.address.findMany({
-      where: { walletId },
-      select: { address: true },
-    });
+    const addressStrings = await addressRepository.findAddressStrings(walletId);
 
     let unsubscribed = 0;
-    for (const { address } of addresses) {
+    for (const address of addressStrings) {
       if (subscribedAddresses.has(address)) {
         subscribedAddresses.delete(address);
         unsubscribed++;
@@ -107,12 +105,10 @@ export async function subscribeWallet(
 ): Promise<void> {
   try {
     // Get all addresses for this wallet
-    const addresses = await prisma.address.findMany({
-      where: { walletId },
-    });
+    const allAddresses = await addressRepository.findByWalletId(walletId);
 
     // Subscribe to each address
-    for (const addr of addresses) {
+    for (const addr of allAddresses) {
       await subscribeToAddress(addr.address, walletId, subscribedAddresses);
     }
 
@@ -221,9 +217,7 @@ export async function checkConfirmationUpdate(txid: string, walletId: string): P
  */
 export async function handleBalanceUpdate(walletId: string, balance: { confirmed: number; unconfirmed: number }): Promise<void> {
   try {
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-    });
+    const wallet = await walletRepository.findById(walletId);
 
     if (!wallet) return;
 

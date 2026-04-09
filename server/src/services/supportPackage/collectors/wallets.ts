@@ -5,7 +5,7 @@
  * Includes type, network, sync status, and counts — no addresses or xpubs.
  */
 
-import { db as prisma } from '../../../repositories/db';
+import prisma from '../../../models/prisma';
 import { registerCollector } from './registry';
 import type { CollectorContext } from '../types';
 

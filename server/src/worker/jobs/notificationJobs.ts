@@ -16,7 +16,7 @@ import type {
   ConfirmationNotifyJobData,
   NotifyJobResult,
 } from './types';
-import { db as prisma } from '../../repositories/db';
+import prisma from '../../models/prisma';
 import { notificationChannelRegistry } from '../../services/notifications/channels/registry';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';

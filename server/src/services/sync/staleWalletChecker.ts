@@ -6,7 +6,8 @@
  * - checkAndQueueStaleSyncs: Finds wallets that haven't been synced recently and queues them.
  */
 
-import { db as prisma } from '../../repositories/db';
+import { walletRepository } from '../../repositories';
+import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { getConfig } from '../../config';
@@ -60,10 +61,7 @@ export async function checkAndQueueStaleSyncs(
     for (const wallet of stuckWallets) {
       if (!state.activeSyncs.has(wallet.id)) {
         log.warn(`[SYNC] Auto-unstuck wallet ${wallet.name || wallet.id} (was stuck with syncInProgress=true)`);
-        await prisma.wallet.update({
-          where: { id: wallet.id },
-          data: { syncInProgress: false },
-        });
+        await walletRepository.update(wallet.id, { syncInProgress: false });
         unstuckCount++;
       }
     }

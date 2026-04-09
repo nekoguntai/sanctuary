@@ -5,8 +5,8 @@ const { mockFindMany, collectorMap } = vi.hoisted(() => ({
   collectorMap: new Map<string, (ctx: any) => Promise<Record<string, unknown>>>(),
 }));
 
-vi.mock('../../../../src/repositories/db', () => ({
-  db: {
+vi.mock('../../../../src/models/prisma', () => ({
+  default: {
     wallet: { findMany: (...args: unknown[]) => mockFindMany(...args) },
   },
 }));

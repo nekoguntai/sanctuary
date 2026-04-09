@@ -4,7 +4,7 @@
  * Device-to-wallet linking and descriptor generation/repair.
  */
 
-import { db as prisma } from '../../repositories/db';
+import prisma from '../../models/prisma';
 import * as descriptorBuilder from '../bitcoin/descriptorBuilder';
 import { createLogger } from '../../utils/logger';
 import { ConflictError, WalletNotFoundError, DeviceNotFoundError } from '../../errors';

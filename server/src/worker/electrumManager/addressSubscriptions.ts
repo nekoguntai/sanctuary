@@ -5,7 +5,8 @@
  * Electrum servers with cursor-based pagination for large deployments.
  */
 
-import { db as prisma } from '../../repositories/db';
+import { walletRepository, addressRepository } from '../../repositories';
+import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { SUBSCRIPTION_BATCH_SIZE } from './types';
@@ -182,14 +183,11 @@ export async function subscribeWalletAddresses(
   networks: Map<BitcoinNetwork, NetworkState>,
   addressToWallet: Map<string, { walletId: string; network: BitcoinNetwork }>
 ): Promise<void> {
-  const wallet = await prisma.wallet.findUnique({
-    where: { id: walletId },
-    select: { network: true },
-  });
+  const walletNetwork = await walletRepository.findNetwork(walletId);
 
-  if (!wallet) return;
+  if (!walletNetwork) return;
 
-  const network = (wallet.network || 'mainnet') as BitcoinNetwork;
+  const network = (walletNetwork || 'mainnet') as BitcoinNetwork;
   const state = networks.get(network);
 
   if (!state?.connected) {
@@ -197,13 +195,10 @@ export async function subscribeWalletAddresses(
     return;
   }
 
-  const addresses = await prisma.address.findMany({
-    where: { walletId },
-    select: { address: true },
-  });
+  const addressStrings = await addressRepository.findAddressStrings(walletId);
 
-  const addressData = addresses.map(a => ({
-    address: a.address,
+  const addressData = addressStrings.map(address => ({
+    address,
     walletId,
   }));
 

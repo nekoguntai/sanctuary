@@ -9,7 +9,7 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import { getNetwork, estimateTransactionSize } from '../utils';
 import { getNodeClient } from '../nodeClient';
-import { db as prisma } from '../../../repositories/db';
+import { utxoRepository } from '../../../repositories';
 import { getDustThreshold } from './shared';
 
 /**
@@ -78,14 +78,7 @@ export async function createCPFPTransaction(
   const parentVsize = bitcoin.Transaction.fromHex(parentTx.hex).virtualSize();
 
   // Get the UTXO from parent transaction
-  const utxo = await prisma.uTXO.findUnique({
-    where: {
-      txid_vout: {
-        txid: parentTxid,
-        vout: parentVout,
-      },
-    },
-  });
+  const utxo = await utxoRepository.findByOutpoint(parentTxid, parentVout);
 
   if (!utxo) {
     throw new Error('UTXO not found');

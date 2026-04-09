@@ -4,7 +4,7 @@
  * Database queries for fetching available UTXOs.
  */
 
-import { db as prisma } from '../../repositories/db';
+import prisma from '../../models/prisma';
 import type { SelectedUtxo } from './types';
 
 /**

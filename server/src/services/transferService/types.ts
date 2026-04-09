@@ -5,7 +5,7 @@
  */
 
 import type { OwnershipTransfer } from '../../generated/prisma/client';
-import { db as prisma } from '../../repositories/db';
+import prisma from '../../models/prisma';
 
 /** Prisma transaction client type */
 export type PrismaTx = Omit<typeof prisma, '$connect' | '$disconnect' | '$transaction' | '$extends'>;

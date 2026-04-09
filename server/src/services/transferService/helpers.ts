@@ -5,7 +5,7 @@
  * expiry calculation, ownership checks, resource name lookup, formatting.
  */
 
-import { db as prisma } from '../../repositories/db';
+import { walletRepository, deviceRepository } from '../../repositories';
 import { checkWalletOwnerAccess } from '../wallet';
 import { checkDeviceOwnerAccess } from '../deviceAccess';
 import type { ResourceType, Transfer, TransferWithUsers } from './types';
@@ -34,16 +34,10 @@ export function isExpired(expiresAt: Date): boolean {
  */
 export async function getResourceName(resourceType: ResourceType, resourceId: string): Promise<string> {
   if (resourceType === 'wallet') {
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: resourceId },
-      select: { name: true },
-    });
-    return wallet?.name || 'Unknown Wallet';
+    const name = await walletRepository.getName(resourceId);
+    return name || 'Unknown Wallet';
   } else {
-    const device = await prisma.device.findUnique({
-      where: { id: resourceId },
-      select: { label: true },
-    });
+    const device = await deviceRepository.findById(resourceId);
     return device?.label || 'Unknown Device';
   }
 }

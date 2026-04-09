@@ -9,7 +9,8 @@
  * - Dead letter queue for permanently failed syncs
  */
 
-import { db as prisma } from '../../repositories/db';
+import { walletRepository } from '../../repositories';
+import prisma from '../../models/prisma';
 import { syncWallet, populateMissingTransactionFields } from '../bitcoin/blockchain';
 import { getNotificationService, walletLog } from '../../websocket/notifications';
 import { createLogger } from '../../utils/logger';
@@ -121,10 +122,7 @@ export async function executeSyncJob(
   }
 
   // Mark sync in progress
-  await prisma.wallet.update({
-    where: { id: walletId },
-    data: { syncInProgress: true },
-  });
+  await walletRepository.update(walletId, { syncInProgress: true });
 
   // Get retry config
   const syncConfig = getConfig().sync;
@@ -197,14 +195,11 @@ export async function executeSyncJob(
     const newTotal = newBalances.confirmed + newBalances.unconfirmed;
 
     // Update sync metadata
-    await prisma.wallet.update({
-      where: { id: walletId },
-      data: {
-        lastSyncedAt: new Date(),
-        lastSyncStatus: 'success',
-        lastSyncError: null,
-        syncInProgress: false,
-      },
+    await walletRepository.update(walletId, {
+      lastSyncedAt: new Date(),
+      lastSyncStatus: 'success',
+      lastSyncError: null,
+      syncInProgress: false,
     });
 
     const duration = Date.now() - startTime;
@@ -275,13 +270,10 @@ export async function executeSyncJob(
       });
 
       // Update DB to show retrying state
-      await prisma.wallet.update({
-        where: { id: walletId },
-        data: {
-          lastSyncStatus: 'retrying',
-          lastSyncError: `${errorMessage} (retrying ${nextRetry}/${syncConfig.maxRetryAttempts})`,
-          syncInProgress: false, // Will be set to true when retry starts
-        },
+      await walletRepository.update(walletId, {
+        lastSyncStatus: 'retrying',
+        lastSyncError: `${errorMessage} (retrying ${nextRetry}/${syncConfig.maxRetryAttempts})`,
+        syncInProgress: false, // Will be set to true when retry starts
       });
 
       // Release distributed lock so retry can acquire it fresh
@@ -321,13 +313,10 @@ export async function executeSyncJob(
     eventService.emitWalletSyncFailed(walletId, errorMessage, syncConfig.maxRetryAttempts);
 
     // Update sync metadata with final error
-    await prisma.wallet.update({
-      where: { id: walletId },
-      data: {
-        lastSyncStatus: 'failed',
-        lastSyncError: errorMessage,
-        syncInProgress: false,
-      },
+    await walletRepository.update(walletId, {
+      lastSyncStatus: 'failed',
+      lastSyncError: errorMessage,
+      syncInProgress: false,
     });
 
     // Notify sync failure via WebSocket

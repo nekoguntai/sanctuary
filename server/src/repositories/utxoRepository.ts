@@ -591,6 +591,18 @@ export async function findByIdsForPrivacy(utxoIds: string[]) {
   });
 }
 
+/**
+ * Find a UTXO by outpoint (txid:vout compound key)
+ */
+export async function findByOutpoint(
+  txid: string,
+  vout: number
+): Promise<UTXO | null> {
+  return prisma.uTXO.findUnique({
+    where: { txid_vout: { txid, vout } },
+  });
+}
+
 // Export as namespace
 export const utxoRepository = {
   getUnspentBalance,
@@ -628,6 +640,7 @@ export const utxoRepository = {
   findUnspentAmounts,
   findUnspentForPrivacy,
   findByIdsForPrivacy,
+  findByOutpoint,
 };
 
 export default utxoRepository;

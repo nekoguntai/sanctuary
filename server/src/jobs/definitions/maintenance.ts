@@ -7,7 +7,8 @@
 
 import type { Job } from 'bullmq';
 import type { JobDefinition } from '../types';
-import { db as prisma } from '../../repositories/db';
+import { maintenanceRepository, pushDeviceRepository } from '../../repositories';
+import prisma from '../../models/prisma';
 import { auditService, AuditCategory } from '../../services/auditService';
 import { expireOldTransfers } from '../../services/transferService';
 import { createLogger } from '../../utils/logger';
@@ -69,15 +70,13 @@ export const cleanupPriceDataJob: JobDefinition<CleanupJobData, number> = {
 
     log.info('Running price data cleanup job', { retentionDays });
 
-    const result = await prisma.priceData.deleteMany({
-      where: { createdAt: { lt: cutoffDate } },
-    });
+    const deleted = await maintenanceRepository.deletePriceDataBefore(cutoffDate);
 
-    if (result.count > 0) {
-      log.info('Price data cleanup completed', { deleted: result.count });
+    if (deleted > 0) {
+      log.info('Price data cleanup completed', { deleted });
     }
 
-    return result.count;
+    return deleted;
   },
   options: {
     attempts: 3,
@@ -97,15 +96,13 @@ export const cleanupFeeEstimatesJob: JobDefinition<CleanupJobData, number> = {
 
     log.info('Running fee estimate cleanup job', { retentionDays });
 
-    const result = await prisma.feeEstimate.deleteMany({
-      where: { createdAt: { lt: cutoffDate } },
-    });
+    const deleted = await maintenanceRepository.deleteFeeEstimatesBefore(cutoffDate);
 
-    if (result.count > 0) {
-      log.info('Fee estimate cleanup completed', { deleted: result.count });
+    if (deleted > 0) {
+      log.info('Fee estimate cleanup completed', { deleted });
     }
 
-    return result.count;
+    return deleted;
   },
   options: {
     attempts: 3,
@@ -123,23 +120,21 @@ export const cleanupExpiredDraftsJob: JobDefinition<void, number> = {
 
     log.info('Running expired drafts cleanup job');
 
-    const result = await prisma.draftTransaction.deleteMany({
-      where: { expiresAt: { lt: now } },
-    });
+    const deleted = await maintenanceRepository.deleteExpiredDrafts();
 
-    if (result.count > 0) {
-      log.info('Expired draft cleanup completed', { deleted: result.count });
+    if (deleted > 0) {
+      log.info('Expired draft cleanup completed', { deleted });
 
       await auditService.log({
         username: 'system',
         action: 'maintenance.draft_cleanup',
         category: AuditCategory.SYSTEM,
-        details: { deletedCount: result.count },
+        details: { deletedCount: deleted },
         success: true,
       });
     }
 
-    return result.count;
+    return deleted;
   },
   options: {
     attempts: 2,
@@ -187,15 +182,13 @@ export const cleanupExpiredTokensJob: JobDefinition<void, number> = {
 
     log.info('Running expired tokens cleanup job');
 
-    const result = await prisma.refreshToken.deleteMany({
-      where: { expiresAt: { lt: now } },
-    });
+    const deleted = await maintenanceRepository.deleteExpiredRefreshTokens();
 
-    if (result.count > 0) {
-      log.info('Expired token cleanup completed', { deleted: result.count });
+    if (deleted > 0) {
+      log.info('Expired token cleanup completed', { deleted });
     }
 
-    return result.count;
+    return deleted;
   },
   options: {
     attempts: 2,
@@ -285,21 +278,16 @@ export const monthlyCleanupJob: JobDefinition<void, { stalePushDevices: number; 
     const staleDate = new Date();
     staleDate.setDate(staleDate.getDate() - 90);
 
-    const stalePushDevicesResult = await prisma.pushDevice.deleteMany({
-      where: { lastUsedAt: { lt: staleDate } },
-    });
+    const stalePushDevicesCount = await pushDeviceRepository.deleteStale(staleDate);
 
     await job.updateProgress(50);
 
-    if (stalePushDevicesResult.count > 0) {
-      log.info('Stale push devices cleanup completed', { deleted: stalePushDevicesResult.count });
+    if (stalePushDevicesCount > 0) {
+      log.info('Stale push devices cleanup completed', { deleted: stalePushDevicesCount });
     }
 
     // Clean up orphaned drafts
-    const orphanedDraftsResult = await prisma.$executeRaw`
-      DELETE FROM "DraftTransaction"
-      WHERE "walletId" NOT IN (SELECT id FROM "Wallet")
-    `;
+    const orphanedDraftsResult = await maintenanceRepository.deleteOrphanedDrafts();
 
     await job.updateProgress(90);
 
@@ -312,7 +300,7 @@ export const monthlyCleanupJob: JobDefinition<void, { stalePushDevices: number; 
       action: 'maintenance.monthly_stale_cleanup',
       category: AuditCategory.SYSTEM,
       details: {
-        stalePushDevices: stalePushDevicesResult.count,
+        stalePushDevices: stalePushDevicesCount,
         orphanedDrafts: orphanedDraftsResult,
       },
       success: true,
@@ -321,7 +309,7 @@ export const monthlyCleanupJob: JobDefinition<void, { stalePushDevices: number; 
     await job.updateProgress(100);
 
     return {
-      stalePushDevices: stalePushDevicesResult.count,
+      stalePushDevices: stalePushDevicesCount,
       orphanedDrafts: orphanedDraftsResult,
     };
   },

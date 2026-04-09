@@ -12,12 +12,26 @@ const mocks = vi.hoisted(() => ({
   electrumClientCtor: vi.fn(),
 }));
 
-vi.mock('../../../../src/repositories/db', async () => {
+vi.mock('../../../../src/models/prisma', async () => {
   const { mockPrismaClient: prisma } = await import('../../../mocks/prisma');
   return {
     __esModule: true,
-    db: prisma,
     default: prisma,
+  };
+});
+
+vi.mock('../../../../src/repositories', async () => {
+  const { mockPrismaClient: prisma } = await import('../../../mocks/prisma');
+  return {
+    nodeConfigRepository: {
+      findDefault: (...args: unknown[]) => prisma.nodeConfig.findFirst(...args),
+      findDefaultWithServers: (...args: unknown[]) => prisma.nodeConfig.findFirst(...args),
+      findOrCreateDefault: vi.fn(),
+      update: vi.fn(),
+      electrumServer: {
+        updateHealth: vi.fn().mockResolvedValue(undefined),
+      },
+    },
   };
 });
 

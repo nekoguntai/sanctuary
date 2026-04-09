@@ -4,7 +4,7 @@
  * State-changing operations (update, delete) with cleanup side effects.
  */
 
-import { db as prisma } from '../../repositories/db';
+import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { hookRegistry, Operations } from '../hooks';

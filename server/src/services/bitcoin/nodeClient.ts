@@ -13,7 +13,8 @@ import {
   resetElectrumPoolForNetwork,
   NetworkType,
 } from './electrumPool';
-import { db as prisma } from '../../repositories/db';
+import { nodeConfigRepository } from '../../repositories';
+import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 
@@ -73,9 +74,7 @@ const networkClients = new Map<NetworkType, NodeClientInterface>();
  */
 async function loadNodeConfig(): Promise<NodeConfig | null> {
   try {
-    const nodeConfig = await prisma.nodeConfig.findFirst({
-      where: { isDefault: true },
-    });
+    const nodeConfig = await nodeConfigRepository.findDefault();
 
     if (nodeConfig) {
       return {
@@ -144,9 +143,7 @@ function getDefaultElectrumConfig(): NodeConfig {
  */
 async function getNetworkModeConfig(network: NetworkType): Promise<NetworkModeConfig> {
   try {
-    const nodeConfig = await prisma.nodeConfig.findFirst({
-      where: { isDefault: true },
-    });
+    const nodeConfig = await nodeConfigRepository.findDefault();
 
     if (!nodeConfig) {
       // Default to pool mode for mainnet, singleton for others

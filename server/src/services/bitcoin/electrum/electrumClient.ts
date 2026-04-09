@@ -10,7 +10,7 @@ import net from 'net';
 import tls from 'tls';
 import { EventEmitter } from 'events';
 import config from '../../../config';
-import { db as prisma } from '../../../repositories/db';
+import { nodeConfigRepository } from '../../../repositories';
 import { createLogger } from '../../../utils/logger';
 import { getErrorMessage } from '../../../utils/errors';
 import { createConnection, wrapSocketInTls, applySocketOptimizations } from './connection';
@@ -103,9 +103,7 @@ class ElectrumClient extends EventEmitter {
       proxy = this.explicitConfig.proxy;
     } else {
       // Get node config from database
-      const nodeConfig = await prisma.nodeConfig.findFirst({
-        where: { isDefault: true },
-      });
+      const nodeConfig = await nodeConfigRepository.findDefault();
 
       if (nodeConfig && nodeConfig.type === 'electrum') {
         // Load per-network singleton config based on this.network

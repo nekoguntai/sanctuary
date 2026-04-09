@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
+import { usePaginatedList } from '../../../hooks/usePaginatedList';
 import { useNavigate } from 'react-router-dom';
 import type {
   Wallet, Transaction, UTXO, Device, User, Address,
@@ -68,22 +69,16 @@ export function useWalletData({
   const [error, setError] = useState<string | null>(null);
 
   // -----------------------------------------------------------------------
-  // Transactions
+  // Transactions (paginated)
   // -----------------------------------------------------------------------
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const txList = usePaginatedList<Transaction>();
   const [transactionStats, setTransactionStats] = useState<transactionsApi.TransactionStats | null>(null);
-  const [txOffset, setTxOffset] = useState(0);
-  const [hasMoreTx, setHasMoreTx] = useState(true);
-  const [loadingMoreTx, setLoadingMoreTx] = useState(false);
 
   // -----------------------------------------------------------------------
-  // UTXOs
+  // UTXOs (paginated)
   // -----------------------------------------------------------------------
-  const [utxos, setUTXOs] = useState<UTXO[]>([]);
+  const utxoList = usePaginatedList<UTXO>();
   const [utxoSummary, setUtxoSummary] = useState<{ count: number; totalBalance: number } | null>(null);
-  const [utxoOffset, setUtxoOffset] = useState(0);
-  const [hasMoreUtxos, setHasMoreUtxos] = useState(true);
-  const [loadingMoreUtxos, setLoadingMoreUtxos] = useState(false);
   const [utxoStats, setUtxoStats] = useState<UTXO[]>([]);
   const [loadingUtxoStats, setLoadingUtxoStats] = useState(false);
 
@@ -95,16 +90,13 @@ export function useWalletData({
   const [showPrivacy] = useState(true);
 
   // -----------------------------------------------------------------------
-  // Addresses
+  // Addresses (paginated)
   // -----------------------------------------------------------------------
-  const [addresses, setAddresses] = useState<Address[]>([]);
-  const [addressOffset, setAddressOffset] = useState(0);
-  const [hasMoreAddresses, setHasMoreAddresses] = useState(true);
+  const addrList = usePaginatedList<Address>();
   const [addressSummary, setAddressSummary] = useState<transactionsApi.AddressSummary | null>(null);
-  const [loadingAddresses, setLoadingAddresses] = useState(false);
 
   // Memoize wallet addresses to prevent infinite re-renders in TransactionList
-  const walletAddressStrings = useMemo(() => addresses.map(a => a.address), [addresses]);
+  const walletAddressStrings = useMemo(() => addrList.items.map(a => a.address), [addrList.items]);
 
   // -----------------------------------------------------------------------
   // Drafts
@@ -128,24 +120,21 @@ export function useWalletData({
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (addressSummary) {
-      setHasMoreAddresses(addressOffset < addressSummary.totalAddresses);
+      addrList.setHasMore(addrList.offset < addressSummary.totalAddresses);
     }
-  }, [addressSummary, addressOffset]);
+  }, [addressSummary, addrList.offset]);
 
   useEffect(() => {
     if (utxoSummary) {
-      setHasMoreUtxos(utxoOffset < utxoSummary.count);
+      utxoList.setHasMore(utxoList.offset < utxoSummary.count);
     }
-  }, [utxoSummary, utxoOffset]);
+  }, [utxoSummary, utxoList.offset]);
 
   // Reset UTXO state when wallet ID changes
   useEffect(() => {
-    setUTXOs([]);
+    utxoList.reset();
     setUtxoSummary(null);
-    setUtxoOffset(0);
-    setHasMoreUtxos(true);
     setUtxoStats([]);
-    setLoadingMoreUtxos(false);
     setLoadingUtxoStats(false);
   }, [id]);
 
@@ -160,41 +149,35 @@ export function useWalletData({
 
   const loadAddressesFn = async (walletId: string, limit: number, offset: number, reset = false) => {
     try {
-      setLoadingAddresses(true);
-      if (reset) setAddressOffset(0);
+      addrList.setLoading(true);
+      if (reset) addrList.setOffset(0);
 
       const formattedAddrs = await loadAddressPage(walletId, offset, limit);
 
-      setAddresses(prev => reset ? formattedAddrs : [...prev, ...formattedAddrs]);
-      const nextOffset = offset + formattedAddrs.length;
-      setAddressOffset(nextOffset);
-      if (addressSummary) {
-        setHasMoreAddresses(nextOffset < addressSummary.totalAddresses);
+      if (reset) {
+        addrList.replaceItems(formattedAddrs, formattedAddrs.length,
+          addressSummary ? formattedAddrs.length < addressSummary.totalAddresses : formattedAddrs.length === limit);
       } else {
-        setHasMoreAddresses(formattedAddrs.length === limit);
+        addrList.appendItems(formattedAddrs,
+          addressSummary ? addressSummary.totalAddresses : limit,
+          addressSummary ? 'total' : 'pageSize');
       }
     } catch (err) {
       logError(log, err, 'Failed to load addresses');
-    } finally {
-      setLoadingAddresses(false);
+      addrList.setLoading(false);
     }
   };
 
   const loadUtxos = async (walletId: string, limit: number, offset: number) => {
-    setLoadingMoreUtxos(true);
+    utxoList.setLoading(true);
 
     try {
       const page = await loadUtxoPage(walletId, offset, limit);
       setUtxoSummary({ count: page.count, totalBalance: page.totalBalance });
-      setUTXOs(prev => [...prev, ...page.utxos]);
-
-      const nextOffset = offset + page.utxos.length;
-      setUtxoOffset(nextOffset);
-      setHasMoreUtxos(nextOffset < page.count);
+      utxoList.appendItems(page.utxos, page.count, 'total');
     } catch (err) {
       logError(log, err, 'Failed to load UTXOs');
-    } finally {
-      setLoadingMoreUtxos(false);
+      utxoList.setLoading(false);
     }
   };
 
@@ -215,26 +198,22 @@ export function useWalletData({
   // -----------------------------------------------------------------------
 
   const loadMoreTransactions = async () => {
-    if (!id || loadingMoreTx || !hasMoreTx) return;
+    if (!id || txList.loading || !txList.hasMore) return;
 
     try {
-      setLoadingMoreTx(true);
-      const formattedTxs = await loadTransactionPage(id, txOffset, TX_PAGE_SIZE);
-
-      setTransactions(prev => [...prev, ...formattedTxs]);
-      setTxOffset(prev => prev + TX_PAGE_SIZE);
-      setHasMoreTx(formattedTxs.length === TX_PAGE_SIZE);
+      txList.setLoading(true);
+      const formattedTxs = await loadTransactionPage(id, txList.offset, TX_PAGE_SIZE);
+      txList.appendItems(formattedTxs, TX_PAGE_SIZE);
     } catch (err) {
       logError(log, err, 'Failed to load more transactions');
       handleError(err, 'Failed to Load More Transactions');
-    } finally {
-      setLoadingMoreTx(false);
+      txList.setLoading(false);
     }
   };
 
   const loadMoreUtxos = async () => {
-    if (!id || loadingMoreUtxos || !hasMoreUtxos) return;
-    await loadUtxos(id, UTXO_PAGE_SIZE, utxoOffset);
+    if (!id || utxoList.loading || !utxoList.hasMore) return;
+    await loadUtxos(id, UTXO_PAGE_SIZE, utxoList.offset);
   };
 
   // -----------------------------------------------------------------------
@@ -278,28 +257,22 @@ export function useWalletData({
     if (aux.explorerUrl) setExplorerUrl(aux.explorerUrl);
     setDevices(aux.devices);
     if (aux.transactions !== null) {
-      setTransactions(aux.transactions);
-      setTxOffset(TX_PAGE_SIZE);
-      setHasMoreTx(aux.transactions.length === TX_PAGE_SIZE);
+      txList.replaceItems(aux.transactions, TX_PAGE_SIZE, aux.transactions.length === TX_PAGE_SIZE);
     }
     if (aux.transactionStats) setTransactionStats(aux.transactionStats);
     if (aux.utxoPage) {
       setUtxoSummary({ count: aux.utxoPage.count, totalBalance: aux.utxoPage.totalBalance });
-      setUTXOs(aux.utxoPage.utxos);
-      setUtxoOffset(aux.utxoPage.utxos.length);
-      setHasMoreUtxos(aux.utxoPage.utxos.length < aux.utxoPage.count);
+      utxoList.replaceItems(aux.utxoPage.utxos, aux.utxoPage.utxos.length,
+        aux.utxoPage.utxos.length < aux.utxoPage.count);
     }
     setPrivacyData(aux.privacyData);
     setPrivacySummary(aux.privacySummary);
     if (aux.addressSummary) setAddressSummary(aux.addressSummary);
     if (aux.addresses !== null) {
-      setAddresses(aux.addresses);
-      setAddressOffset(aux.addresses.length);
-      if (aux.addressSummary) {
-        setHasMoreAddresses(aux.addresses.length < aux.addressSummary.totalAddresses);
-      } else {
-        setHasMoreAddresses(aux.addresses.length === ADDRESS_PAGE_SIZE);
-      }
+      addrList.replaceItems(aux.addresses, aux.addresses.length,
+        aux.addressSummary
+          ? aux.addresses.length < aux.addressSummary.totalAddresses
+          : aux.addresses.length === ADDRESS_PAGE_SIZE);
     }
 
     // Drafts + notifications
@@ -364,20 +337,20 @@ export function useWalletData({
     setError,
 
     // Transactions
-    transactions,
-    setTransactions,
+    transactions: txList.items,
+    setTransactions: txList.setItems,
     transactionStats,
-    txOffset,
-    hasMoreTx,
-    loadingMoreTx,
+    txOffset: txList.offset,
+    hasMoreTx: txList.hasMore,
+    loadingMoreTx: txList.loading,
     loadMoreTransactions,
 
     // UTXOs
-    utxos,
-    setUTXOs,
+    utxos: utxoList.items,
+    setUTXOs: utxoList.setItems,
     utxoSummary,
-    hasMoreUtxos,
-    loadingMoreUtxos,
+    hasMoreUtxos: utxoList.hasMore,
+    loadingMoreUtxos: utxoList.loading,
     loadMoreUtxos,
 
     // UTXO stats
@@ -392,15 +365,15 @@ export function useWalletData({
     showPrivacy,
 
     // Addresses
-    addresses,
-    setAddresses,
+    addresses: addrList.items,
+    setAddresses: addrList.setItems,
     walletAddressStrings,
     addressSummary,
-    hasMoreAddresses,
-    loadingAddresses,
+    hasMoreAddresses: addrList.hasMore,
+    loadingAddresses: addrList.loading,
     loadAddresses: loadAddressesFn,
     loadAddressSummary: loadAddressSummaryFn,
-    addressOffset,
+    addressOffset: addrList.offset,
     ADDRESS_PAGE_SIZE,
 
     // Drafts

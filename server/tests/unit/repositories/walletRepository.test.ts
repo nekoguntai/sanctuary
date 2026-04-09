@@ -16,7 +16,21 @@ vi.mock('../../../src/models/prisma', () => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      create: vi.fn(),
     },
+    walletDevice: {
+      create: vi.fn(),
+      createMany: vi.fn(),
+    },
+    $transaction: vi.fn((fn: (tx: any) => Promise<any>) => fn({
+      wallet: {
+        create: (prisma as any).wallet.create,
+        findUnique: (prisma as any).wallet.findUnique,
+      },
+      walletDevice: {
+        createMany: (prisma as any).walletDevice.createMany,
+      },
+    })),
   },
 }));
 
@@ -468,6 +482,102 @@ describe('Wallet Repository', () => {
           },
         },
       });
+    });
+  });
+
+  describe('findByIdWithAccessAndDevices', () => {
+    it('queries with access check and device include', async () => {
+      (prisma.wallet.findFirst as Mock).mockResolvedValueOnce({ ...mockWallet, devices: [] });
+      const result = await walletRepository.findByIdWithAccessAndDevices('wallet-123', mockUserId);
+      expect(result).toBeTruthy();
+      expect(prisma.wallet.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ id: 'wallet-123' }),
+        include: { devices: { include: { device: true } } },
+      }));
+    });
+  });
+
+  describe('findByIdWithOwnerAndDevices', () => {
+    it('queries with owner role check and device include', async () => {
+      (prisma.wallet.findFirst as Mock).mockResolvedValueOnce({ ...mockWallet, devices: [] });
+      const result = await walletRepository.findByIdWithOwnerAndDevices('wallet-123', mockUserId);
+      expect(result).toBeTruthy();
+      expect(prisma.wallet.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+          id: 'wallet-123',
+          users: { some: { userId: mockUserId, role: 'owner' } },
+        }),
+        include: { devices: { include: { device: true } } },
+      }));
+    });
+  });
+
+  describe('linkDevice', () => {
+    it('creates a walletDevice record', async () => {
+      (prisma as any).walletDevice.create.mockResolvedValueOnce({ walletId: 'w1', deviceId: 'd1', signerIndex: 0 });
+      await walletRepository.linkDevice('w1', 'd1', 0);
+      expect((prisma as any).walletDevice.create).toHaveBeenCalledWith({
+        data: { walletId: 'w1', deviceId: 'd1', signerIndex: 0 },
+      });
+    });
+
+    it('allows omitting signerIndex', async () => {
+      (prisma as any).walletDevice.create.mockResolvedValueOnce({ walletId: 'w1', deviceId: 'd1' });
+      await walletRepository.linkDevice('w1', 'd1');
+      expect((prisma as any).walletDevice.create).toHaveBeenCalledWith({
+        data: { walletId: 'w1', deviceId: 'd1', signerIndex: undefined },
+      });
+    });
+  });
+
+  describe('createWithDeviceLinks', () => {
+    it('creates wallet and links devices atomically', async () => {
+      const created = { id: 'new-wallet', devices: [{ deviceId: 'd1' }], addresses: [] };
+      (prisma as any).$transaction.mockImplementationOnce(async (fn: any) => {
+        const tx = {
+          wallet: { create: vi.fn().mockResolvedValue({ id: 'new-wallet' }), findUnique: vi.fn().mockResolvedValue(created) },
+          walletDevice: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+        };
+        return fn(tx);
+      });
+
+      const result = await walletRepository.createWithDeviceLinks(
+        { name: 'Test', type: 'single_sig', scriptType: 'native_segwit', network: 'mainnet' } as any,
+        ['d1'],
+      );
+
+      expect(result.id).toBe('new-wallet');
+    });
+
+    it('creates wallet without device links when deviceIds omitted', async () => {
+      const created = { id: 'new-wallet', devices: [], addresses: [] };
+      (prisma as any).$transaction.mockImplementationOnce(async (fn: any) => {
+        const tx = {
+          wallet: { create: vi.fn().mockResolvedValue({ id: 'new-wallet' }), findUnique: vi.fn().mockResolvedValue(created) },
+          walletDevice: { createMany: vi.fn() },
+        };
+        return fn(tx);
+      });
+
+      const result = await walletRepository.createWithDeviceLinks(
+        { name: 'Test', type: 'single_sig', scriptType: 'native_segwit', network: 'mainnet' } as any,
+      );
+
+      expect(result.id).toBe('new-wallet');
+    });
+
+    it('throws when wallet creation returns null', async () => {
+      (prisma as any).$transaction.mockImplementationOnce(async (fn: any) => {
+        const tx = {
+          wallet: { create: vi.fn().mockResolvedValue({ id: 'ghost' }), findUnique: vi.fn().mockResolvedValue(null) },
+          walletDevice: { createMany: vi.fn() },
+        };
+        return fn(tx);
+      });
+
+      await expect(
+        walletRepository.createWithDeviceLinks({ name: 'Ghost' } as any),
+      ).rejects.toThrow('Failed to create wallet');
     });
   });
 });

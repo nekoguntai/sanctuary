@@ -243,6 +243,16 @@ export async function expireOverdue(): Promise<number> {
   return result.count;
 }
 
+/**
+ * Execute a callback inside a serializable-isolation transaction.
+ * Used by transfer operations that need race-condition protection.
+ */
+export async function withSerializableTransaction<T>(
+  fn: (tx: PrismaTx) => Promise<T>
+): Promise<T> {
+  return prisma.$transaction(fn, { isolationLevel: 'Serializable' });
+}
+
 // Export as namespace
 export const transferRepository = {
   findById,
@@ -256,6 +266,7 @@ export const transferRepository = {
   create,
   update,
   expireOverdue,
+  withSerializableTransaction,
 };
 
 export default transferRepository;

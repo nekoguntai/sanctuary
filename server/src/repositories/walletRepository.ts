@@ -502,6 +502,86 @@ export async function findByUserIdWithInclude(
   });
 }
 
+/**
+ * Find a wallet by ID with access check and device details.
+ * Returns wallet with nested device relations for descriptor building.
+ */
+export async function findByIdWithAccessAndDevices(walletId: string, userId: string) {
+  return prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      ...buildWalletAccessWhere(userId),
+    },
+    include: {
+      devices: {
+        include: { device: true },
+      },
+    },
+  });
+}
+
+/**
+ * Find a wallet by ID where the user is an owner, with device details.
+ * Used for operations restricted to wallet owners (e.g., descriptor repair).
+ */
+export async function findByIdWithOwnerAndDevices(walletId: string, userId: string) {
+  return prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      users: { some: { userId, role: 'owner' } },
+    },
+    include: {
+      devices: {
+        include: { device: true },
+      },
+    },
+  });
+}
+
+/**
+ * Link a device to a wallet.
+ */
+export async function linkDevice(
+  walletId: string,
+  deviceId: string,
+  signerIndex?: number,
+): Promise<void> {
+  await prisma.walletDevice.create({
+    data: { walletId, deviceId, signerIndex },
+  });
+}
+
+/**
+ * Atomically create a wallet with owner association and optional device links.
+ * Returns the wallet with devices and addresses relations.
+ */
+export async function createWithDeviceLinks(
+  data: Prisma.WalletCreateInput,
+  deviceIds?: string[],
+): Promise<Wallet & { devices: Array<{ deviceId: string }>; addresses: Array<{ id: string }> }> {
+  return prisma.$transaction(async (tx) => {
+    const wallet = await tx.wallet.create({ data });
+
+    if (deviceIds && deviceIds.length > 0) {
+      await tx.walletDevice.createMany({
+        data: deviceIds.map((deviceId, index) => ({
+          walletId: wallet.id,
+          deviceId,
+          signerIndex: index,
+        })),
+      });
+    }
+
+    const result = await tx.wallet.findUnique({
+      where: { id: wallet.id },
+      include: { devices: true, addresses: true },
+    });
+
+    if (!result) throw new Error('Failed to create wallet');
+    return result;
+  });
+}
+
 // Export all functions as a namespace for convenient importing
 export const walletRepository = {
   findByIdWithAccess,
@@ -535,6 +615,10 @@ export const walletRepository = {
   deleteById,
   findByIdWithFullAccess,
   findByUserIdWithInclude,
+  findByIdWithAccessAndDevices,
+  findByIdWithOwnerAndDevices,
+  linkDevice,
+  createWithDeviceLinks,
 };
 
 export default walletRepository;

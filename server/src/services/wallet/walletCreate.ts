@@ -5,7 +5,6 @@
  * initial address generation, and audit hook execution.
  */
 
-import prisma from '../../models/prisma';
 import { deviceRepository, addressRepository, walletRepository } from '../../repositories';
 import * as descriptorBuilder from '../bitcoin/descriptorBuilder';
 import { createLogger } from '../../utils/logger';
@@ -119,53 +118,27 @@ export async function createWallet(
     fingerprint = descriptorResult.fingerprint;
   }
 
-  // Create wallet in database with transaction to ensure device linking
-  const wallet = await prisma.$transaction(async (tx) => {
-    // Create the wallet
-    const newWallet = await tx.wallet.create({
-      data: {
-        name: input.name,
-        type: input.type,
-        scriptType: input.scriptType,
-        network: input.network || 'mainnet',
-        quorum: input.quorum,
-        totalSigners: input.totalSigners,
-        descriptor,
-        fingerprint,
-        groupId: input.groupId,
-        users: {
-          create: {
-            userId,
-            role: 'owner',
-          },
+  // Create wallet in database with atomic device linking
+  const wallet = await walletRepository.createWithDeviceLinks(
+    {
+      name: input.name,
+      type: input.type,
+      scriptType: input.scriptType,
+      network: input.network || 'mainnet',
+      quorum: input.quorum,
+      totalSigners: input.totalSigners,
+      descriptor,
+      fingerprint,
+      group: input.groupId ? { connect: { id: input.groupId } } : undefined,
+      users: {
+        create: {
+          userId,
+          role: 'owner',
         },
       },
-    });
-
-    // Link devices to wallet if provided
-    if (input.deviceIds && input.deviceIds.length > 0) {
-      await tx.walletDevice.createMany({
-        data: input.deviceIds.map((deviceId, index) => ({
-          walletId: newWallet.id,
-          deviceId,
-          signerIndex: index,
-        })),
-      });
-    }
-
-    // Fetch complete wallet with relations
-    return tx.wallet.findUnique({
-      where: { id: newWallet.id },
-      include: {
-        devices: true,
-        addresses: true,
-      },
-    });
-  });
-
-  if (!wallet) {
-    throw new Error('Failed to create wallet');
-  }
+    },
+    input.deviceIds,
+  );
 
   // Generate initial addresses if wallet has a descriptor
   if (descriptor) {

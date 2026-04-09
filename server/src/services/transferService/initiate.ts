@@ -5,8 +5,7 @@
  * Uses serializable transaction isolation to prevent race conditions.
  */
 
-import { userRepository } from '../../repositories';
-import prisma from '../../models/prisma';
+import { userRepository, transferRepository } from '../../repositories';
 import { createLogger } from '../../utils/logger';
 import { ForbiddenError, InvalidInputError, ConflictError, UserNotFoundError } from '../../errors';
 import { calculateExpiryDate, checkResourceOwnership, formatTransfer } from './helpers';
@@ -35,9 +34,9 @@ export async function initiateTransfer(
     throw new UserNotFoundError(toUserId);
   }
 
-  // Use a transaction to ensure atomicity - prevents race condition where
+  // Use a serializable transaction to ensure atomicity - prevents race condition where
   // two requests both pass the hasActiveTransfer check before either creates a transfer
-  const transfer = await prisma.$transaction(async (tx) => {
+  const transfer = await transferRepository.withSerializableTransaction(async (tx) => {
     // Validation: check ownership
     const isOwner = await checkResourceOwnership(resourceType, resourceId, ownerId);
     if (!isOwner) {
@@ -46,14 +45,8 @@ export async function initiateTransfer(
 
     // Validation: check no active transfer exists for this resource
     // This check is inside the transaction to prevent TOCTOU race condition
-    const activeTransferCount = await tx.ownershipTransfer.count({
-      where: {
-        resourceType,
-        resourceId,
-        status: { in: ['pending', 'accepted'] },
-      },
-    });
-    if (activeTransferCount > 0) {
+    const hasActive = await transferRepository.hasActiveTransfer(resourceType, resourceId, tx);
+    if (hasActive) {
       throw new ConflictError(`This ${resourceType} already has a pending transfer`);
     }
 
@@ -64,25 +57,16 @@ export async function initiateTransfer(
     }
 
     // Create transfer record - within the same transaction
-    return tx.ownershipTransfer.create({
-      data: {
-        resourceType,
-        resourceId,
-        fromUserId: ownerId,
-        toUserId,
-        status: 'pending',
-        message: message || null,
-        keepExistingUsers,
-        expiresAt: calculateExpiryDate(expiresInDays),
-      },
-      include: {
-        fromUser: { select: { id: true, username: true } },
-        toUser: { select: { id: true, username: true } },
-      },
-    });
-  }, {
-    // Use serializable isolation to prevent concurrent transfers
-    isolationLevel: 'Serializable',
+    return transferRepository.create({
+      resourceType,
+      resourceId,
+      fromUserId: ownerId,
+      toUserId,
+      status: 'pending',
+      message: message || null,
+      keepExistingUsers,
+      expiresAt: calculateExpiryDate(expiresInDays),
+    }, tx);
   });
 
   log.info('Transfer initiated', {

@@ -62,6 +62,18 @@ vi.mock('../../../src/repositories', () => ({
       mockPrismaClient.wallet.findUnique({ where: { id }, include: { devices: { include: { device: true } } } }),
     hasAccess: vi.fn().mockResolvedValue(true),
     findById: (id: string) => mockPrismaClient.wallet.findUnique({ where: { id } }),
+    findByIdWithAccessAndDevices: (walletId: string, userId: string) =>
+      mockPrismaClient.wallet.findFirst({ where: { id: walletId, users: { some: { userId } } }, include: { devices: { include: { device: true } } } }),
+    findByIdWithOwnerAndDevices: (walletId: string, userId: string) =>
+      mockPrismaClient.wallet.findFirst({ where: { id: walletId, users: { some: { userId, role: 'owner' } } }, include: { devices: { include: { device: true } } } }),
+    linkDevice: vi.fn().mockResolvedValue(undefined),
+    createWithDeviceLinks: vi.fn(async (data: any, deviceIds?: string[]) => {
+      const wallet = await mockPrismaClient.wallet.create({ data });
+      if (deviceIds) {
+        await mockPrismaClient.walletDevice.createMany({ data: deviceIds.map((did: string, i: number) => ({ walletId: wallet.id, deviceId: did, signerIndex: i })) });
+      }
+      return mockPrismaClient.wallet.findUnique({ where: { id: wallet.id }, include: { devices: true, addresses: true } });
+    }),
   },
   utxoRepository: {
     getUnspentBalance: (walletId: string) =>
@@ -701,7 +713,8 @@ describe('Wallet Service', () => {
       });
 
       it('throws if wallet transaction result is unexpectedly null', async () => {
-        mockPrismaClient.$transaction.mockResolvedValueOnce(null);
+        const { walletRepository: walletRepo } = await import('../../../src/repositories');
+        vi.mocked(walletRepo.createWithDeviceLinks).mockRejectedValueOnce(new Error('Failed to create wallet'));
 
         await expect(
           createWallet(userId, {
@@ -1338,13 +1351,8 @@ describe('Wallet Service', () => {
 
       await addDeviceToWallet('wallet-1', 'device-1', 'user-1', 0);
 
-      expect(mockPrismaClient.walletDevice.create).toHaveBeenCalledWith({
-        data: {
-          walletId: 'wallet-1',
-          deviceId: 'device-1',
-          signerIndex: 0,
-        },
-      });
+      const { walletRepository: walletRepo } = await import('../../../src/repositories');
+      expect(walletRepo.linkDevice).toHaveBeenCalledWith('wallet-1', 'device-1', 0);
       expect(mockPrismaClient.wallet.update).toHaveBeenCalledWith({
         where: { id: 'wallet-1' },
         data: {
@@ -1377,7 +1385,8 @@ describe('Wallet Service', () => {
       });
 
       await expect(addDeviceToWallet('wallet-1', 'device-1', 'user-1')).resolves.toBeUndefined();
-      expect(mockPrismaClient.walletDevice.create).toHaveBeenCalled();
+      const { walletRepository: walletRepo3 } = await import('../../../src/repositories');
+      expect(walletRepo3.linkDevice).toHaveBeenCalled();
     });
 
     it('defers multisig descriptor generation until required signer threshold is met', async () => {
@@ -1412,7 +1421,8 @@ describe('Wallet Service', () => {
 
       await addDeviceToWallet('wallet-multi', 'device-new', 'user-1', 1);
 
-      expect(mockPrismaClient.walletDevice.create).toHaveBeenCalled();
+      const { walletRepository: walletRepo2 } = await import('../../../src/repositories');
+      expect(walletRepo2.linkDevice).toHaveBeenCalled();
       expect(mockBuildDescriptorFromDevices).not.toHaveBeenCalled();
       expect(mockPrismaClient.wallet.update).not.toHaveBeenCalled();
     });

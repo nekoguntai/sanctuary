@@ -4,7 +4,6 @@
  * Device-to-wallet linking and descriptor generation/repair.
  */
 
-import prisma from '../../models/prisma';
 import { walletRepository, deviceRepository, addressRepository } from '../../repositories';
 import * as descriptorBuilder from '../bitcoin/descriptorBuilder';
 import { createLogger } from '../../utils/logger';
@@ -24,17 +23,7 @@ export async function addDeviceToWallet(
   signerIndex?: number
 ): Promise<void> {
   // Check user has access to wallet
-  const wallet = await prisma.wallet.findFirst({
-    where: {
-      id: walletId,
-      users: { some: { userId } },
-    },
-    include: {
-      devices: {
-        include: { device: true },
-      },
-    },
-  });
+  const wallet = await walletRepository.findByIdWithAccessAndDevices(walletId, userId);
 
   if (!wallet) {
     throw new WalletNotFoundError(walletId);
@@ -54,13 +43,7 @@ export async function addDeviceToWallet(
   }
 
   // Add device to wallet
-  await prisma.walletDevice.create({
-    data: {
-      walletId,
-      deviceId,
-      signerIndex,
-    },
-  });
+  await walletRepository.linkDevice(walletId, deviceId, signerIndex);
 
   // Regenerate descriptor if wallet now has enough devices
   const allDevices = [...wallet.devices.map(wd => wd.device), device];
@@ -129,38 +112,28 @@ export async function repairWalletDescriptor(
   walletId: string,
   userId: string
 ): Promise<{ success: boolean; message: string }> {
-  const wallet = await prisma.wallet.findFirst({
-    where: {
-      id: walletId,
-      users: { some: { userId, role: 'owner' } },
-    },
-    include: {
-      devices: {
-        include: { device: true },
-      },
-    },
-  });
-
-  if (!wallet) {
+  // Owner-only check: repair requires wallet ownership
+  const ownerWallet = await walletRepository.findByIdWithOwnerAndDevices(walletId, userId);
+  if (!ownerWallet) {
     throw new WalletNotFoundError(walletId);
   }
 
-  if (wallet.descriptor) {
+  if (ownerWallet.descriptor) {
     return { success: true, message: 'Wallet already has a descriptor' };
   }
 
-  const devices = wallet.devices.map(wd => wd.device);
+  const devices = ownerWallet.devices.map(wd => wd.device);
 
   // Check device count requirements
-  if (wallet.type === 'single_sig' && devices.length !== 1) {
+  if (ownerWallet.type === 'single_sig' && devices.length !== 1) {
     return {
       success: false,
       message: `Single-sig wallet needs exactly 1 device, but has ${devices.length}`
     };
   }
 
-  if (wallet.type === 'multi_sig') {
-    const requiredDevices = wallet.totalSigners || 2;
+  if (ownerWallet.type === 'multi_sig') {
+    const requiredDevices = ownerWallet.totalSigners || 2;
     if (devices.length < requiredDevices) {
       return {
         success: false,
@@ -180,10 +153,10 @@ export async function repairWalletDescriptor(
     const descriptorResult = descriptorBuilder.buildDescriptorFromDevices(
       deviceInfos,
       {
-        type: wallet.type as 'single_sig' | 'multi_sig',
-        scriptType: wallet.scriptType as 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy',
-        network: wallet.network as 'mainnet' | 'testnet' | 'regtest',
-        quorum: wallet.quorum || undefined,
+        type: ownerWallet.type as 'single_sig' | 'multi_sig',
+        scriptType: ownerWallet.scriptType as 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy',
+        network: ownerWallet.network as 'mainnet' | 'testnet' | 'regtest',
+        quorum: ownerWallet.quorum || undefined,
       }
     );
 
@@ -194,8 +167,8 @@ export async function repairWalletDescriptor(
     });
 
     // Generate initial addresses
-    const network = wallet.network as 'mainnet' | 'testnet' | 'regtest';
-    const addressesToCreate = generateInitialAddresses(wallet.id, descriptorResult.descriptor, network);
+    const network = ownerWallet.network as 'mainnet' | 'testnet' | 'regtest';
+    const addressesToCreate = generateInitialAddresses(walletId, descriptorResult.descriptor, network);
 
     // skipDuplicates ensures idempotency - if repair is called multiple times
     // or addresses already exist from a partial repair, they won't cause errors

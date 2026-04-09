@@ -25,6 +25,7 @@ import type { ParsedDescriptor, Network, ScriptType } from '../../../src/service
 vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
+  withTransaction: (fn: (tx: any) => Promise<any>) => mockPrismaClient.$transaction(fn),
 }));
 
 // Mock logger

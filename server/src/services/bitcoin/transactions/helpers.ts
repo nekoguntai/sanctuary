@@ -7,8 +7,8 @@
  * - Raw transaction fetching for legacy inputs
  */
 
-import { Prisma } from '../../../generated/prisma/client';
 import { getNodeClient } from '../nodeClient';
+export { isUniqueConstraintError } from '../../../utils/errors';
 
 /**
  * Check if a script type is legacy (requires nonWitnessUtxo)
@@ -16,16 +16,6 @@ import { getNodeClient } from '../nodeClient';
  */
 export function isLegacyScriptType(scriptType: string | null): boolean {
   return scriptType === 'legacy' || scriptType === 'p2pkh' || scriptType === 'P2PKH';
-}
-
-/**
- * Check if an error is a Prisma unique constraint violation
- */
-export function isUniqueConstraintError(error: unknown): boolean {
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    return error.code === 'P2002';
-  }
-  return String(error).includes('Unique constraint');
 }
 
 /**

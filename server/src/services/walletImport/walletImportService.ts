@@ -5,7 +5,7 @@
  * the top-level auto-detect import orchestrator.
  */
 
-import { walletRepository as walletRepo } from '../../repositories';
+import { withTransaction } from '../../models/prisma';
 import type {
   ParsedDescriptor,
   JsonImportConfig,
@@ -55,7 +55,7 @@ export async function createWalletTransaction(
   // Determine account purpose from wallet type
   const accountPurpose = parsed.type === 'multi_sig' ? 'multisig' : 'single_sig';
 
-  return await walletRepo.withTransaction(async (tx) => {
+  return await withTransaction(async (tx) => {
     const createdDeviceIds: string[] = [];
     const reusedDeviceIds: string[] = [];
     const deviceIdsForWallet: string[] = [];

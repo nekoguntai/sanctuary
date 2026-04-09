@@ -47,6 +47,17 @@ export function isPrismaValidationError(error: unknown): error is Prisma.PrismaC
 }
 
 /**
+ * Check if error is a Prisma unique constraint violation (P2002).
+ * Covers both typed PrismaClientKnownRequestError and string-based fallback.
+ */
+export function isUniqueConstraintError(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return error.code === 'P2002';
+  }
+  return String(error).includes('Unique constraint');
+}
+
+/**
  * Get error message from unknown error type
  * Alias for extractErrorMessage for backward compatibility
  */

@@ -380,4 +380,14 @@ process.on('beforeExit', async () => {
  */
 export type PrismaTxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
+/**
+ * Execute a callback inside a default-isolation Prisma transaction.
+ * Use this for services that need atomic multi-model operations.
+ */
+export async function withTransaction<T>(
+  fn: (tx: PrismaTxClient) => Promise<T>
+): Promise<T> {
+  return prisma.$transaction(fn);
+}
+
 export default prisma;

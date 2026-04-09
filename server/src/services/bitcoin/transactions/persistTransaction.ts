@@ -6,7 +6,7 @@
  * and internal wallet detection.
  */
 
-import { walletRepository } from '../../../repositories';
+import { withTransaction } from '../../../models/prisma';
 import { createLogger } from '../../../utils/logger';
 import { isUniqueConstraintError } from './helpers';
 import { storeTransactionInputs, storeTransactionOutputs } from './storeTransactionIO';
@@ -40,7 +40,7 @@ export async function persistTransaction(
   unlockedCount: number;
   createdReceivingTransactions: Array<{ walletId: string; amount: number; address: string }>;
 }> {
-  return walletRepository.withTransaction(async (tx) => {
+  return withTransaction(async (tx) => {
     // Mark UTXOs as spent
     for (const utxo of metadata.utxos) {
       await tx.uTXO.update({

@@ -11,10 +11,9 @@
  * - RBF drafts skip locking (they reuse same UTXOs as original tx)
  */
 
-import { Prisma } from '../generated/prisma/client';
 import { draftLockRepository } from '../repositories';
 import { createLogger } from '../utils/logger';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, isUniqueConstraintError } from '../utils/errors';
 
 const log = createLogger('DRAFT_LOCK:SVC');
 
@@ -32,13 +31,6 @@ export interface UtxoLockInfo {
   draftId: string;
   draftLabel?: string;
   lockedAt: Date;
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    return error.code === 'P2002';
-  }
-  return String(error).includes('Unique constraint');
 }
 
 /**

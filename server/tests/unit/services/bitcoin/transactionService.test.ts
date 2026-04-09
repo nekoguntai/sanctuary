@@ -23,6 +23,7 @@ const { mockParseDescriptor, mockNotifyNewTransactions, mockEmitTransactionSent,
 vi.mock('../../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
+  withTransaction: (fn: (tx: any) => Promise<any>) => mockPrismaClient.$transaction(fn),
 }));
 
 // Mock the nodeClient - getTransaction returns raw hex string when verbose=false

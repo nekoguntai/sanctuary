@@ -4,7 +4,7 @@
  * Database queries for fetching available UTXOs.
  */
 
-import prisma from '../../models/prisma';
+import { utxoRepository } from '../../repositories';
 import type { SelectedUtxo } from './types';
 
 /**
@@ -18,39 +18,7 @@ export async function getAvailableUtxos(
     excludeUtxoIds?: string[];
   }
 ): Promise<SelectedUtxo[]> {
-  const where: Record<string, unknown> = {
-    walletId,
-    spent: false,
-  };
-
-  if (options.excludeFrozen !== false) {
-    where.frozen = false;
-  }
-
-  if (options.excludeUnconfirmed) {
-    where.confirmations = { gt: 0 };
-  }
-
-  if (options.excludeUtxoIds?.length) {
-    where.id = { notIn: options.excludeUtxoIds };
-  }
-
-  // Also exclude UTXOs locked by drafts
-  where.draftLock = null;
-
-  const utxos = await prisma.uTXO.findMany({
-    where,
-    select: {
-      id: true,
-      txid: true,
-      vout: true,
-      address: true,
-      amount: true,
-      confirmations: true,
-      blockHeight: true,
-    },
-    orderBy: { amount: 'desc' },
-  });
+  const utxos = await utxoRepository.findAvailableForSelection(walletId, options);
 
   return utxos.map(u => ({
     id: u.id,

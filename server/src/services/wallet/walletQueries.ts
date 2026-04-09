@@ -5,7 +5,7 @@
  * aggregate queries for balance computation.
  */
 
-import prisma from '../../models/prisma';
+import { walletRepository, utxoRepository, transactionRepository, addressRepository } from '../../repositories';
 import { WalletNotFoundError } from '../../errors';
 import { EDIT_ROLES } from './types';
 import type { WalletRole, WalletWithBalance } from './types';
@@ -16,26 +16,12 @@ import type { WalletRole, WalletWithBalance } from './types';
  */
 export async function getUserWallets(userId: string): Promise<WalletWithBalance[]> {
   // First, get wallet IDs and basic info
-  const wallets = await prisma.wallet.findMany({
-    where: {
-      OR: [
-        { users: { some: { userId } } },
-        { group: { members: { some: { userId } } } },
-      ],
-    },
-    include: {
-      devices: { select: { id: true } },
-      addresses: { select: { id: true } },
-      // Include sharing info
-      group: {
-        select: { name: true },
-      },
-      users: {
-        select: { userId: true, role: true },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  const wallets = await walletRepository.findByUserIdWithInclude(userId, {
+    devices: { select: { id: true } },
+    addresses: { select: { id: true } },
+    group: { select: { name: true } },
+    users: { select: { userId: true, role: true } },
+  }, { createdAt: 'desc' });
 
   if (wallets.length === 0) {
     return [];
@@ -43,18 +29,11 @@ export async function getUserWallets(userId: string): Promise<WalletWithBalance[
 
   // Fetch balances using aggregate query (single query for all wallets)
   const walletIds = wallets.map(w => w.id);
-  const balances = await prisma.uTXO.groupBy({
-    by: ['walletId'],
-    where: {
-      walletId: { in: walletIds },
-      spent: false,
-    },
-    _sum: { amount: true },
-  });
+  const balanceMapBigint = await utxoRepository.getUnspentBalanceForWallets(walletIds);
 
-  // Create balance lookup map
+  // Create balance lookup map (convert BigInt to Number)
   const balanceMap = new Map(
-    balances.map(b => [b.walletId, Number(b._sum.amount || 0)])
+    [...balanceMapBigint.entries()].map(([id, val]) => [id, Number(val)])
   );
 
   return wallets.map((wallet) => {
@@ -117,40 +96,25 @@ export async function getWalletById(
   walletId: string,
   userId: string
 ): Promise<WalletWithBalance | null> {
-  const wallet = await prisma.wallet.findFirst({
-    where: {
-      id: walletId,
-      OR: [
-        { users: { some: { userId } } },
-        { group: { members: { some: { userId } } } },
-      ],
+  const wallet = await walletRepository.findByIdWithFullAccess(walletId, userId, {
+    users: {
+      include: {
+        user: {
+          select: { id: true, username: true },
+        },
+      },
     },
-    include: {
-      users: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-            },
-          },
-        },
-      },
-      devices: {
-        include: {
-          device: true,
-        },
-      },
-      addresses: {
-        orderBy: { index: 'asc' },
-      },
-      // Don't load UTXOs - use aggregate query instead
-      group: {
-        include: {
-          members: {
-            where: { userId },
-            select: { role: true },
-          },
+    devices: {
+      include: { device: true },
+    },
+    addresses: {
+      orderBy: { index: 'asc' },
+    },
+    group: {
+      include: {
+        members: {
+          where: { userId },
+          select: { role: true },
         },
       },
     },
@@ -159,14 +123,8 @@ export async function getWalletById(
   if (!wallet) return null;
 
   // Use aggregate query for balance (efficient for wallets with many UTXOs)
-  const balanceResult = await prisma.uTXO.aggregate({
-    where: {
-      walletId,
-      spent: false,
-    },
-    _sum: { amount: true },
-  });
-  const balance = Number(balanceResult._sum.amount || 0);
+  const balanceBigint = await utxoRepository.getUnspentBalance(walletId);
+  const balance = Number(balanceBigint);
 
   // Determine if wallet is shared
   const userCount = wallet.users.length;
@@ -223,51 +181,29 @@ export async function getWalletById(
  */
 export async function getWalletStats(walletId: string, userId: string) {
   // First verify access
-  const wallet = await prisma.wallet.findFirst({
-    where: {
-      id: walletId,
-      OR: [
-        { users: { some: { userId } } },
-        { group: { members: { some: { userId } } } },
-      ],
-    },
-    select: { id: true },
-  });
+  const wallet = await walletRepository.findByIdWithFullAccess(walletId, userId, {});
 
   if (!wallet) {
     throw new WalletNotFoundError(walletId);
   }
 
   // Use aggregate queries for all statistics (efficient for wallets with many records)
-  const [balanceResult, receivedResult, sentResult, transactionCount, utxoCount, addressCount] =
+  const [utxoAgg, txGrouped, transactionCount, utxoCount, addressCount] =
     await Promise.all([
-      // Balance from unspent UTXOs
-      prisma.uTXO.aggregate({
-        where: { walletId, spent: false },
-        _sum: { amount: true },
-      }),
-      // Total received
-      prisma.transaction.aggregate({
-        where: { walletId, type: 'received' },
-        _sum: { amount: true },
-      }),
-      // Total sent
-      prisma.transaction.aggregate({
-        where: { walletId, type: 'sent' },
-        _sum: { amount: true },
-      }),
-      // Transaction count
-      prisma.transaction.count({ where: { walletId } }),
-      // UTXO count (unspent only)
-      prisma.uTXO.count({ where: { walletId, spent: false } }),
-      // Address count
-      prisma.address.count({ where: { walletId } }),
+      utxoRepository.aggregateUnspent(walletId),
+      transactionRepository.groupByType(walletId),
+      transactionRepository.countByWalletId(walletId),
+      utxoRepository.countByWalletId(walletId, { spent: false }),
+      addressRepository.countByWalletId(walletId),
     ]);
 
+  const receivedGroup = txGrouped.find(g => g.type === 'received');
+  const sentGroup = txGrouped.find(g => g.type === 'sent');
+
   return {
-    balance: Number(balanceResult._sum.amount || 0),
-    received: Number(receivedResult._sum.amount || 0),
-    sent: Number(sentResult._sum.amount || 0),
+    balance: Number(utxoAgg._sum.amount || 0),
+    received: Number(receivedGroup?._sum.amount || 0),
+    sent: Number(sentGroup?._sum.amount || 0),
     transactionCount,
     utxoCount,
     addressCount,

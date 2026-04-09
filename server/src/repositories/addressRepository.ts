@@ -405,6 +405,88 @@ export async function findRecentUnused(
   });
 }
 
+/**
+ * Find all addresses with wallet info (for subscription management)
+ */
+export async function findAllWithWalletNetwork(): Promise<Array<{
+  id: string;
+  address: string;
+  walletId: string;
+  wallet: { network: string };
+}>> {
+  return prisma.address.findMany({
+    select: {
+      id: true,
+      address: true,
+      walletId: true,
+      wallet: { select: { network: true } },
+    },
+    orderBy: { id: 'asc' },
+  });
+}
+
+/**
+ * Find all addresses with wallet info, paginated by cursor (for large deployments)
+ */
+export async function findAllWithWalletNetworkPaginated(options: {
+  take: number;
+  cursor?: string;
+}): Promise<Array<{
+  id: string;
+  address: string;
+  walletId: string;
+  wallet: { network: string };
+}>> {
+  return prisma.address.findMany({
+    select: {
+      id: true,
+      address: true,
+      walletId: true,
+      wallet: { select: { network: true } },
+    },
+    take: options.take,
+    skip: options.cursor ? 1 : 0,
+    cursor: options.cursor ? { id: options.cursor } : undefined,
+    orderBy: { id: 'asc' },
+  });
+}
+
+/**
+ * Find an address record by address string (no access check)
+ */
+export async function findByAddress(
+  address: string,
+  select?: { walletId: true }
+): Promise<{ walletId: string } | null> {
+  return prisma.address.findFirst({
+    where: { address },
+    select: select ?? { walletId: true },
+  });
+}
+
+/**
+ * Find an address record by address string with wallet included
+ */
+export async function findByAddressWithWallet(address: string) {
+  return prisma.address.findFirst({
+    where: { address },
+    include: { wallet: true },
+  });
+}
+
+/**
+ * Create a single address
+ */
+export async function create(data: {
+  walletId: string;
+  address: string;
+  derivationPath: string;
+  index: number;
+  used: boolean;
+}): Promise<Address> {
+  return prisma.address.create({ data });
+}
+
 // Export as namespace
 export const addressRepository = {
   resetUsedFlags,
@@ -431,6 +513,11 @@ export const addressRepository = {
   markManyAsUsedByAddress,
   findByIdWithWallet,
   findRecentUnused,
+  findAllWithWalletNetwork,
+  findAllWithWalletNetworkPaginated,
+  findByAddress,
+  findByAddressWithWallet,
+  create,
 };
 
 export default addressRepository;

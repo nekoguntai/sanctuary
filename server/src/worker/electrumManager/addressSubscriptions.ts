@@ -6,7 +6,6 @@
  */
 
 import { walletRepository, addressRepository } from '../../repositories';
-import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { SUBSCRIPTION_BATCH_SIZE } from './types';
@@ -32,17 +31,9 @@ export async function subscribeAllAddresses(
 
   // Process addresses in pages to avoid memory issues with large deployments
   while (true) {
-    const addresses = await prisma.address.findMany({
-      select: {
-        id: true,
-        address: true,
-        walletId: true,
-        wallet: { select: { network: true } },
-      },
+    const addresses = await addressRepository.findAllWithWalletNetworkPaginated({
       take: PAGE_SIZE,
-      skip: cursor ? 1 : 0,
-      cursor: cursor ? { id: cursor } : undefined,
-      orderBy: { id: 'asc' },
+      cursor,
     });
 
     if (addresses.length === 0) break;

@@ -9,7 +9,6 @@
  */
 
 import { walletRepository, addressRepository } from '../../repositories';
-import prisma from '../../models/prisma';
 import { setCachedBlockHeight } from '../bitcoin/blockchain';
 import { getNodeClient, getElectrumClientIfActive } from '../bitcoin/nodeClient';
 import { getNotificationService } from '../../websocket/notifications';
@@ -180,9 +179,7 @@ export async function subscribeAllWalletAddresses(state: SyncState): Promise<voi
   const electrumClient = await getElectrumClientIfActive();
   if (!electrumClient) return;
 
-  const addressRecords = await prisma.address.findMany({
-    select: { address: true, walletId: true },
-  });
+  const addressRecords = await addressRepository.findAllWithWalletNetwork();
 
   if (addressRecords.length === 0) {
     log.info('[SYNC] No addresses to subscribe to');
@@ -274,9 +271,7 @@ export async function reconcileAddressToWalletMap(state: SyncState): Promise<voi
     return;
   }
 
-  const addressRecords = await prisma.address.findMany({
-    select: { address: true, walletId: true },
-  });
+  const addressRecords = await addressRepository.findAllWithWalletNetwork();
 
   if (addressRecords.length === 0) {
     if (state.addressToWalletMap.size > 0) {
@@ -475,10 +470,7 @@ export async function handleAddressActivity(
     log.info(`[SYNC] Queued high-priority sync for wallet ${walletId} due to address activity`);
   } else {
     // Try to look up the wallet from the database
-    const addressRecord = await prisma.address.findFirst({
-      where: { address },
-      select: { walletId: true },
-    });
+    const addressRecord = await addressRepository.findByAddress(address);
 
     if (addressRecord) {
       state.addressToWalletMap.set(address, addressRecord.walletId);

@@ -6,7 +6,7 @@
  * and broadcasts changes via events and WebSocket notifications.
  */
 
-import prisma from '../../models/prisma';
+import { transactionRepository } from '../../repositories';
 import { updateTransactionConfirmations, populateMissingTransactionFields } from '../bitcoin/blockchain';
 import { getNotificationService } from '../../websocket/notifications';
 import { createLogger } from '../../utils/logger';
@@ -25,15 +25,8 @@ export async function updateAllConfirmations(isRunning: boolean): Promise<void> 
 
   try {
     // Get all wallets with pending transactions
-    const walletsWithPending = await prisma.transaction.findMany({
-      where: {
-        confirmations: { lt: 6 },
-      },
-      select: {
-        walletId: true,
-      },
-      distinct: ['walletId'],
-    });
+    const walletIds = await transactionRepository.findWalletIdsWithPendingConfirmations(6);
+    const walletsWithPending = walletIds.map(walletId => ({ walletId }));
 
     let totalUpdated = 0;
 

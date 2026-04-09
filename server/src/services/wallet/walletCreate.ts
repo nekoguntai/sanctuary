@@ -6,6 +6,7 @@
  */
 
 import prisma from '../../models/prisma';
+import { deviceRepository, addressRepository, walletRepository } from '../../repositories';
 import * as descriptorBuilder from '../bitcoin/descriptorBuilder';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
@@ -39,15 +40,7 @@ export async function createWallet(
   // If device IDs provided, fetch devices and generate descriptor
   if (input.deviceIds && input.deviceIds.length > 0) {
     // Fetch devices with their accounts
-    const devices = await prisma.device.findMany({
-      where: {
-        id: { in: input.deviceIds },
-        userId,
-      },
-      include: {
-        accounts: true,
-      },
-    });
+    const devices = await deviceRepository.findByIdsAndUserWithAccounts(input.deviceIds, userId);
 
     if (devices.length !== input.deviceIds.length) {
       throw new DeviceNotFoundError();
@@ -179,7 +172,7 @@ export async function createWallet(
     try {
       const network = (input.network || 'mainnet') as 'mainnet' | 'testnet' | 'regtest';
       const addressesToCreate = generateInitialAddresses(wallet.id, descriptor, network);
-      await prisma.address.createMany({ data: addressesToCreate });
+      await addressRepository.createMany(addressesToCreate);
     } catch (err) {
       log.error('Failed to generate initial addresses', { error: getErrorMessage(err) });
       // Don't fail wallet creation if address generation fails
@@ -187,12 +180,9 @@ export async function createWallet(
   }
 
   // Re-fetch wallet with addresses
-  const walletWithAddresses = await prisma.wallet.findUnique({
-    where: { id: wallet.id },
-    include: {
-      devices: true,
-      addresses: true,
-    },
+  const walletWithAddresses = await walletRepository.findByIdWithSelect(wallet.id, {
+    id: true,
+    addresses: true,
   });
 
   const result = {

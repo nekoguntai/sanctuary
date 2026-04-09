@@ -40,6 +40,70 @@ vi.mock('../../../src/models/prisma', () => ({
   default: mockPrismaClient,
 }));
 
+// Mock repositories used by wallet service modules
+vi.mock('../../../src/repositories', () => ({
+  walletRepository: {
+    findByIdWithEditAccess: (walletId: string, userId: string) =>
+      mockPrismaClient.walletUser.findFirst({ where: { walletId, userId, role: 'owner' } }).then((wu: any) => wu ? { id: walletId } : null),
+    update: (id: string, data: unknown) => mockPrismaClient.wallet.update({ where: { id }, data }),
+    findByIdWithFullAccess: (walletId: string, _userId: string, include: unknown) =>
+      mockPrismaClient.wallet.findFirst({ where: { id: walletId }, include }),
+    deleteById: (walletId: string) => mockPrismaClient.wallet.delete({ where: { id: walletId } }),
+    findByIdWithAccessAndInclude: (walletId: string, userId: string, include: unknown) =>
+      mockPrismaClient.wallet.findFirst({ where: { id: walletId, users: { some: { userId } } }, include }),
+    findByUserIdWithInclude: (userId: string, include: unknown, orderBy: unknown) =>
+      mockPrismaClient.wallet.findMany({ where: { OR: [{ users: { some: { userId } } }] }, include, orderBy }),
+    findByIdWithSelect: (id: string, select: unknown) =>
+      mockPrismaClient.wallet.findUnique({ where: { id }, select }),
+    findGroupRoleByMembership: (walletId: string, userId: string) =>
+      mockPrismaClient.wallet.findFirst({ where: { id: walletId, group: { members: { some: { userId } } } }, select: { groupRole: true } })
+        .then((w: any) => w?.groupRole ?? null),
+    findByIdWithSigningDevices: (id: string) =>
+      mockPrismaClient.wallet.findUnique({ where: { id }, include: { devices: { include: { device: true } } } }),
+    hasAccess: vi.fn().mockResolvedValue(true),
+    findById: (id: string) => mockPrismaClient.wallet.findUnique({ where: { id } }),
+  },
+  utxoRepository: {
+    getUnspentBalance: (walletId: string) =>
+      mockPrismaClient.uTXO.aggregate({ where: { walletId, spent: false }, _sum: { amount: true } })
+        .then((r: any) => r._sum.amount || BigInt(0)),
+    getUnspentBalanceForWallets: (walletIds: string[]) =>
+      mockPrismaClient.uTXO.groupBy({ by: ['walletId'], where: { walletId: { in: walletIds }, spent: false }, _sum: { amount: true } })
+        .then((results: any[]) => new Map(results.map((b: any) => [b.walletId, b._sum.amount || BigInt(0)]))),
+    aggregateUnspent: (walletId: string) =>
+      mockPrismaClient.uTXO.aggregate({ where: { walletId, spent: false }, _count: { _all: true }, _sum: { amount: true } }),
+    countByWalletId: (walletId: string, opts: any) =>
+      mockPrismaClient.uTXO.count({ where: { walletId, ...opts } }),
+  },
+  transactionRepository: {
+    groupByType: vi.fn().mockResolvedValue([]),
+    countByWalletId: (walletId: string) =>
+      mockPrismaClient.transaction.count({ where: { walletId } }),
+    findByIdWithAccess: vi.fn().mockResolvedValue(null),
+  },
+  addressRepository: {
+    countByWalletId: (walletId: string) =>
+      mockPrismaClient.address.count({ where: { walletId } }),
+    createMany: (data: unknown, opts?: { skipDuplicates?: boolean }) =>
+      mockPrismaClient.address.createMany({ data, ...(opts?.skipDuplicates ? { skipDuplicates: true } : {}) }),
+    create: (data: unknown) => mockPrismaClient.address.create({ data }),
+  },
+  deviceRepository: {
+    findByIdsAndUserWithAccounts: (ids: string[], userId: string) =>
+      mockPrismaClient.device.findMany({ where: { id: { in: ids }, userId }, include: { accounts: true } }),
+    findByIdAndUser: (deviceId: string, userId: string) =>
+      mockPrismaClient.device.findFirst({ where: { id: deviceId, userId } }),
+    findByUserId: (userId: string) =>
+      mockPrismaClient.device.findMany({ where: { userId } }),
+  },
+  walletSharingRepository: {
+    findByWalletId: vi.fn().mockResolvedValue([]),
+    findByUserId: vi.fn().mockResolvedValue([]),
+    findWalletUser: (walletId: string, userId: string) =>
+      mockPrismaClient.walletUser.findFirst({ where: { walletId, userId } }),
+  },
+}));
+
 // Mock descriptor builder
 vi.mock('../../../src/services/bitcoin/descriptorBuilder', () => ({
   buildDescriptorFromDevices: (...args: any[]) => mockBuildDescriptorFromDevices(...args),
@@ -1131,8 +1195,7 @@ describe('Wallet Service', () => {
 
   describe('wallet mutation and maintenance operations', () => {
     it('updates wallet metadata for owners and returns computed fields', async () => {
-      mockPrismaClient.walletUser.findFirst.mockResolvedValueOnce({ role: 'owner' });
-      mockPrismaClient.wallet.update.mockResolvedValueOnce({
+      const walletData = {
         id: 'wallet-1',
         name: 'Renamed Wallet',
         type: 'single_sig',
@@ -1147,7 +1210,10 @@ describe('Wallet Service', () => {
         addresses: [{ id: 'a1' }, { id: 'a2' }],
         group: { name: 'Treasury' },
         users: [{ userId: 'owner-1' }, { userId: 'owner-2' }],
-      });
+      };
+      mockPrismaClient.walletUser.findFirst.mockResolvedValueOnce({ role: 'owner' });
+      mockPrismaClient.wallet.update.mockResolvedValueOnce(walletData);
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce(walletData);
       mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: BigInt(9876) } });
 
       const updated = await updateWallet('wallet-1', 'owner-1', { name: 'Renamed Wallet' });
@@ -1159,8 +1225,7 @@ describe('Wallet Service', () => {
     });
 
     it('falls back to zero balance and private sharing metadata for owner updates', async () => {
-      mockPrismaClient.walletUser.findFirst.mockResolvedValueOnce({ role: 'owner' });
-      mockPrismaClient.wallet.update.mockResolvedValueOnce({
+      const walletData = {
         id: 'wallet-private',
         name: 'Private Wallet',
         type: 'single_sig',
@@ -1175,7 +1240,10 @@ describe('Wallet Service', () => {
         addresses: [],
         group: null,
         users: [{ userId: 'owner-1' }],
-      });
+      };
+      mockPrismaClient.walletUser.findFirst.mockResolvedValueOnce({ role: 'owner' });
+      mockPrismaClient.wallet.update.mockResolvedValueOnce(walletData);
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce(walletData);
       mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: null } });
 
       const updated = await updateWallet('wallet-private', 'owner-1', { name: 'Private Wallet' });
@@ -1186,8 +1254,7 @@ describe('Wallet Service', () => {
     });
 
     it('uses null groupName for shared wallets without a group object', async () => {
-      mockPrismaClient.walletUser.findFirst.mockResolvedValueOnce({ role: 'owner' });
-      mockPrismaClient.wallet.update.mockResolvedValueOnce({
+      const walletData = {
         id: 'wallet-shared-no-group',
         name: 'Shared No Group',
         type: 'single_sig',
@@ -1202,7 +1269,10 @@ describe('Wallet Service', () => {
         addresses: [],
         group: null,
         users: [{ userId: 'owner-1' }, { userId: 'owner-2' }],
-      });
+      };
+      mockPrismaClient.walletUser.findFirst.mockResolvedValueOnce({ role: 'owner' });
+      mockPrismaClient.wallet.update.mockResolvedValueOnce(walletData);
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce(walletData);
       mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: BigInt(5) } });
 
       const updated = await updateWallet('wallet-shared-no-group', 'owner-1', { name: 'Shared No Group' });
@@ -1684,11 +1754,13 @@ describe('Wallet Service', () => {
 
   describe('wallet stats aggregation', () => {
     it('returns aggregate wallet stats for authorized users', async () => {
+      const { transactionRepository: txRepo } = await import('../../../src/repositories');
       mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({ id: 'wallet-1' });
-      mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: BigInt(12000) } });
-      mockPrismaClient.transaction.aggregate
-        .mockResolvedValueOnce({ _sum: { amount: BigInt(45000) } })
-        .mockResolvedValueOnce({ _sum: { amount: BigInt(17000) } });
+      mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: BigInt(12000) }, _count: { _all: 4 } });
+      vi.mocked(txRepo.groupByType).mockResolvedValueOnce([
+        { type: 'received', _count: { id: 5 }, _sum: { amount: BigInt(45000) } },
+        { type: 'sent', _count: { id: 3 }, _sum: { amount: BigInt(17000) } },
+      ] as any);
       mockPrismaClient.transaction.count.mockResolvedValueOnce(12);
       mockPrismaClient.uTXO.count.mockResolvedValueOnce(4);
       mockPrismaClient.address.count.mockResolvedValueOnce(8);
@@ -1706,11 +1778,10 @@ describe('Wallet Service', () => {
     });
 
     it('falls back aggregate amount fields to zero when sums are null', async () => {
+      const { transactionRepository: txRepo } = await import('../../../src/repositories');
       mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({ id: 'wallet-2' });
-      mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: null } });
-      mockPrismaClient.transaction.aggregate
-        .mockResolvedValueOnce({ _sum: { amount: null } })
-        .mockResolvedValueOnce({ _sum: { amount: null } });
+      mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: null }, _count: { _all: 0 } });
+      vi.mocked(txRepo.groupByType).mockResolvedValueOnce([] as any);
       mockPrismaClient.transaction.count.mockResolvedValueOnce(0);
       mockPrismaClient.uTXO.count.mockResolvedValueOnce(0);
       mockPrismaClient.address.count.mockResolvedValueOnce(0);

@@ -7,8 +7,7 @@
 
 import { getWebSocketServer } from '../server';
 import { getElectrumClient } from '../../services/bitcoin/electrum';
-import { addressRepository, walletRepository } from '../../repositories';
-import prisma from '../../models/prisma';
+import { addressRepository, walletRepository, transactionRepository } from '../../repositories';
 import { createLogger } from '../../utils/logger';
 import {
   broadcastTransactionNotification,
@@ -124,10 +123,7 @@ export async function subscribeWallet(
 export async function handleAddressUpdate(address: string, _walletId: string): Promise<void> {
   try {
     // Get address from database
-    const addressRecord = await prisma.address.findFirst({
-      where: { address },
-      include: { wallet: true },
-    });
+    const addressRecord = await addressRepository.findByAddressWithWallet(address);
 
     if (!addressRecord) {
       log.warn(`Address ${address} not found in database`);
@@ -157,9 +153,7 @@ export async function handleAddressUpdate(address: string, _walletId: string): P
 export async function handleTransaction(txid: string, walletId: string, _address: string): Promise<void> {
   try {
     // Check if transaction already exists
-    const existing = await prisma.transaction.findFirst({
-      where: { txid },
-    });
+    const existing = await transactionRepository.findByTxidGlobal(txid);
 
     if (existing) {
       // Check for confirmation updates
@@ -188,9 +182,7 @@ export async function handleTransaction(txid: string, walletId: string, _address
  */
 export async function checkConfirmationUpdate(txid: string, walletId: string): Promise<void> {
   try {
-    const transaction = await prisma.transaction.findFirst({
-      where: { txid },
-    });
+    const transaction = await transactionRepository.findByTxidGlobal(txid);
 
     if (!transaction) return;
 

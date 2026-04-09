@@ -9,8 +9,7 @@
  * - Dead letter queue for permanently failed syncs
  */
 
-import { walletRepository } from '../../repositories';
-import prisma from '../../models/prisma';
+import { walletRepository, utxoRepository } from '../../repositories';
 import { syncWallet, populateMissingTransactionFields } from '../bitcoin/blockchain';
 import { getNotificationService, walletLog } from '../../websocket/notifications';
 import { createLogger } from '../../utils/logger';
@@ -74,35 +73,7 @@ export async function releaseSyncLock(state: SyncState, walletId: string): Promi
  * Get wallet balance from UTXOs, separated into confirmed and unconfirmed.
  */
 export async function getWalletBalance(walletId: string): Promise<{ confirmed: number; unconfirmed: number }> {
-  const [confirmedResult, unconfirmedResult] = await Promise.all([
-    // Confirmed: UTXOs with a block height
-    prisma.uTXO.aggregate({
-      where: {
-        walletId,
-        spent: false,
-        blockHeight: { not: null },
-      },
-      _sum: {
-        amount: true,
-      },
-    }),
-    // Unconfirmed: UTXOs without a block height (still in mempool)
-    prisma.uTXO.aggregate({
-      where: {
-        walletId,
-        spent: false,
-        blockHeight: null,
-      },
-      _sum: {
-        amount: true,
-      },
-    }),
-  ]);
-
-  return {
-    confirmed: Number(confirmedResult._sum.amount || 0),
-    unconfirmed: Number(unconfirmedResult._sum.amount || 0),
-  };
+  return utxoRepository.getConfirmedUnconfirmedBalance(walletId);
 }
 
 /**

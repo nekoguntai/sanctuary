@@ -691,6 +691,44 @@ export async function findWalletDevicesWithUserAccess(
 }
 
 // Export as namespace
+/**
+ * Find devices for a user with their accounts included
+ */
+export async function findByUserIdWithAccounts(userId: string) {
+  return prisma.device.findMany({
+    where: {
+      id: { in: [] }, // Will be overridden by caller's explicit IDs
+      userId,
+    },
+    include: { accounts: true },
+  });
+}
+
+/**
+ * Find devices by IDs belonging to a user with accounts included
+ */
+export async function findByIdsAndUserWithAccounts(ids: string[], userId: string) {
+  return prisma.device.findMany({
+    where: {
+      id: { in: ids },
+      userId,
+    },
+    include: { accounts: true },
+  });
+}
+
+/**
+ * Find a single device by ID belonging to a user (ownership check)
+ */
+export async function findByIdAndUser(
+  deviceId: string,
+  userId: string
+): Promise<Device | null> {
+  return prisma.device.findFirst({
+    where: { id: deviceId, userId },
+  });
+}
+
 export const deviceRepository = {
   findById,
   findByIdWithUsers,
@@ -733,6 +771,9 @@ export const deviceRepository = {
   findGroupName,
   findUserGroupIds,
   findWalletDevicesWithUserAccess,
+  findByUserIdWithAccounts,
+  findByIdsAndUserWithAccounts,
+  findByIdAndUser,
 };
 
 export default deviceRepository;

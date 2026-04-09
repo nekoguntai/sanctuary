@@ -98,10 +98,33 @@ vi.mock('../../../src/repositories', () => ({
     findNetwork: (id: string) => mockPrismaClient.wallet.findUnique({ where: { id }, select: { network: true } }).then((w: any) => w?.network ?? null),
     update: (id: string, data: unknown) => mockPrismaClient.wallet.update({ where: { id }, data }),
     updateSyncState: (id: string, state: unknown) => mockPrismaClient.wallet.update({ where: { id }, data: state }),
+    resetAllStuckSyncFlags: () => mockPrismaClient.wallet.updateMany({ where: { syncInProgress: true }, data: { syncInProgress: false } }).then((r: any) => r.count),
+    findStuckSyncing: () => mockPrismaClient.wallet.findMany({ where: { syncInProgress: true }, select: { id: true, name: true } }),
+    findStale: (opts: any) => mockPrismaClient.wallet.findMany({
+      where: { OR: [{ lastSyncedAt: null }, { lastSyncedAt: { lt: new Date(Date.now() - opts.staleThresholdMs) } }], syncInProgress: false },
+      select: { id: true },
+    }),
   },
   addressRepository: {
     findAddressStrings: (walletId: string) => mockPrismaClient.address.findMany({ where: { walletId }, select: { address: true } }).then((addrs: any[]) => addrs.map((a: any) => a.address)),
     findByWalletId: (walletId: string) => mockPrismaClient.address.findMany({ where: { walletId } }),
+    findAllWithWalletNetwork: () => mockPrismaClient.address.findMany({ select: { address: true, walletId: true } }),
+    findByAddress: (address: string) => mockPrismaClient.address.findFirst({ where: { address }, select: { walletId: true } }),
+  },
+  transactionRepository: {
+    findWalletIdsWithPendingConfirmations: (threshold: number) =>
+      mockPrismaClient.transaction.findMany({ where: { confirmations: { lt: threshold } }, select: { walletId: true }, distinct: ['walletId'] })
+        .then((results: any[]) => results.map((r: any) => r.walletId)),
+  },
+  utxoRepository: {
+    getConfirmedUnconfirmedBalance: (walletId: string) =>
+      Promise.all([
+        mockPrismaClient.uTXO.aggregate({ where: { walletId, spent: false, blockHeight: { not: null } }, _sum: { amount: true } }),
+        mockPrismaClient.uTXO.aggregate({ where: { walletId, spent: false, blockHeight: null }, _sum: { amount: true } }),
+      ]).then(([confirmed, unconfirmed]: any[]) => ({
+        confirmed: Number(confirmed._sum.amount || 0),
+        unconfirmed: Number(unconfirmed._sum.amount || 0),
+      })),
   },
 }));
 

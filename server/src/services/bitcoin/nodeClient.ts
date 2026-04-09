@@ -14,7 +14,6 @@ import {
   NetworkType,
 } from './electrumPool';
 import { nodeConfigRepository } from '../../repositories';
-import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 
@@ -95,29 +94,10 @@ async function loadNodeConfig(): Promise<NodeConfig | null> {
  * Save node configuration to database
  */
 export async function saveNodeConfig(config: NodeConfig): Promise<void> {
-  // First, unset any existing default
-  await prisma.nodeConfig.updateMany({
-    where: { isDefault: true },
-    data: { isDefault: false },
-  });
-
-  // Upsert the new config
-  await prisma.nodeConfig.upsert({
-    where: { id: 'default' },
-    update: {
-      host: config.host,
-      port: config.port,
-      useSsl: config.protocol === 'ssl',
-      isDefault: true,
-    },
-    create: {
-      id: 'default',
-      type: 'electrum', // Only Electrum is supported
-      host: config.host,
-      port: config.port,
-      useSsl: config.protocol === 'ssl',
-      isDefault: true,
-    },
+  await nodeConfigRepository.saveAsDefault({
+    host: config.host,
+    port: config.port,
+    useSsl: config.protocol === 'ssl',
   });
 
   // Reset the active client when config changes

@@ -18,7 +18,7 @@ import type {
   UpdateConfirmationsJobData,
   UpdateConfirmationsResult,
 } from './types';
-import prisma from '../../models/prisma';
+import { walletRepository, transactionRepository } from '../../repositories';
 import { syncWallet } from '../../services/bitcoin/blockchain';
 import {
   updateTransactionConfirmations,
@@ -67,10 +67,7 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
     log.info(`Syncing wallet ${walletId}`, { reason, jobId: job.id });
 
     // Get wallet network for block height tracking
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-      select: { network: true },
-    });
+    const wallet = await walletRepository.findByIdWithSelect(walletId, { network: true });
 
     if (!wallet) {
       log.warn(`Wallet ${walletId} not found, skipping sync`);
@@ -78,10 +75,7 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
     }
 
     // Mark wallet as syncing
-    await prisma.wallet.update({
-      where: { id: walletId },
-      data: { syncInProgress: true },
-    });
+    await walletRepository.update(walletId, { syncInProgress: true });
 
     let flagCleared = false;
     try {
@@ -96,15 +90,12 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
       const currentBlockHeight = getCachedBlockHeight(network);
 
       // Update wallet metadata with block height
-      await prisma.wallet.update({
-        where: { id: walletId },
-        data: {
-          syncInProgress: false,
-          lastSyncedAt: new Date(),
-          lastSyncedBlockHeight: currentBlockHeight,
-          lastSyncStatus: 'success',
-          lastSyncError: null,
-        },
+      await walletRepository.update(walletId, {
+        syncInProgress: false,
+        lastSyncedAt: new Date(),
+        lastSyncedBlockHeight: currentBlockHeight,
+        lastSyncStatus: 'success',
+        lastSyncError: null,
       });
       flagCleared = true;
 
@@ -129,13 +120,10 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
 
       try {
         // Update wallet with error status
-        await prisma.wallet.update({
-          where: { id: walletId },
-          data: {
-            syncInProgress: false,
-            lastSyncStatus: 'failed',
-            lastSyncError: errorMsg,
-          },
+        await walletRepository.update(walletId, {
+          syncInProgress: false,
+          lastSyncStatus: 'failed',
+          lastSyncError: errorMsg,
         });
         flagCleared = true;
       } catch (updateError) {
@@ -162,10 +150,7 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
       // force-reset it so the wallet doesn't stay stuck forever.
       if (!flagCleared) {
         try {
-          await prisma.wallet.update({
-            where: { id: walletId },
-            data: { syncInProgress: false },
-          });
+          await walletRepository.update(walletId, { syncInProgress: false });
           log.warn(`Safety-net reset syncInProgress for wallet ${walletId}`);
         } catch (cleanupError) {
           log.error(`Failed to safety-net reset syncInProgress for wallet ${walletId}`, {
@@ -217,23 +202,11 @@ export const checkStaleWalletsJob: WorkerJobHandler<CheckStaleWalletsJobData, Ch
     // This recovers from scenarios where the worker crashed or the catch block's DB
     // update failed, leaving syncInProgress=true permanently.
     const stuckCutoff = new Date(Date.now() - config.sync.maxSyncDurationMs);
-    const stuckWallets = await prisma.wallet.findMany({
-      where: {
-        syncInProgress: true,
-        OR: [
-          { lastSyncedAt: { lt: stuckCutoff } },
-          { lastSyncedAt: null },
-        ],
-      },
-      select: { id: true, name: true, lastSyncedAt: true },
-    });
+    const stuckWallets = await walletRepository.findStuckWithCutoff(stuckCutoff);
 
     if (stuckWallets.length > 0) {
       for (const wallet of stuckWallets) {
-        await prisma.wallet.update({
-          where: { id: wallet.id },
-          data: { syncInProgress: false },
-        });
+        await walletRepository.update(wallet.id, { syncInProgress: false });
         log.warn(`Reset stuck syncInProgress flag for wallet ${wallet.name || wallet.id}`, {
           lastSyncedAt: wallet.lastSyncedAt,
           stuckForMs: wallet.lastSyncedAt ? Date.now() - wallet.lastSyncedAt.getTime() : 'unknown',
@@ -244,19 +217,10 @@ export const checkStaleWalletsJob: WorkerJobHandler<CheckStaleWalletsJobData, Ch
 
     // Find stale wallets, prioritizing those never synced, then oldest first
     // Limited to prevent queue flooding
-    const staleWallets = await prisma.wallet.findMany({
-      where: {
-        OR: [
-          { lastSyncedAt: null },
-          { lastSyncedAt: { lt: cutoffTime } },
-        ],
-        syncInProgress: false,
-      },
-      select: { id: true, name: true, lastSyncedAt: true },
-      orderBy: [
-        { lastSyncedAt: { sort: 'asc', nulls: 'first' } },
-      ],
-      take: maxWallets,
+    const staleWallets = await walletRepository.findStale({
+      staleThresholdMs: staleThresholdMs,
+      maxResults: maxWallets,
+      orderBy: [{ lastSyncedAt: { sort: 'asc', nulls: 'first' } }],
     });
 
     if (staleWallets.length === 0) {
@@ -321,13 +285,8 @@ export const updateConfirmationsJob: WorkerJobHandler<UpdateConfirmationsJobData
     }
 
     // Find all wallets with pending transactions (< 6 confirmations)
-    const walletsWithPending = await prisma.transaction.findMany({
-      where: {
-        confirmations: { lt: 6 },
-      },
-      select: { walletId: true },
-      distinct: ['walletId'],
-    });
+    const walletIds = await transactionRepository.findWalletIdsWithPendingConfirmations(6);
+    const walletsWithPending = walletIds.map(walletId => ({ walletId }));
 
     if (walletsWithPending.length === 0) {
       log.debug('No wallets with pending transactions');

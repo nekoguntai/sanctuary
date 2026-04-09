@@ -20,16 +20,29 @@ vi.mock('../../../src/models/prisma', () => ({
   },
 }));
 
-vi.mock('../../../src/repositories', () => ({
-  walletRepository: {
-    findNetwork: vi.fn().mockResolvedValue(null),
-    findById: vi.fn().mockResolvedValue(null),
-  },
-  addressRepository: {
-    findAddressStrings: vi.fn().mockResolvedValue([]),
-    findByWalletId: vi.fn().mockResolvedValue([]),
-  },
-}));
+vi.mock('../../../src/repositories', async () => {
+  const prismaModule = await import('../../../src/models/prisma');
+  const prisma = prismaModule.default;
+  return {
+    walletRepository: {
+      findNetwork: vi.fn().mockResolvedValue(null),
+      findById: vi.fn().mockResolvedValue(null),
+    },
+    addressRepository: {
+      findAddressStrings: vi.fn().mockResolvedValue([]),
+      findByWalletId: vi.fn().mockResolvedValue([]),
+      findAllWithWalletNetworkPaginated: (opts: { take: number; cursor?: string }) =>
+        prisma.address.findMany({
+          select: { id: true, address: true, walletId: true, wallet: { select: { network: true } } },
+          take: opts.take,
+          skip: opts.cursor ? 1 : 0,
+          cursor: opts.cursor ? { id: opts.cursor } : undefined,
+          orderBy: { id: 'asc' },
+        }),
+      findAllWithWalletNetwork: () => prisma.address.findMany({ select: { address: true, walletId: true } }),
+    },
+  };
+});
 
 // Mock the electrum client
 vi.mock('../../../src/services/bitcoin/electrum', () => ({

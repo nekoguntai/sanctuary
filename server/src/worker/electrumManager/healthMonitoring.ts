@@ -5,7 +5,7 @@
  * reporting for the Electrum subscription manager.
  */
 
-import prisma from '../../models/prisma';
+import { addressRepository } from '../../repositories';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { subscribeAddressBatch } from './addressSubscriptions';
@@ -65,17 +65,9 @@ export async function reconcileSubscriptions(
   // - Build a set of all addresses (just strings, lightweight)
   // - Find and subscribe to new addresses in batches
   while (true) {
-    const addresses = await prisma.address.findMany({
-      select: {
-        id: true,
-        address: true,
-        walletId: true,
-        wallet: { select: { network: true } },
-      },
+    const addresses = await addressRepository.findAllWithWalletNetworkPaginated({
       take: PAGE_SIZE,
-      skip: cursor ? 1 : 0,
-      cursor: cursor ? { id: cursor } : undefined,
-      orderBy: { id: 'asc' },
+      cursor,
     });
 
     if (addresses.length === 0) break;

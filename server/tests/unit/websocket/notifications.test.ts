@@ -62,15 +62,25 @@ vi.mock('../../../src/models/prisma', () => ({
   },
 }));
 
-vi.mock('../../../src/repositories', () => ({
-  addressRepository: {
-    findAddressStrings: vi.fn().mockResolvedValue([]),
-    findByWalletId: vi.fn().mockResolvedValue([]),
-  },
-  walletRepository: {
-    findById: vi.fn().mockResolvedValue(null),
-  },
-}));
+vi.mock('../../../src/repositories', async () => {
+  const prismaModule = await import('../../../src/models/prisma');
+  const prisma = prismaModule.default;
+  return {
+    addressRepository: {
+      findAddressStrings: vi.fn().mockResolvedValue([]),
+      findByWalletId: vi.fn().mockResolvedValue([]),
+      findByAddressWithWallet: (...args: unknown[]) =>
+        prisma.address.findFirst({ where: { address: args[0] }, include: { wallet: true } }),
+    },
+    walletRepository: {
+      findById: vi.fn().mockResolvedValue(null),
+    },
+    transactionRepository: {
+      findByTxidGlobal: (txid: string) =>
+        prisma.transaction.findFirst({ where: { txid } }),
+    },
+  };
+});
 
 vi.mock('../../../src/services/walletLogBuffer', () => ({
   walletLogBuffer: {

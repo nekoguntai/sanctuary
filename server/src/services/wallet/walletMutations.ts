@@ -4,7 +4,7 @@
  * State-changing operations (update, delete) with cleanup side effects.
  */
 
-import prisma from '../../models/prisma';
+import { walletRepository, utxoRepository } from '../../repositories';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { hookRegistry, Operations } from '../hooks';
@@ -22,57 +22,43 @@ export async function updateWallet(
   updates: Partial<{ name: string; descriptor: string }>
 ): Promise<WalletWithBalance> {
   // Check user has owner role
-  const walletUser = await prisma.walletUser.findFirst({
-    where: {
-      walletId,
-      userId,
-      role: 'owner',
-    },
-  });
+  const hasEditAccess = await walletRepository.findByIdWithEditAccess(walletId, userId);
 
-  if (!walletUser) {
+  if (!hasEditAccess) {
     throw new ForbiddenError('Only wallet owners can update wallet');
   }
 
-  const wallet = await prisma.wallet.update({
-    where: { id: walletId },
-    data: updates,
-    include: {
-      devices: true,
-      addresses: true,
-      // Don't load UTXOs - use aggregate query instead
-      group: {
-        select: { name: true },
-      },
-      users: {
-        select: { userId: true },
-      },
-    },
+  const wallet = await walletRepository.update(walletId, updates);
+
+  // Re-fetch with includes
+  const walletFull = await walletRepository.findByIdWithFullAccess(walletId, userId, {
+    devices: true,
+    addresses: true,
+    group: { select: { name: true } },
+    users: { select: { userId: true } },
   });
+
+  if (!walletFull) {
+    throw new ForbiddenError('Only wallet owners can update wallet');
+  }
 
   // Use aggregate query for balance (efficient for wallets with many UTXOs)
-  const balanceResult = await prisma.uTXO.aggregate({
-    where: {
-      walletId,
-      spent: false,
-    },
-    _sum: { amount: true },
-  });
-  const balance = Number(balanceResult._sum.amount || 0);
+  const balanceBigint = await utxoRepository.getUnspentBalance(walletId);
+  const balance = Number(balanceBigint);
 
   // Determine if wallet is shared
-  const userCount = wallet.users.length;
-  const hasGroup = !!wallet.group;
+  const userCount = walletFull.users.length;
+  const hasGroup = !!walletFull.group;
   const isShared = hasGroup || userCount > 1;
 
   return {
-    ...wallet,
+    ...walletFull,
     balance,
-    deviceCount: wallet.devices.length,
-    addressCount: wallet.addresses.length,
+    deviceCount: walletFull.devices.length,
+    addressCount: walletFull.addresses.length,
     isShared,
     sharedWith: isShared ? {
-      groupName: wallet.group?.name || null,
+      groupName: walletFull.group?.name || null,
       userCount,
     } : undefined,
   };
@@ -83,15 +69,9 @@ export async function updateWallet(
  */
 export async function deleteWallet(walletId: string, userId: string): Promise<void> {
   // Check user has owner role
-  const walletUser = await prisma.walletUser.findFirst({
-    where: {
-      walletId,
-      userId,
-      role: 'owner',
-    },
-  });
+  const hasEditAccess = await walletRepository.findByIdWithEditAccess(walletId, userId);
 
-  if (!walletUser) {
+  if (!hasEditAccess) {
     throw new ForbiddenError('Only wallet owners can delete wallet');
   }
 
@@ -104,9 +84,7 @@ export async function deleteWallet(walletId: string, userId: string): Promise<vo
   const { notificationService } = await import('../../websocket/notifications');
   await notificationService.unsubscribeWalletAddresses(walletId);
 
-  await prisma.wallet.delete({
-    where: { id: walletId },
-  });
+  await walletRepository.deleteById(walletId);
 
   // Execute after hooks for audit logging
   hookRegistry.executeAfter(Operations.WALLET_DELETE, { walletId }, {

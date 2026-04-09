@@ -31,6 +31,19 @@ vi.mock('../../../../src/models/prisma', () => ({
   default: mockPrisma,
 }));
 
+// Mock repositories
+vi.mock('../../../../src/repositories', () => ({
+  draftRepository: {
+    findById: (id: string) => mockPrisma.draftTransaction.findUnique({ where: { id } }),
+  },
+  transactionRepository: {
+    findByTxid: (txid: string, walletId: string) => mockPrisma.transaction.findFirst({ where: { txid, walletId } }),
+  },
+  walletRepository: {
+    getName: vi.fn().mockResolvedValue('Test Wallet'),
+  },
+}));
+
 // Mock notification channel registry
 const mockNotificationChannelRegistry = vi.hoisted(() => ({
   notifyTransactions: vi.fn(),
@@ -447,7 +460,7 @@ describe('Notification Jobs', () => {
         [expect.objectContaining({
           txid: 'txid-abc',
           confirmations: 1,
-          walletName: 'My Wallet',
+          walletName: 'Test Wallet',
         })]
       );
     });

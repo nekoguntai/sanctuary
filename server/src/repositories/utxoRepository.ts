@@ -603,6 +603,78 @@ export async function findByOutpoint(
   });
 }
 
+/**
+ * Get confirmed and unconfirmed balance separately for a wallet
+ */
+export async function getConfirmedUnconfirmedBalance(
+  walletId: string
+): Promise<{ confirmed: number; unconfirmed: number }> {
+  const [confirmedResult, unconfirmedResult] = await Promise.all([
+    prisma.uTXO.aggregate({
+      where: { walletId, spent: false, blockHeight: { not: null } },
+      _sum: { amount: true },
+    }),
+    prisma.uTXO.aggregate({
+      where: { walletId, spent: false, blockHeight: null },
+      _sum: { amount: true },
+    }),
+  ]);
+  return {
+    confirmed: Number(confirmedResult._sum.amount || 0),
+    unconfirmed: Number(unconfirmedResult._sum.amount || 0),
+  };
+}
+
+/**
+ * Get available UTXOs for selection with dynamic where clause
+ */
+export async function findAvailableForSelection(
+  walletId: string,
+  options: {
+    excludeFrozen?: boolean;
+    excludeUnconfirmed?: boolean;
+    excludeUtxoIds?: string[];
+  }
+): Promise<Array<{
+  id: string;
+  txid: string;
+  vout: number;
+  address: string;
+  amount: bigint;
+  confirmations: number;
+  blockHeight: number | null;
+}>> {
+  const where: Prisma.UTXOWhereInput = {
+    walletId,
+    spent: false,
+  };
+
+  if (options.excludeFrozen !== false) {
+    where.frozen = false;
+  }
+  if (options.excludeUnconfirmed) {
+    where.confirmations = { gt: 0 };
+  }
+  if (options.excludeUtxoIds?.length) {
+    where.id = { notIn: options.excludeUtxoIds };
+  }
+  where.draftLock = null;
+
+  return prisma.uTXO.findMany({
+    where,
+    select: {
+      id: true,
+      txid: true,
+      vout: true,
+      address: true,
+      amount: true,
+      confirmations: true,
+      blockHeight: true,
+    },
+    orderBy: { amount: 'desc' },
+  });
+}
+
 // Export as namespace
 export const utxoRepository = {
   getUnspentBalance,
@@ -641,6 +713,8 @@ export const utxoRepository = {
   findUnspentForPrivacy,
   findByIdsForPrivacy,
   findByOutpoint,
+  getConfirmedUnconfirmedBalance,
+  findAvailableForSelection,
 };
 
 export default utxoRepository;

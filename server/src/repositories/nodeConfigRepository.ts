@@ -73,6 +73,38 @@ export async function update(
   });
 }
 
+/**
+ * Save a node configuration as the default (unset existing defaults first)
+ */
+export async function saveAsDefault(config: {
+  host: string;
+  port: number;
+  useSsl: boolean;
+}): Promise<void> {
+  await prisma.nodeConfig.updateMany({
+    where: { isDefault: true },
+    data: { isDefault: false },
+  });
+
+  await prisma.nodeConfig.upsert({
+    where: { id: 'default' },
+    update: {
+      host: config.host,
+      port: config.port,
+      useSsl: config.useSsl,
+      isDefault: true,
+    },
+    create: {
+      id: 'default',
+      type: 'electrum',
+      host: config.host,
+      port: config.port,
+      useSsl: config.useSsl,
+      isDefault: true,
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // ElectrumServer methods
 // ---------------------------------------------------------------------------
@@ -251,6 +283,7 @@ export const nodeConfigRepository = {
   findDefaultWithServers,
   findOrCreateDefault,
   update,
+  saveAsDefault,
   electrumServer,
 };
 

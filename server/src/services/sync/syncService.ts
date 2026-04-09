@@ -13,8 +13,7 @@
  * - subscriptionManager.ts: Electrum real-time subscriptions
  */
 
-import { walletRepository } from '../../repositories';
-import prisma from '../../models/prisma';
+import { walletRepository, transactionRepository } from '../../repositories';
 import { updateTransactionConfirmations, populateMissingTransactionFields } from '../bitcoin/blockchain';
 import { getNotificationService } from '../../websocket/notifications';
 import { createLogger } from '../../utils/logger';
@@ -508,12 +507,9 @@ class SyncService {
    */
   private async resetStuckSyncs(): Promise<void> {
     try {
-      const result = await prisma.wallet.updateMany({
-        where: { syncInProgress: true },
-        data: { syncInProgress: false },
-      });
-      if (result.count > 0) {
-        log.info(`[SYNC] Reset ${result.count} stuck sync flags from previous session`);
+      const count = await walletRepository.resetAllStuckSyncFlags();
+      if (count > 0) {
+        log.info(`[SYNC] Reset ${count} stuck sync flags from previous session`);
       }
     } catch (error) {
       log.error('[SYNC] Failed to reset stuck sync flags', { error: getErrorMessage(error) });
@@ -530,12 +526,7 @@ class SyncService {
     try {
       // First, check for stuck syncs - wallets marked as syncing in DB but not in memory
       // This can happen if sync times out or crashes without proper cleanup
-      const stuckWallets = await prisma.wallet.findMany({
-        where: {
-          syncInProgress: true,
-        },
-        select: { id: true, name: true },
-      });
+      const stuckWallets = await walletRepository.findStuckSyncing();
 
       // Reset any wallet that's marked as syncing but isn't actually syncing
       let unstuckCount = 0;
@@ -553,16 +544,7 @@ class SyncService {
 
       // Now check for stale wallets that need syncing
       const { staleThresholdMs } = getConfig().sync;
-      const staleWallets = await prisma.wallet.findMany({
-        where: {
-          OR: [
-            { lastSyncedAt: null },
-            { lastSyncedAt: { lt: new Date(Date.now() - staleThresholdMs) } },
-          ],
-          syncInProgress: false,
-        },
-        select: { id: true },
-      });
+      const staleWallets = await walletRepository.findStale({ staleThresholdMs });
 
       for (const wallet of staleWallets) {
         this.queueSync(wallet.id, 'low');
@@ -584,15 +566,8 @@ class SyncService {
 
     try {
       // Get all wallets with pending transactions
-      const walletsWithPending = await prisma.transaction.findMany({
-        where: {
-          confirmations: { lt: 6 },
-        },
-        select: {
-          walletId: true,
-        },
-        distinct: ['walletId'],
-      });
+      const walletIds = await transactionRepository.findWalletIdsWithPendingConfirmations(6);
+      const walletsWithPending = walletIds.map(walletId => ({ walletId }));
 
       let totalUpdated = 0;
 

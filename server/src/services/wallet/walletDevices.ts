@@ -5,6 +5,7 @@
  */
 
 import prisma from '../../models/prisma';
+import { walletRepository, deviceRepository, addressRepository } from '../../repositories';
 import * as descriptorBuilder from '../bitcoin/descriptorBuilder';
 import { createLogger } from '../../utils/logger';
 import { ConflictError, WalletNotFoundError, DeviceNotFoundError } from '../../errors';
@@ -30,9 +31,7 @@ export async function addDeviceToWallet(
     },
     include: {
       devices: {
-        include: {
-          device: true,
-        },
+        include: { device: true },
       },
     },
   });
@@ -42,12 +41,7 @@ export async function addDeviceToWallet(
   }
 
   // Check device belongs to user
-  const device = await prisma.device.findFirst({
-    where: {
-      id: deviceId,
-      userId,
-    },
-  });
+  const device = await deviceRepository.findByIdAndUser(deviceId, userId);
 
   if (!device) {
     throw new DeviceNotFoundError(deviceId);
@@ -94,12 +88,9 @@ export async function addDeviceToWallet(
       );
 
       // Update wallet with new descriptor
-      await prisma.wallet.update({
-        where: { id: walletId },
-        data: {
-          descriptor: descriptorResult.descriptor,
-          fingerprint: descriptorResult.fingerprint,
-        },
+      await walletRepository.update(walletId, {
+        descriptor: descriptorResult.descriptor,
+        fingerprint: descriptorResult.fingerprint,
       });
 
       log.info('Generated descriptor for wallet after device link', {
@@ -145,9 +136,7 @@ export async function repairWalletDescriptor(
     },
     include: {
       devices: {
-        include: {
-          device: true,
-        },
+        include: { device: true },
       },
     },
   });
@@ -199,12 +188,9 @@ export async function repairWalletDescriptor(
     );
 
     // Update wallet with descriptor
-    await prisma.wallet.update({
-      where: { id: walletId },
-      data: {
-        descriptor: descriptorResult.descriptor,
-        fingerprint: descriptorResult.fingerprint,
-      },
+    await walletRepository.update(walletId, {
+      descriptor: descriptorResult.descriptor,
+      fingerprint: descriptorResult.fingerprint,
     });
 
     // Generate initial addresses
@@ -213,10 +199,7 @@ export async function repairWalletDescriptor(
 
     // skipDuplicates ensures idempotency - if repair is called multiple times
     // or addresses already exist from a partial repair, they won't cause errors
-    await prisma.address.createMany({
-      data: addressesToCreate,
-      skipDuplicates: true,
-    });
+    await addressRepository.createMany(addressesToCreate, { skipDuplicates: true });
 
     log.info('Repaired wallet descriptor', {
       walletId,

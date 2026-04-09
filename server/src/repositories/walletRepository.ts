@@ -359,6 +359,149 @@ export async function findNetwork(walletId: string): Promise<string | null> {
   return wallet?.network ?? null;
 }
 
+/**
+ * Reset all wallets with syncInProgress=true (batch updateMany)
+ * Used on startup to clear stale flags from previous server sessions.
+ */
+export async function resetAllStuckSyncFlags(): Promise<number> {
+  const result = await prisma.wallet.updateMany({
+    where: { syncInProgress: true },
+    data: { syncInProgress: false },
+  });
+  return result.count;
+}
+
+/**
+ * Find wallets currently marked as syncing
+ */
+export async function findStuckSyncing(
+  select?: { id: true; name: true; lastSyncedAt?: true }
+): Promise<Array<{ id: string; name: string; lastSyncedAt?: Date | null }>> {
+  return prisma.wallet.findMany({
+    where: { syncInProgress: true },
+    select: select ?? { id: true, name: true },
+  });
+}
+
+/**
+ * Find stale wallets that need syncing (not synced recently or never synced)
+ */
+export async function findStale(options: {
+  staleThresholdMs: number;
+  maxResults?: number;
+  orderBy?: Prisma.WalletOrderByWithRelationInput[];
+}): Promise<Array<{ id: string; name: string; lastSyncedAt: Date | null }>> {
+  return prisma.wallet.findMany({
+    where: {
+      OR: [
+        { lastSyncedAt: null },
+        { lastSyncedAt: { lt: new Date(Date.now() - options.staleThresholdMs) } },
+      ],
+      syncInProgress: false,
+    },
+    select: { id: true, name: true, lastSyncedAt: true },
+    orderBy: options.orderBy,
+    take: options.maxResults,
+  });
+}
+
+/**
+ * Find stuck wallets (syncInProgress=true AND not synced recently)
+ */
+export async function findStuckWithCutoff(
+  cutoff: Date
+): Promise<Array<{ id: string; name: string; lastSyncedAt: Date | null }>> {
+  return prisma.wallet.findMany({
+    where: {
+      syncInProgress: true,
+      OR: [
+        { lastSyncedAt: { lt: cutoff } },
+        { lastSyncedAt: null },
+      ],
+    },
+    select: { id: true, name: true, lastSyncedAt: true },
+  });
+}
+
+/**
+ * Find all wallets with a custom select (no access check - for internal use)
+ */
+export async function findAllWithSelect<T extends Prisma.WalletSelect>(
+  select: T,
+  where?: Prisma.WalletWhereInput
+) {
+  return prisma.wallet.findMany({
+    where,
+    select,
+  });
+}
+
+/**
+ * Find a wallet by ID with access check and custom includes
+ */
+export async function findByIdWithAccessAndInclude(
+  walletId: string,
+  userId: string,
+  include: Prisma.WalletInclude
+) {
+  return prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      ...buildWalletAccessWhere(userId),
+    },
+    include,
+  });
+}
+
+/**
+ * Delete a wallet by ID
+ */
+export async function deleteById(walletId: string): Promise<void> {
+  await prisma.wallet.delete({
+    where: { id: walletId },
+  });
+}
+
+/**
+ * Find wallet by ID with access check and custom include (for wallet queries)
+ */
+export async function findByIdWithFullAccess(
+  walletId: string,
+  userId: string,
+  include: Prisma.WalletInclude
+) {
+  return prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      OR: [
+        { users: { some: { userId } } },
+        { group: { members: { some: { userId } } } },
+      ],
+    },
+    include,
+  });
+}
+
+/**
+ * Find all wallets accessible by a user with custom include
+ */
+export async function findByUserIdWithInclude(
+  userId: string,
+  include: Prisma.WalletInclude,
+  orderBy?: Prisma.WalletOrderByWithRelationInput
+) {
+  return prisma.wallet.findMany({
+    where: {
+      OR: [
+        { users: { some: { userId } } },
+        { group: { members: { some: { userId } } } },
+      ],
+    },
+    include,
+    orderBy,
+  });
+}
+
 // Export all functions as a namespace for convenient importing
 export const walletRepository = {
   findByIdWithAccess,
@@ -383,6 +526,15 @@ export const walletRepository = {
   findGroupRoleByMembership,
   findNameById,
   findNetwork,
+  resetAllStuckSyncFlags,
+  findStuckSyncing,
+  findStale,
+  findStuckWithCutoff,
+  findAllWithSelect,
+  findByIdWithAccessAndInclude,
+  deleteById,
+  findByIdWithFullAccess,
+  findByUserIdWithInclude,
 };
 
 export default walletRepository;

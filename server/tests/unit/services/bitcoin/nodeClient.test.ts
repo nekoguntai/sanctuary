@@ -20,6 +20,8 @@ vi.mock('../../../../src/models/prisma', async () => {
   };
 });
 
+const mockSaveAsDefault = vi.fn<any>().mockResolvedValue(undefined);
+
 vi.mock('../../../../src/repositories', async () => {
   const { mockPrismaClient: prisma } = await import('../../../mocks/prisma');
   return {
@@ -28,6 +30,7 @@ vi.mock('../../../../src/repositories', async () => {
       findDefaultWithServers: (...args: unknown[]) => prisma.nodeConfig.findFirst(...args),
       findOrCreateDefault: vi.fn(),
       update: vi.fn(),
+      saveAsDefault: (...args: unknown[]) => mockSaveAsDefault(...args),
       electrumServer: {
         updateHealth: vi.fn().mockResolvedValue(undefined),
       },
@@ -487,29 +490,11 @@ describe('nodeClient service', () => {
     await saveNodeConfig(config);
     const active = await getActiveNodeConfig();
 
-    expect(mockPrismaClient.nodeConfig.updateMany).toHaveBeenCalledWith({
-      where: { isDefault: true },
-      data: { isDefault: false },
+    expect(mockSaveAsDefault).toHaveBeenCalledWith({
+      host: 'saved.example.com',
+      port: 50001,
+      useSsl: false,
     });
-    expect(mockPrismaClient.nodeConfig.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'default' },
-        update: expect.objectContaining({
-          host: 'saved.example.com',
-          port: 50001,
-          useSsl: false,
-          isDefault: true,
-        }),
-        create: expect.objectContaining({
-          id: 'default',
-          type: 'electrum',
-          host: 'saved.example.com',
-          port: 50001,
-          useSsl: false,
-          isDefault: true,
-        }),
-      })
-    );
     expect(active).toEqual(config);
   });
 

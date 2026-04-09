@@ -40,13 +40,10 @@ import { createLogger } from '../../../utils/logger';
 import { getErrorMessage } from '../../../utils/errors';
 import { nodeConfigRepository } from '../../../repositories';
 import { CircuitBreaker, createCircuitBreaker } from '../../circuitBreaker';
-import { updateElectrumPoolMetrics } from '../../../observability/metrics';
-
 import type {
   ElectrumPoolConfig,
   ServerConfig,
   ServerState,
-  ServerStats,
   PooledConnection,
   PooledConnectionHandle,
   PoolStats,
@@ -90,6 +87,8 @@ import {
   activateConnectionSingleMode,
   processWaitingQueue,
 } from './acquisitionQueue';
+import { computePoolStats, exportMetrics } from './metricsExporter';
+import { getSubscriptionConnection as getSubscriptionConn } from './subscriptionConnection';
 
 const log = createLogger('ELECTRUM_POOL:SVC');
 
@@ -556,105 +555,30 @@ export class ElectrumPool extends EventEmitter {
       await this.initialize();
     }
 
-    // Single-connection mode - use the one connection for everything
-    if (!this.config.enabled) {
-      let conn = this.connections.values().next().value as PooledConnection | undefined;
-      if (!conn || !conn.client.isConnected()) {
-        if (conn) {
-          await this.reconnectConnection(conn);
-        } else {
-          await this.createConnection();
-        }
-        conn = this.connections.values().next().value as PooledConnection;
-      }
-      return conn.client;
-    }
-
-    // Return existing subscription connection if available
-    if (this.subscriptionConnectionId.value) {
-      const conn = this.connections.get(this.subscriptionConnectionId.value);
-      if (conn && conn.state !== 'closed' && conn.client.isConnected()) {
-        return conn.client;
-      }
-      // Subscription connection is dead, clear it
-      this.subscriptionConnectionId.value = null;
-    }
-
-    // Create or designate a subscription connection
-    let conn = this.findIdleConnection();
-    if (!conn && this.connections.size < this.getEffectiveMaxConnections()) {
-      conn = await this.createConnection();
-    }
-
-    if (!conn) {
-      // All connections are active, create one even if over limit for subscriptions
-      log.warn('Creating extra connection for subscriptions (pool at capacity)');
-      conn = await this.createConnection();
-    }
-
-    conn.isDedicated = true;
-    conn.state = 'active';
-    this.subscriptionConnectionId.value = conn.id;
-
-    log.info(`Designated connection ${conn.id} for subscriptions`);
-    return conn.client;
+    return getSubscriptionConn(
+      this.connections,
+      this.subscriptionConnectionId,
+      this.config,
+      {
+        findIdleConnection: () => this.findIdleConnection(),
+        createConnection: () => this.createConnection(),
+        reconnectConnection: (conn) => this.reconnectConnection(conn),
+        getEffectiveMaxConnections: () => this.getEffectiveMaxConnections(),
+      },
+    );
   }
 
   /**
    * Get pool statistics
    */
   getPoolStats(): PoolStats {
-    const connections = Array.from(this.connections.values());
-    const activeCount = connections.filter((c) => c.state === 'active').length;
-    const idleCount = connections.filter((c) => c.state === 'idle').length;
-
-    // Build per-server stats
-    const now = Date.now();
-    const serverStatsArray: ServerStats[] = this.servers.map(server => {
-      const serverConnections = connections.filter(c => c.serverId === server.id);
-      const healthyConns = serverConnections.filter(c => c.state !== 'closed' && c.client.isConnected()).length;
-      const stats = this.serverStats.get(server.id);
-
-      // Check if currently in cooldown
-      const inCooldown = stats?.cooldownUntil ? stats.cooldownUntil.getTime() > now : false;
-
-      return {
-        serverId: server.id,
-        label: server.label,
-        host: server.host,
-        port: server.port,
-        connectionCount: serverConnections.length,
-        healthyConnections: healthyConns,
-        totalRequests: stats?.totalRequests || 0,
-        failedRequests: stats?.failedRequests || 0,
-        isHealthy: stats?.isHealthy ?? true,
-        lastHealthCheck: stats?.lastHealthCheck || null,
-        // Backoff state
-        consecutiveFailures: stats?.consecutiveFailures || 0,
-        backoffLevel: stats?.backoffLevel || 0,
-        cooldownUntil: inCooldown ? stats!.cooldownUntil : null,
-        weight: stats?.weight ?? 1.0,
-        // Health history (most recent first)
-        healthHistory: stats?.healthHistory || [],
-        // Capability flags
-        supportsVerbose: server.supportsVerbose,
-      };
-    });
-
-    return {
-      totalConnections: connections.length,
-      activeConnections: activeCount,
-      idleConnections: idleCount,
-      waitingRequests: this.waitingQueue.length,
-      totalAcquisitions: this.stats.totalAcquisitions,
-      averageAcquisitionTimeMs:
-        this.stats.totalAcquisitions > 0
-          ? Math.round(this.stats.totalAcquisitionTimeMs / this.stats.totalAcquisitions)
-          : 0,
-      healthCheckFailures: this.stats.healthCheckFailures,
-      serverCount: this.servers.length,
-      servers: serverStatsArray,
-    };
+    return computePoolStats(
+      this.connections,
+      this.servers,
+      this.serverStats,
+      this.waitingQueue.length,
+      this.stats,
+    );
   }
 
   /**
@@ -831,31 +755,8 @@ export class ElectrumPool extends EventEmitter {
    */
   private exportMetrics(): void {
     const poolStats = this.getPoolStats();
-    const circuitHealth = this.circuitBreaker.getHealth();
-
-    // Get circuit breaker state (already lowercase: 'closed' | 'open' | 'half-open')
-    const circuitState = circuitHealth.state;
-
-    updateElectrumPoolMetrics(
-      this.network,
-      {
-        totalConnections: poolStats.totalConnections,
-        activeConnections: poolStats.activeConnections,
-        idleConnections: poolStats.idleConnections,
-        waitingRequests: poolStats.waitingRequests,
-        totalAcquisitions: poolStats.totalAcquisitions,
-        averageAcquisitionTimeMs: poolStats.averageAcquisitionTimeMs,
-        healthCheckFailures: poolStats.healthCheckFailures,
-        servers: poolStats.servers.map(s => ({
-          label: s.label,
-          isHealthy: s.isHealthy,
-          connectionCount: s.connectionCount,
-          backoffLevel: s.backoffLevel,
-          weight: s.weight,
-        })),
-      },
-      circuitState
-    );
+    const circuitState = this.circuitBreaker.getHealth().state;
+    exportMetrics(this.network, poolStats, circuitState);
   }
 
   /**

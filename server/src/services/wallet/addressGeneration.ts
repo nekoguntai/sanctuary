@@ -4,7 +4,7 @@
  * Address derivation and gap limit management for wallets.
  */
 
-import prisma from '../../models/prisma';
+import { walletRepository, addressRepository } from '../../repositories';
 import * as addressDerivation from '../bitcoin/addressDerivation';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
@@ -44,16 +44,10 @@ export async function generateAddress(
   walletId: string,
   userId: string
 ): Promise<string> {
-  const wallet = await prisma.wallet.findFirst({
-    where: {
-      id: walletId,
-      users: { some: { userId } },
-    },
-    include: {
-      addresses: {
-        orderBy: { index: 'desc' },
-        take: 1,
-      },
+  const wallet = await walletRepository.findByIdWithAccessAndInclude(walletId, userId, {
+    addresses: {
+      orderBy: { index: 'desc' },
+      take: 1,
     },
   });
 
@@ -83,14 +77,12 @@ export async function generateAddress(
   );
 
   // Save to database
-  await prisma.address.create({
-    data: {
-      walletId,
-      address,
-      derivationPath,
-      index: nextIndex,
-      used: false,
-    },
+  await addressRepository.create({
+    walletId,
+    address,
+    derivationPath,
+    index: nextIndex,
+    used: false,
   });
 
   // Execute after hooks for audit logging

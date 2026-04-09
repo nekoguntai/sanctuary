@@ -817,6 +817,29 @@ export async function batchUpdateByIds(
   }
 }
 
+/**
+ * Find distinct wallet IDs with pending confirmations (< threshold)
+ */
+export async function findWalletIdsWithPendingConfirmations(
+  threshold: number = 6
+): Promise<string[]> {
+  const results = await prisma.transaction.findMany({
+    where: { confirmations: { lt: threshold } },
+    select: { walletId: true },
+    distinct: ['walletId'],
+  });
+  return results.map(r => r.walletId);
+}
+
+/**
+ * Find a transaction by txid across all wallets (no wallet filter)
+ */
+export async function findByTxidGlobal(txid: string): Promise<Transaction | null> {
+  return prisma.transaction.findFirst({
+    where: { txid },
+  });
+}
+
 // Export as namespace
 export const transactionRepository = {
   deleteByWalletId,
@@ -861,6 +884,8 @@ export const transactionRepository = {
   findBelowConfirmationThreshold,
   findWithMissingFields,
   batchUpdateByIds,
+  findWalletIdsWithPendingConfirmations,
+  findByTxidGlobal,
 };
 
 export default transactionRepository;

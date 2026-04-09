@@ -1,14 +1,16 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const {
-  mockWalletFindMany,
+  mockResetAllStuckSyncFlags,
+  mockFindStuckSyncing,
+  mockFindStale,
   mockWalletUpdate,
-  mockWalletUpdateMany,
   mockLogger,
 } = vi.hoisted(() => ({
-  mockWalletFindMany: vi.fn<any>(),
+  mockResetAllStuckSyncFlags: vi.fn<any>(),
+  mockFindStuckSyncing: vi.fn<any>(),
+  mockFindStale: vi.fn<any>(),
   mockWalletUpdate: vi.fn<any>(),
-  mockWalletUpdateMany: vi.fn<any>(),
   mockLogger: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -18,16 +20,14 @@ const {
 }));
 
 vi.mock('../../../../src/models/prisma', () => ({
-  default: {
-    wallet: {
-      findMany: (...args: unknown[]) => mockWalletFindMany(...args),
-      updateMany: (...args: unknown[]) => mockWalletUpdateMany(...args),
-    },
-  },
+  default: {},
 }));
 
 vi.mock('../../../../src/repositories', () => ({
   walletRepository: {
+    resetAllStuckSyncFlags: (...args: unknown[]) => mockResetAllStuckSyncFlags(...args),
+    findStuckSyncing: (...args: unknown[]) => mockFindStuckSyncing(...args),
+    findStale: (...args: unknown[]) => mockFindStale(...args),
     update: (id: string, data: unknown) => mockWalletUpdate(id, data),
   },
 }));
@@ -74,21 +74,18 @@ describe('staleWalletChecker', () => {
 
   describe('resetStuckSyncs', () => {
     it('resets wallets with syncInProgress=true', async () => {
-      mockWalletUpdateMany.mockResolvedValue({ count: 3 });
+      mockResetAllStuckSyncFlags.mockResolvedValue(3);
 
       await resetStuckSyncs();
 
-      expect(mockWalletUpdateMany).toHaveBeenCalledWith({
-        where: { syncInProgress: true },
-        data: { syncInProgress: false },
-      });
+      expect(mockResetAllStuckSyncFlags).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Reset 3 stuck sync flags'),
       );
     });
 
     it('does not log when no stuck syncs found', async () => {
-      mockWalletUpdateMany.mockResolvedValue({ count: 0 });
+      mockResetAllStuckSyncFlags.mockResolvedValue(0);
 
       await resetStuckSyncs();
 
@@ -96,7 +93,7 @@ describe('staleWalletChecker', () => {
     });
 
     it('handles errors gracefully', async () => {
-      mockWalletUpdateMany.mockRejectedValue(new Error('DB error'));
+      mockResetAllStuckSyncFlags.mockRejectedValue(new Error('DB error'));
 
       await resetStuckSyncs();
 
@@ -114,7 +111,7 @@ describe('staleWalletChecker', () => {
 
       await checkAndQueueStaleSyncs(state, queueSync);
 
-      expect(mockWalletFindMany).not.toHaveBeenCalled();
+      expect(mockFindStuckSyncing).not.toHaveBeenCalled();
     });
 
     it('unstucks wallets marked as syncing but not in activeSyncs', async () => {
@@ -122,13 +119,13 @@ describe('staleWalletChecker', () => {
         activeSyncs: new Set(['w2']),
       });
 
-      // First call: stuck wallets
-      mockWalletFindMany.mockResolvedValueOnce([
+      // Stuck wallets
+      mockFindStuckSyncing.mockResolvedValueOnce([
         { id: 'w1', name: 'Stuck Wallet' },
         { id: 'w2', name: 'Active Wallet' }, // this one IS in activeSyncs
       ]);
-      // Second call: stale wallets
-      mockWalletFindMany.mockResolvedValueOnce([]);
+      // Stale wallets
+      mockFindStale.mockResolvedValueOnce([]);
       mockWalletUpdate.mockResolvedValue({});
 
       const queueSync = vi.fn();
@@ -145,10 +142,10 @@ describe('staleWalletChecker', () => {
     it('queues stale wallets for low-priority sync', async () => {
       const state = makeSyncState();
 
-      // First call: no stuck wallets
-      mockWalletFindMany.mockResolvedValueOnce([]);
-      // Second call: stale wallets
-      mockWalletFindMany.mockResolvedValueOnce([
+      // No stuck wallets
+      mockFindStuckSyncing.mockResolvedValueOnce([]);
+      // Stale wallets
+      mockFindStale.mockResolvedValueOnce([
         { id: 'w1' },
         { id: 'w2' },
       ]);
@@ -166,8 +163,8 @@ describe('staleWalletChecker', () => {
     it('does not log when no stale wallets found', async () => {
       const state = makeSyncState();
 
-      mockWalletFindMany.mockResolvedValueOnce([]); // no stuck
-      mockWalletFindMany.mockResolvedValueOnce([]); // no stale
+      mockFindStuckSyncing.mockResolvedValueOnce([]);
+      mockFindStale.mockResolvedValueOnce([]);
 
       const queueSync = vi.fn();
       await checkAndQueueStaleSyncs(state, queueSync);
@@ -177,7 +174,7 @@ describe('staleWalletChecker', () => {
 
     it('handles errors gracefully', async () => {
       const state = makeSyncState();
-      mockWalletFindMany.mockRejectedValue(new Error('DB error'));
+      mockFindStuckSyncing.mockRejectedValue(new Error('DB error'));
 
       const queueSync = vi.fn();
       await checkAndQueueStaleSyncs(state, queueSync);
@@ -191,8 +188,8 @@ describe('staleWalletChecker', () => {
     it('does not log unstuck when none were stuck', async () => {
       const state = makeSyncState();
 
-      mockWalletFindMany.mockResolvedValueOnce([]); // no stuck
-      mockWalletFindMany.mockResolvedValueOnce([]); // no stale
+      mockFindStuckSyncing.mockResolvedValueOnce([]);
+      mockFindStale.mockResolvedValueOnce([]);
 
       await checkAndQueueStaleSyncs(state, vi.fn());
 

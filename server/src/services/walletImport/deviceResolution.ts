@@ -5,7 +5,7 @@
  * resolution against existing user devices during wallet import.
  */
 
-import prisma from '../../models/prisma';
+import { deviceRepository, walletRepository } from '../../repositories';
 import type { ParsedDevice, JsonImportDevice } from '../bitcoin/descriptorParser';
 import type { DeviceResolution } from './types';
 
@@ -40,15 +40,7 @@ export async function resolveDevices(
   originalDevices?: JsonImportDevice[]
 ): Promise<DeviceResolution[]> {
   // Fetch all user's existing devices
-  const existingDevices = await prisma.device.findMany({
-    where: { userId },
-    select: {
-      id: true,
-      fingerprint: true,
-      label: true,
-      xpub: true,
-    },
-  });
+  const existingDevices = await deviceRepository.findByUserId(userId);
 
   // Create maps for quick lookup
   const deviceByFingerprint = new Map(
@@ -104,17 +96,11 @@ export async function checkDuplicateWallet(
   userId: string,
   newFingerprints: Set<string>
 ): Promise<void> {
-  const userWallets = await prisma.wallet.findMany({
-    where: {
-      users: { some: { userId } },
-      descriptor: { not: null },
-    },
-    select: {
-      id: true,
-      name: true,
-      descriptor: true,
-    },
-  });
+  const userWallets = await walletRepository.findAccessibleWithSelect(userId, {
+    id: true,
+    name: true,
+    descriptor: true,
+  }, { descriptor: { not: null } });
 
   for (const wallet of userWallets) {
     if (!wallet.descriptor) continue;

@@ -7,7 +7,6 @@
  */
 
 import { walletRepository } from '../../repositories';
-import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { getConfig } from '../../config';
@@ -21,11 +20,9 @@ const log = createLogger('SYNC:STALE');
  */
 export async function resetStuckSyncs(): Promise<void> {
   try {
-    const result = await prisma.wallet.updateMany({
-      where: { syncInProgress: true },
-      data: { syncInProgress: false },
-    });
-    if (result.count > 0) {
+    const count = await walletRepository.resetAllStuckSyncFlags();
+    if (count > 0) {
+      const result = { count };
       log.info(`[SYNC] Reset ${result.count} stuck sync flags from previous session`);
     }
   } catch (error) {
@@ -49,12 +46,7 @@ export async function checkAndQueueStaleSyncs(
   try {
     // First, check for stuck syncs - wallets marked as syncing in DB but not in memory
     // This can happen if sync times out or crashes without proper cleanup
-    const stuckWallets = await prisma.wallet.findMany({
-      where: {
-        syncInProgress: true,
-      },
-      select: { id: true, name: true },
-    });
+    const stuckWallets = await walletRepository.findStuckSyncing();
 
     // Reset any wallet that's marked as syncing but isn't actually syncing
     let unstuckCount = 0;
@@ -72,16 +64,7 @@ export async function checkAndQueueStaleSyncs(
 
     // Now check for stale wallets that need syncing
     const { staleThresholdMs } = getConfig().sync;
-    const staleWallets = await prisma.wallet.findMany({
-      where: {
-        OR: [
-          { lastSyncedAt: null },
-          { lastSyncedAt: { lt: new Date(Date.now() - staleThresholdMs) } },
-        ],
-        syncInProgress: false,
-      },
-      select: { id: true },
-    });
+    const staleWallets = await walletRepository.findStale({ staleThresholdMs });
 
     for (const wallet of staleWallets) {
       queueSync(wallet.id, 'low');

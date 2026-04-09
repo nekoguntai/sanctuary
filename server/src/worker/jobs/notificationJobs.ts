@@ -16,7 +16,7 @@ import type {
   ConfirmationNotifyJobData,
   NotifyJobResult,
 } from './types';
-import prisma from '../../models/prisma';
+import { draftRepository, transactionRepository, walletRepository } from '../../repositories';
 import { notificationChannelRegistry } from '../../services/notifications/channels/registry';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
@@ -159,16 +159,7 @@ export const draftNotifyJob: WorkerJobHandler<DraftNotifyJobData, NotifyJobResul
 
     try {
       // Get draft details
-      const draft = await prisma.draftTransaction.findUnique({
-        where: { id: draftId },
-        select: {
-          id: true,
-          amount: true,
-          feeRate: true,
-          recipient: true,
-          label: true,
-        },
-      });
+      const draft = await draftRepository.findById(draftId);
 
       if (!draft) {
         log.warn(`Draft not found: ${draftId}`);
@@ -270,19 +261,15 @@ export const confirmationNotifyJob: WorkerJobHandler<ConfirmationNotifyJobData, 
 
     try {
       // Get transaction details
-      const transaction = await prisma.transaction.findFirst({
-        where: { txid, walletId },
-        select: {
-          type: true,
-          amount: true,
-          wallet: { select: { name: true } },
-        },
-      });
+      const transaction = await transactionRepository.findByTxid(txid, walletId);
 
       if (!transaction) {
         log.warn(`Transaction not found: ${txid}`);
         return { success: true, channelsNotified: 0 };
       }
+
+      // Get wallet name for notification context
+      const walletName = await walletRepository.getName(walletId);
 
       // Build a confirmation update as a transaction notification
       // The notification service handles the formatting
@@ -291,7 +278,7 @@ export const confirmationNotifyJob: WorkerJobHandler<ConfirmationNotifyJobData, 
         type: transaction.type as 'received' | 'sent' | 'consolidation',
         amount: transaction.amount,
         confirmations,
-        walletName: transaction.wallet.name,
+        walletName: walletName || undefined,
       }];
 
       const results = await notificationChannelRegistry.notifyTransactions(

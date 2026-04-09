@@ -8,7 +8,7 @@
  * - Owner override
  */
 
-import type { ApprovalRequest, ApprovalVote, DraftTransaction } from '../../generated/prisma/client';
+import type { ApprovalRequest, ApprovalVote } from '../../generated/prisma/client';
 import { policyRepository } from '../../repositories/policyRepository';
 import { draftRepository } from '../../repositories/draftRepository';
 import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError } from '../../errors';

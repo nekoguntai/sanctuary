@@ -9,7 +9,8 @@ import { requireWalletAccess } from '../../middleware/walletAccess';
 import { walletRepository, addressRepository } from '../../repositories';
 import * as addressDerivation from '../../services/bitcoin/addressDerivation';
 import { createLogger } from '../../utils/logger';
-import { bigIntToNumberOrZero, validatePagination, getErrorMessage } from '../../utils/errors';
+import { bigIntToNumberOrZero, getErrorMessage } from '../../utils/errors';
+import { extractPagination, setTruncationHeaders } from '../../utils/pagination';
 import { asyncHandler } from '../../errors/errorHandler';
 import { NotFoundError, ValidationError } from '../../errors/ApiError';
 import { INITIAL_ADDRESS_COUNT } from '../../constants';
@@ -25,15 +26,8 @@ const log = createLogger('ADDRESS:ROUTE');
 router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
   const { used, change } = req.query;
-  const hasPagination = req.query.limit !== undefined || req.query.offset !== undefined;
-  const DEFAULT_UNPAGED_LIMIT = 1000;
-  const { limit, offset } = validatePagination(
-    req.query.limit as string,
-    req.query.offset as string,
-    DEFAULT_UNPAGED_LIMIT
-  );
-  const effectiveLimit = hasPagination ? limit : DEFAULT_UNPAGED_LIMIT;
-  const effectiveOffset = hasPagination ? offset : 0;
+  const pagination = extractPagination(req.query as { limit?: string; offset?: string });
+  const { effectiveLimit, effectiveOffset } = pagination;
 
   // Get wallet for descriptor
   const wallet = await walletRepository.findById(walletId);
@@ -142,10 +136,7 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), asyncHan
     };
   });
 
-  if (!hasPagination) {
-    res.setHeader('X-Result-Limit', String(DEFAULT_UNPAGED_LIMIT));
-    res.setHeader('X-Result-Truncated', addresses.length >= DEFAULT_UNPAGED_LIMIT ? 'true' : 'false');
-  }
+  setTruncationHeaders(res, addresses.length, pagination);
 
   res.json(addressesWithBalance);
 }));

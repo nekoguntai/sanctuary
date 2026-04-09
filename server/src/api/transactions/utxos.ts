@@ -9,7 +9,8 @@ import { requireWalletAccess } from '../../middleware/walletAccess';
 import { systemSettingRepository, utxoRepository, transactionRepository } from '../../repositories';
 import { checkWalletAccess } from '../../services/accessControl';
 import { SystemSettingSchemas } from '../../utils/safeJson';
-import { bigIntToNumberOrZero, validatePagination } from '../../utils/errors';
+import { bigIntToNumberOrZero } from '../../utils/errors';
+import { extractPagination, setTruncationHeaders } from '../../utils/pagination';
 import { asyncHandler } from '../../errors/errorHandler';
 import { ValidationError, NotFoundError, ForbiddenError } from '../../errors/ApiError';
 
@@ -21,15 +22,8 @@ const router = Router();
  */
 router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
-  const hasPagination = req.query.limit !== undefined || req.query.offset !== undefined;
-  const DEFAULT_UNPAGED_LIMIT = 1000;
-  const { limit, offset } = validatePagination(
-    req.query.limit as string,
-    req.query.offset as string,
-    DEFAULT_UNPAGED_LIMIT
-  );
-  const effectiveLimit = hasPagination ? limit : DEFAULT_UNPAGED_LIMIT;
-  const effectiveOffset = hasPagination ? offset : 0;
+  const pagination = extractPagination(req.query as { limit?: string; offset?: string });
+  const { effectiveLimit, effectiveOffset } = pagination;
 
   // Get confirmation threshold setting
   const confirmationThreshold = await systemSettingRepository.getParsed('confirmationThreshold', SystemSettingSchemas.number, 3);
@@ -70,10 +64,7 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), asyncHandler
   const totalBalance = bigIntToNumberOrZero(summary._sum.amount);
   const totalCount = summary._count._all;
 
-  if (!hasPagination) {
-    res.setHeader('X-Result-Limit', String(DEFAULT_UNPAGED_LIMIT));
-    res.setHeader('X-Result-Truncated', utxos.length >= DEFAULT_UNPAGED_LIMIT ? 'true' : 'false');
-  }
+  setTruncationHeaders(res, utxos.length, pagination);
 
   res.json({
     utxos: serializedUtxos,

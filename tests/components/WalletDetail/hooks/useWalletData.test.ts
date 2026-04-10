@@ -411,6 +411,67 @@ describe('useWalletData', () => {
     expect(result.current.hasMoreAddresses).toBe(false);
   });
 
+  it('appends addresses using total mode when address summary is available', async () => {
+    // Default mock: getAddressSummary returns { totalAddresses: 2 }
+    const { result } = renderHook(() => useWalletData({ id: 'wallet-1', user: defaultUser }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.addressSummary?.totalAddresses).toBe(2);
+
+    // Append (reset=false) with addressSummary present -- covers the truthy
+    // branches of the ternaries at lines 162–163: addressSummary.totalAddresses / 'total'
+    vi.mocked(transactionsApi.getAddresses).mockResolvedValueOnce([makeAddress('append-1')] as never);
+    await act(async () => {
+      await result.current.loadAddresses('wallet-1', 10, 1, false);
+    });
+    // offset should be updated from append, and hasMore should be false (offset 2 >= totalAddresses 2)
+    expect(result.current.addresses.some(a => a.id === 'append-1')).toBe(true);
+  });
+
+  it('resets addresses with addressSummary present: hasMore true and false', async () => {
+    const { result } = renderHook(() => useWalletData({ id: 'wallet-1', user: defaultUser }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.addressSummary?.totalAddresses).toBe(2);
+
+    // Reset with fewer addresses than totalAddresses: hasMore = true (1 < 2)
+    vi.mocked(transactionsApi.getAddresses).mockResolvedValueOnce([makeAddress('reset-1')] as never);
+    await act(async () => {
+      await result.current.loadAddresses('wallet-1', 10, 0, true);
+    });
+    expect(result.current.hasMoreAddresses).toBe(true);
+
+    // Reset with addresses >= totalAddresses: hasMore = false (2 < 2 is false)
+    vi.mocked(transactionsApi.getAddresses).mockResolvedValueOnce([makeAddress('r-a'), makeAddress('r-b')] as never);
+    await act(async () => {
+      await result.current.loadAddresses('wallet-1', 10, 0, true);
+    });
+    expect(result.current.hasMoreAddresses).toBe(false);
+  });
+
+  it('loads addresses with null addressSummary (falsy branch)', async () => {
+    // Force addressSummary to be null by rejecting the summary fetch
+    vi.mocked(transactionsApi.getAddressSummary).mockRejectedValue(new Error('no summary'));
+    vi.mocked(transactionsApi.getAddresses).mockResolvedValue([makeAddress('a1'), makeAddress('a2')] as never);
+
+    const { result } = renderHook(() => useWalletData({ id: 'wallet-1', user: defaultUser }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.addressSummary).toBeNull();
+
+    // Reset path with null addressSummary — covers line 159 falsy branch
+    vi.mocked(transactionsApi.getAddresses).mockResolvedValueOnce([makeAddress('r1')] as never);
+    await act(async () => {
+      await result.current.loadAddresses('wallet-1', 10, 0, true);
+    });
+    // Falls back to pageSize comparison: 1 === 10 is false, so hasMore = false
+    expect(result.current.hasMoreAddresses).toBe(false);
+
+    // Append path with null addressSummary — covers lines 162-163 falsy branches
+    vi.mocked(transactionsApi.getAddresses).mockResolvedValueOnce([makeAddress('r2')] as never);
+    await act(async () => {
+      await result.current.loadAddresses('wallet-1', 10, 1, false);
+    });
+    expect(result.current.hasMoreAddresses).toBe(false);
+  });
+
   it('uses singular pending-draft notification title and skips hidden-tab refresh', async () => {
     vi.mocked(draftsApi.getDrafts).mockResolvedValueOnce([{ id: 'draft-1' }] as never);
 

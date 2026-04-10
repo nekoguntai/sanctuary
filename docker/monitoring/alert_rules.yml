@@ -74,24 +74,24 @@ groups:
     rules:
       # Electrum pool unhealthy
       - alert: ElectrumPoolUnhealthy
-        expr: sanctuary_electrum_pool_healthy_connections < 1
+        expr: sum(sanctuary_electrum_server_healthy) < 1
         for: 2m
         labels:
           severity: critical
         annotations:
           summary: "No healthy Electrum connections"
-          description: "All Electrum servers are unavailable"
+          description: "No Electrum servers report healthy. Current healthy count: {{ $value }}"
 
       # Electrum pool degraded
       - alert: ElectrumPoolDegraded
         expr: |
-          sanctuary_electrum_pool_healthy_connections < sanctuary_electrum_pool_size * 0.5
+          sum(sanctuary_electrum_server_healthy) / count(sanctuary_electrum_server_healthy) < 0.5
         for: 5m
         labels:
           severity: warning
         annotations:
           summary: "Electrum pool degraded"
-          description: "Less than 50% of Electrum connections are healthy"
+          description: "{{ $value | humanizePercentage }} of Electrum servers are healthy (threshold: 50%)"
 
       # High database query latency
       - alert: HighDatabaseLatency

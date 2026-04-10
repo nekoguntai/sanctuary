@@ -14,6 +14,7 @@
 import http from 'http';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
+import { registry } from '../observability/metrics/registry';
 
 const log = createLogger('WORKER:HEALTH');
 
@@ -112,7 +113,7 @@ export function startHealthServer(options: HealthServerOptions): HealthServerHan
         }
 
         case '/metrics': {
-          // Metrics endpoint
+          // Metrics endpoint (JSON format for backward compat)
           if (healthProvider.getMetrics) {
             const metrics = await healthProvider.getMetrics();
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -128,6 +129,14 @@ export function startHealthServer(options: HealthServerOptions): HealthServerHan
               timestamp: new Date().toISOString(),
             }));
           }
+          break;
+        }
+
+        case '/metrics/prometheus': {
+          // Prometheus text format for scraping
+          const metricsText = await registry.metrics();
+          res.writeHead(200, { 'Content-Type': registry.contentType });
+          res.end(metricsText);
           break;
         }
 

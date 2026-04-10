@@ -7,8 +7,27 @@
 import type { Worker } from 'bullmq';
 import { createLogger } from '../../utils/logger';
 import { deadLetterQueue, type DeadLetterCategory } from '../../services/deadLetterQueue';
+import { jobProcessingDuration } from '../../observability/metrics/infrastructureMetrics';
 
 const log = createLogger('WORKER:QUEUE_EVENTS');
+
+/**
+ * Observe job processing duration if timing data is available.
+ */
+function observeJobDuration(
+  queueName: string,
+  jobName: string,
+  status: 'completed' | 'failed',
+  processedOn: number | undefined,
+  finishedOn: number | undefined,
+): void {
+  if (finishedOn !== undefined && processedOn !== undefined) {
+    jobProcessingDuration.observe(
+      { job_name: `${queueName}:${jobName}`, status },
+      (finishedOn - processedOn) / 1000,
+    );
+  }
+}
 
 /**
  * Map queue name to DLQ category
@@ -34,10 +53,10 @@ export function setupWorkerEventHandlers(
   worker.on('completed', (job) => {
     log.debug(`Job completed: ${queueName}:${job.name}`, {
       jobId: job.id,
-      duration: job.finishedOn && job.processedOn
-        ? job.finishedOn - job.processedOn
-        : undefined,
+      duration: job.finishedOn && job.processedOn ? job.finishedOn - job.processedOn : undefined,
     });
+
+    observeJobDuration(queueName, job.name, 'completed', job.processedOn, job.finishedOn);
 
     if (jobCompletionTimes) {
       jobCompletionTimes.set(`${queueName}:${job.name}`, Date.now());
@@ -56,6 +75,10 @@ export function setupWorkerEventHandlers(
       maxAttempts,
       exhausted: isExhausted,
     });
+
+    if (job) {
+      observeJobDuration(queueName, job.name, 'failed', job.processedOn, job.finishedOn);
+    }
 
     // Route exhausted jobs to dead letter queue for visibility and manual retry
     if (isExhausted && job) {

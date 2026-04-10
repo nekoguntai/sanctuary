@@ -45,6 +45,8 @@ export const createWorkerTestHarness = async (
     getRegisteredJobs: vi.fn(() => ['test-job']),
     getHealth: vi.fn(async () => ({ queues: {} })),
     isHealthy: vi.fn(() => true),
+    getJobCompletionTimes: vi.fn(() => ({})),
+    onJobCompleted: vi.fn(),
     shutdown: vi.fn(async () => undefined),
   };
 
@@ -123,6 +125,7 @@ export const createWorkerTestHarness = async (
     isRedisConnected: vi.fn(() => redisConnected),
     shutdownDistributedLock: vi.fn(() => undefined),
     getDistributedEventBus: () => ({ on: vi.fn(), emit: vi.fn() }),
+    shutdownNotificationDispatcher: vi.fn(async () => undefined),
   }));
 
   vi.doMock('../../../src/services/featureFlagService', () => ({
@@ -156,6 +159,20 @@ export const createWorkerTestHarness = async (
 
   vi.doMock('../../../src/worker/jobs', () => ({
     registerWorkerJobs,
+  }));
+
+  vi.doMock('../../../src/observability/metrics/registry', () => ({
+    metricsService: { initialize: vi.fn() },
+    registry: { metrics: vi.fn(async () => ''), contentType: 'text/plain' },
+  }));
+
+  vi.doMock('../../../src/observability/metrics/infrastructureMetrics', () => ({
+    jobProcessingDuration: { observe: vi.fn() },
+    jobQueueDepth: { set: vi.fn() },
+  }));
+
+  vi.doMock('../../../src/observability/metrics/helpers', () => ({
+    updateJobQueueMetrics: vi.fn(),
   }));
 
   const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);

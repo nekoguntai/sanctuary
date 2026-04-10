@@ -23,6 +23,9 @@ const otelPromise = initializeOpenTelemetry();
 import { getConfig } from './config';
 import { createLogger } from './utils/logger';
 import { getErrorMessage } from './utils/errors';
+// Initialize Prometheus metrics collection for the worker process
+import { metricsService } from './observability/metrics/registry';
+import { updateJobQueueMetrics } from './observability/metrics/helpers';
 import { connectWithRetry, disconnect } from './models/prisma';
 import { initializeRedis, shutdownRedis, isRedisConnected, shutdownDistributedLock, getDistributedEventBus, shutdownNotificationDispatcher } from './infrastructure';
 import { WorkerJobQueue } from './worker/workerJobQueue';
@@ -41,6 +44,7 @@ let jobQueue: WorkerJobQueue | null = null;
 let electrumManager: ElectrumSubscriptionManager | null = null;
 let healthServer: HealthServerHandle | null = null;
 let reconciliationTimer: NodeJS.Timeout | null = null;
+let metricsTimer: NodeJS.Timeout | null = null;
 let isShuttingDown = false;
 
 // Reconciliation interval - clean up stale subscriptions every 15 minutes
@@ -198,6 +202,22 @@ async function startWorker(): Promise<void> {
       },
     },
   });
+
+  // Initialize Prometheus metrics service
+  metricsService.initialize();
+
+  // Periodically update job queue depth metrics for Prometheus
+  metricsTimer = setInterval(async () => {
+    if (isShuttingDown || !jobQueue) return;
+    try {
+      const health = await jobQueue.getHealth();
+      for (const [queue, stats] of Object.entries(health.queues)) {
+        updateJobQueueMetrics(queue, stats.waiting, stats.active, stats.delayed, stats.failed);
+      }
+    } catch (error) {
+      log.debug('Metrics update failed (best-effort)', { error: getErrorMessage(error) });
+    }
+  }, 15_000);
 
   // Schedule recurring jobs
   await scheduleRecurringJobs();
@@ -538,10 +558,14 @@ async function shutdown(signal: string): Promise<void> {
 
   log.info(`${signal} received, shutting down worker...`);
 
-  // Stop reconciliation timer
+  // Stop timers
   if (reconciliationTimer) {
     clearInterval(reconciliationTimer);
     reconciliationTimer = null;
+  }
+  if (metricsTimer) {
+    clearInterval(metricsTimer);
+    metricsTimer = null;
   }
 
   // Stop health server first

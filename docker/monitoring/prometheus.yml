@@ -9,11 +9,13 @@ global:
   external_labels:
     monitor: 'sanctuary'
 
-# Alerting (optional - add Alertmanager if needed)
+# Alerting (optional)
+# To enable alert notifications, deploy Alertmanager and uncomment:
 # alerting:
 #   alertmanagers:
 #     - static_configs:
-#         - targets: []
+#         - targets: ['alertmanager:9093']
+# See: https://prometheus.io/docs/alerting/latest/alertmanager/
 
 # Rule files - alert rules for Sanctuary
 rule_files:
@@ -25,6 +27,14 @@ scrape_configs:
     static_configs:
       - targets: ['backend:3001']
     metrics_path: /metrics
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Sanctuary Worker (Background Jobs, Electrum Subscriptions)
+  - job_name: 'sanctuary-worker'
+    static_configs:
+      - targets: ['worker:3002']
+    metrics_path: /metrics/prometheus
     scrape_interval: 10s
     scrape_timeout: 5s
 

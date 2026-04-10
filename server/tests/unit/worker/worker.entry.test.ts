@@ -159,6 +159,20 @@ vi.mock('../../../src/worker/jobs', () => ({
   registerWorkerJobs: mocks.registerWorkerJobs,
 }));
 
+vi.mock('../../../src/observability/metrics/registry', () => ({
+  metricsService: { initialize: vi.fn() },
+  registry: { metrics: vi.fn().mockResolvedValue(''), contentType: 'text/plain' },
+}));
+
+vi.mock('../../../src/observability/metrics/infrastructureMetrics', () => ({
+  jobProcessingDuration: { observe: vi.fn() },
+  jobQueueDepth: { set: vi.fn() },
+}));
+
+vi.mock('../../../src/observability/metrics/helpers', () => ({
+  updateJobQueueMetrics: vi.fn(),
+}));
+
 describe('worker entrypoint', () => {
   beforeEach(() => {
     vi.resetModules();

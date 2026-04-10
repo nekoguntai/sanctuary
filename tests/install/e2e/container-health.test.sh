@@ -310,11 +310,11 @@ test_frontend_javascript_bundle() {
 
     log_debug "Found JS bundle: $js_path"
 
-    # Fetch the JS bundle
-    local js_content=$(compose_exec frontend wget -q -O - --no-check-certificate "https://localhost:443${js_path}" 2>/dev/null)
+    # Fetch the JS bundle (disable gzip to measure actual size)
+    local js_content=$(compose_exec frontend wget -q -O - --no-check-certificate --header='Accept-Encoding: identity' "https://localhost:443${js_path}" 2>/dev/null)
 
     if [ -z "$js_content" ]; then
-        js_content=$(compose_exec frontend wget -q -O - "http://localhost:80${js_path}" 2>/dev/null)
+        js_content=$(compose_exec frontend wget -q -O - --header='Accept-Encoding: identity' "http://localhost:80${js_path}" 2>/dev/null)
     fi
 
     # Check bundle size (should be substantial - at least 100KB)

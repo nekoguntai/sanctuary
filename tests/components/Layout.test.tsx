@@ -2,10 +2,10 @@
  * Tests for Layout component
  */
 
-import { render,screen,waitFor } from '@testing-library/react';
+import { cleanup,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach,describe,expect,it,vi } from 'vitest';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { Layout } from '../../components/Layout';
 import * as AppNotificationContext from '../../contexts/AppNotificationContext';
 import * as UserContext from '../../contexts/UserContext';
@@ -87,6 +87,13 @@ describe('Layout', () => {
     onLogout: vi.fn(),
     children: <div data-testid="page-content">Page Content</div>,
   };
+
+  afterEach(async () => {
+    cleanup();
+    // Flush pending microtasks so async effects (getStatus, getDrafts)
+    // settle before vitest tears down the worker RPC channel
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();

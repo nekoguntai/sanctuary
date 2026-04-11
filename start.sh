@@ -83,10 +83,10 @@ check_ssl_expiry() {
 
                 if [ "$days_left" -lt 30 ]; then
                     # Only auto-regenerate self-signed certs; warn for CA-signed
-                    local issuer=$(openssl x509 -issuer -noout -in "$cert_file" 2>/dev/null)
-                    local subject=$(openssl x509 -subject -noout -in "$cert_file" 2>/dev/null)
+                    local issuer_dn=$(openssl x509 -issuer -noout -in "$cert_file" 2>/dev/null | sed 's/^issuer= *//')
+                    local subject_dn=$(openssl x509 -subject -noout -in "$cert_file" 2>/dev/null | sed 's/^subject= *//')
                     local is_self_signed=false
-                    if [ "$issuer" = "$subject" ]; then
+                    if [ "$issuer_dn" = "$subject_dn" ]; then
                         is_self_signed=true
                     fi
 

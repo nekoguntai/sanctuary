@@ -33,7 +33,7 @@ This document describes the architectural patterns and infrastructure used in th
 
 ## Service Lifecycle Registry
 
-The service registry is a lifecycle registry, not an IoC container. It starts and stops long-running background services in a predictable order.
+The service registry is a lifecycle registry, not an IoC container. It starts and stops long-running background services in dependency order.
 
 **Location:** `src/services/serviceRegistry.ts`
 
@@ -66,7 +66,7 @@ const startupResults = await startRegisteredServices();
 
 ### Shutdown
 
-`stopRegisteredServices()` stops services in reverse registration order and logs individual stop failures without skipping the rest of shutdown:
+`stopRegisteredServices()` stops services in reverse dependency order and logs individual stop failures without skipping the rest of shutdown. If a service declares invalid dependencies during shutdown, the registry logs the graph error and falls back to reverse registration order so graceful shutdown can continue:
 
 ```typescript
 import { stopRegisteredServices } from './services/serviceRegistry';
@@ -81,7 +81,7 @@ await stopRegisteredServices();
 | `registerService()` | Register a managed service with `start` and optional `stop` |
 | `getRegisteredServices()` | Return registered services in registration order |
 | `startRegisteredServices()` | Start services through the startup manager |
-| `stopRegisteredServices()` | Stop services in reverse registration order |
+| `stopRegisteredServices()` | Stop services in reverse dependency order, falling back to reverse registration order if graph validation fails |
 
 Do not use this registry for request-time service lookup or dependency injection. For tests, mock the imported service module or repository module directly.
 

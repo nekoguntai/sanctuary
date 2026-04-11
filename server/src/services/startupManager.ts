@@ -13,6 +13,7 @@
  */
 
 import { executeWithRecovery, createRecoveryPolicy } from './recoveryPolicy';
+import { orderByDependencies } from './serviceLifecycleGraph';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('STARTUP:SVC');
@@ -143,15 +144,15 @@ export async function startAllServices(
   services: ServiceDefinition[]
 ): Promise<ServiceStartupResult[]> {
   state.startedAt = new Date();
+  state.completedAt = null;
+  state.overallSuccess = false;
   state.services.clear();
-
-  validateDependencies(services);
 
   const results: ServiceStartupResult[] = [];
   const started = new Set<string>();
 
   // Sort services by dependencies
-  const sortedServices = topologicalSort(services);
+  const sortedServices = orderByDependencies(services);
 
   for (const service of sortedServices) {
     // Check dependencies are started
@@ -203,57 +204,6 @@ export async function startAllServices(
   log.info('Service startup complete', summary);
 
   return results;
-}
-
-/**
- * Topological sort for dependency ordering
- */
-function topologicalSort(services: ServiceDefinition[]): ServiceDefinition[] {
-  const result: ServiceDefinition[] = [];
-  const visited = new Set<string>();
-  const visiting = new Set<string>();
-
-  const serviceMap = new Map(services.map(s => [s.name, s]));
-
-  function visit(name: string) {
-    if (visited.has(name)) return;
-    if (visiting.has(name)) {
-      throw new Error(`Circular dependency detected: ${name}`);
-    }
-
-    const service = serviceMap.get(name)!;
-
-    visiting.add(name);
-
-    for (const dep of service.dependsOn ?? []) {
-      visit(dep);
-    }
-
-    visiting.delete(name);
-    visited.add(name);
-    result.push(service);
-  }
-
-  for (const service of services) {
-    visit(service.name);
-  }
-
-  return result;
-}
-
-/**
- * Ensure all declared dependencies exist
- */
-function validateDependencies(services: ServiceDefinition[]): void {
-  const names = new Set(services.map(service => service.name));
-
-  for (const service of services) {
-    for (const dep of service.dependsOn ?? []) {
-      if (!names.has(dep)) {
-        throw new Error(`Service ${service.name} depends on missing service ${dep}`);
-      }
-    }
-  }
 }
 
 /**

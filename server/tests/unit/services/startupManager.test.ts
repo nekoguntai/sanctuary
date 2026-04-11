@@ -198,6 +198,21 @@ describe('StartupManager', () => {
       );
     });
 
+    it('should clear stale completion state when dependency validation fails', async () => {
+      await startAllServices([createService('service-a')]);
+
+      await expect(startAllServices([
+        createService('service-b', { dependsOn: ['missing-service'] }),
+      ])).rejects.toThrow('Service service-b depends on missing service missing-service');
+
+      const status = getStartupStatus();
+
+      expect(status.started).toBe(true);
+      expect(status.completedAt).toBeNull();
+      expect(status.overallSuccess).toBe(false);
+      expect(status.services).toEqual([]);
+    });
+
     it('should skip service when dependency fails', async () => {
       const services: ServiceDefinition[] = [
         createService('service-a', {

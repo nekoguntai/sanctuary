@@ -100,4 +100,64 @@ describe('serviceRegistry', () => {
       error: 'fail-stop',
     });
   });
+
+  it('stops services in reverse dependency order', async () => {
+    const stopOrder: string[] = [];
+    const registry = await loadRegistry();
+    registry.registerService({
+      name: 'api',
+      dependsOn: ['cache'],
+      start: vi.fn(),
+      stop: vi.fn(() => {
+        stopOrder.push('api');
+      }),
+    });
+    registry.registerService({
+      name: 'database',
+      start: vi.fn(),
+      stop: vi.fn(() => {
+        stopOrder.push('database');
+      }),
+    });
+    registry.registerService({
+      name: 'cache',
+      dependsOn: ['database'],
+      start: vi.fn(),
+      stop: vi.fn(() => {
+        stopOrder.push('cache');
+      }),
+    });
+
+    await registry.stopRegisteredServices();
+
+    expect(stopOrder).toEqual(['api', 'cache', 'database']);
+  });
+
+  it('falls back to reverse registration order when the shutdown graph is invalid', async () => {
+    const stopOrder: string[] = [];
+    const registry = await loadRegistry();
+    registry.registerService({
+      name: 'api',
+      dependsOn: ['missing-cache'],
+      start: vi.fn(),
+      stop: vi.fn(() => {
+        stopOrder.push('api');
+      }),
+    });
+    registry.registerService({
+      name: 'database',
+      start: vi.fn(),
+      stop: vi.fn(() => {
+        stopOrder.push('database');
+      }),
+    });
+
+    await registry.stopRegisteredServices();
+
+    expect(stopOrder).toEqual(['database', 'api']);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Failed to resolve service shutdown order; using reverse registration order',
+      { error: 'Service api depends on missing service missing-cache' }
+    );
+  });
 });

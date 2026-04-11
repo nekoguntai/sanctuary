@@ -96,7 +96,7 @@ Understanding these dependencies is crucial for:
 
 ## Startup Order
 
-The `StartupManager` handles background service startup with proper ordering:
+The `StartupManager` handles background service startup with dependency ordering. Shutdown uses the same lifecycle graph in reverse so dependents stop before the services they depend on:
 
 ```typescript
 // From index.ts
@@ -171,8 +171,11 @@ src/utils/
 
 ```
 src/services/
+├── serviceLifecycleGraph.ts ← Orders service startup/shutdown dependencies
+│   └── Depends on: none
+│
 ├── startupManager.ts      ← Orchestrates service startup
-│   └── Depends on: recoveryPolicy, logger
+│   └── Depends on: serviceLifecycleGraph, recoveryPolicy, logger
 │
 ├── syncService.ts         ← Wallet sync orchestration
 │   └── Depends on: electrumPool, prisma, websocket, recoveryPolicy

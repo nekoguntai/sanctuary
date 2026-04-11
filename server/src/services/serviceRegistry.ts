@@ -5,6 +5,7 @@
  */
 
 import { startAllServices, type ServiceDefinition, type ServiceStartupResult } from './startupManager';
+import { orderForShutdown } from './serviceLifecycleGraph';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 
@@ -31,9 +32,19 @@ export async function startRegisteredServices(): Promise<ServiceStartupResult[]>
 }
 
 export async function stopRegisteredServices(): Promise<void> {
-  const registered = getRegisteredServices().slice().reverse();
+  const registered = getRegisteredServices();
+  let stopOrder: ManagedService[];
 
-  for (const service of registered) {
+  try {
+    stopOrder = orderForShutdown(registered);
+  } catch (error) {
+    log.warn('Failed to resolve service shutdown order; using reverse registration order', {
+      error: getErrorMessage(error),
+    });
+    stopOrder = registered.slice().reverse();
+  }
+
+  for (const service of stopOrder) {
     if (!service.stop) continue;
     try {
       await service.stop();
@@ -45,4 +56,3 @@ export async function stopRegisteredServices(): Promise<void> {
     }
   }
 }
-

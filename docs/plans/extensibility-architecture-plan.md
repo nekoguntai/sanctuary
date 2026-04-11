@@ -84,15 +84,23 @@ Verification:
 
 ### Phase 4: Lifecycle Graph
 
-Status: Not started
+Status: Completed 2026-04-11
 
 Goal: make backend service startup/shutdown ordering explicit and testable.
 
 Planned work:
 
-- Extend the existing lifecycle registry or add a small startup graph abstraction.
-- Migrate low-risk services from manual startup/shutdown in `server/src/index.ts`.
-- Test dependency order and reverse shutdown order.
+- Completed: added `server/src/services/serviceLifecycleGraph.ts` as a pure lifecycle dependency graph helper.
+- Completed: kept startup dependency ordering in the existing startup manager while moving the graph logic out of startup-only code.
+- Completed: changed `stopRegisteredServices()` to stop in reverse dependency order, with reverse registration order as a shutdown fallback if graph validation fails.
+- Completed: added focused graph and service registry tests for dependency order, reverse shutdown order, missing dependencies, circular dependencies, duplicate names, stop-error tolerance, and invalid-graph fallback.
+- Deferred: migrating currently manual services from `server/src/index.ts` because validation showed the existing registered services have no production dependencies yet, and moving manual startup tasks would change their startup timing relative to database, Redis, migrations, and server listen.
+
+Verification:
+
+- Passed: `cd server && npx vitest run tests/unit/services/serviceLifecycleGraph.test.ts tests/unit/services/serviceRegistry.test.ts tests/unit/services/startupManager.test.ts`
+- Passed: `cd server && npx tsc --noEmit`
+- Passed: `git diff --check`
 
 ### Phase 5: Registry Helper Evaluation
 

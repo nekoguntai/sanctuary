@@ -5,96 +5,9 @@
  * table column configuration, and related UI types.
  */
 
-export type BackgroundOption =
-  // Static backgrounds
-  | 'minimal'
-  | 'zen'
-  | 'circuit'
-  | 'topography'
-  | 'waves'
-  | 'lines'
-  | 'sanctuary'
-  | 'sanctuary-hero'
-  | 'hexagons'
-  | 'triangles'
-  | 'stars'
-  | 'aurora'
-  | 'dots'
-  | 'cross'
-  | 'mountains'
-  | 'noise'
-  // Bitcoin themed
-  | 'sakura-petals'
-  | 'floating-shields'
-  | 'bitcoin-particles'
-  | 'stacking-blocks'
-  | 'digital-rain'
-  | 'constellation'
-  | 'sanctuary-logo'
-  | 'sats-symbol'
-  | 'hash-storm'
-  // Weather
-  | 'snowfall'
-  | 'fireflies'
-  | 'gentle-rain'
-  | 'northern-lights'
-  | 'thunderstorm'
-  | 'ice-crystals'
-  | 'raindrop-window'
-  // Nature
-  | 'ink-drops'
-  | 'rippling-water'
-  | 'falling-leaves'
-  | 'embers-rising'
-  | 'butterfly-garden'
-  | 'dandelion-wishes'
-  | 'lavender-fields'
-  | 'serene-meadows'
-  | 'autumn-wind'
-  // Sumi-e / Zen
-  | 'brush-stroke-blossoms'
-  | 'ink-branch'
-  | 'calligraphy-wind'
-  | 'mountain-mist'
-  | 'koi-shadows'
-  | 'bamboo-sway'
-  | 'ink-on-water'
-  | 'enso-circles'
-  | 'zen-sand-garden'
-  | 'smoke-calligraphy'
-  | 'breath'
-  | 'sakura-redux'
-  // Water
-  | 'gentle-waves'
-  | 'tide-pools'
-  | 'bioluminescent-beach'
-  | 'tidal-patterns'
-  | 'jellyfish-drift'
-  // Sky
-  | 'stargazing'
-  | 'moonlit-clouds'
-  | 'eclipse'
-  | 'fireworks'
-  // Landscape
-  | 'misty-valley'
-  | 'desert-dunes'
-  | 'volcanic-islands'
-  | 'still-ponds'
-  // Creatures
-  | 'duckling-parade'
-  | 'bunny-meadow'
-  // Whimsical
-  | 'floating-lanterns'
-  | 'paper-boats'
-  | 'paper-airplanes'
-  | 'wind-chimes'
-  | 'lotus-bloom'
-  | 'sunset-sailing'
-  | 'train-station'
-  // Organic
-  | 'mycelium-network'
-  | 'oil-slick'
-  | 'wisteria';
+import type { GlobalBackgroundPatternId } from '../themes/patterns';
+
+export type BackgroundOption = GlobalBackgroundPatternId;
 
 export type ThemeOption =
   | 'sanctuary'

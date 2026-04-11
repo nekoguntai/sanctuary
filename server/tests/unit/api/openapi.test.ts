@@ -62,4 +62,68 @@ describe('OpenAPI Docs', () => {
     expect(openApiSpec.paths['/auth/login']).toBeDefined();
     expect(openApiSpec.paths['/wallets']).toBeDefined();
   });
+
+  it('documents wallet delete as a 204 empty response', () => {
+    const deleteResponses = openApiSpec.paths['/wallets/{walletId}'].delete.responses;
+
+    expect(deleteResponses).toHaveProperty('204');
+    expect(deleteResponses).not.toHaveProperty('200');
+    expect(deleteResponses[204]).not.toHaveProperty('content');
+  });
+
+  it('documents implemented device item routes', () => {
+    const deviceItemPath = openApiSpec.paths['/devices/{deviceId}'];
+
+    expect(deviceItemPath.get).toBeDefined();
+    expect(deviceItemPath.patch).toBeDefined();
+    expect(deviceItemPath.delete).toBeDefined();
+
+    for (const method of ['get', 'patch', 'delete'] as const) {
+      expect(deviceItemPath[method].parameters).toContainEqual(
+        expect.objectContaining({
+          name: 'deviceId',
+          in: 'path',
+          required: true,
+        }),
+      );
+    }
+  });
+
+  it('documents device create merge and conflict statuses', () => {
+    const createResponses = openApiSpec.paths['/devices'].post.responses;
+    const createSchema = openApiSpec.components.schemas.CreateDeviceRequest;
+
+    expect(createResponses).toHaveProperty('201');
+    expect(createResponses).toHaveProperty('200');
+    expect(createResponses).toHaveProperty('409');
+    expect(createResponses[200].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/DeviceMergeResponse',
+    });
+    expect(createResponses[409].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/DeviceConflictResponse',
+    });
+    expect(createSchema.required).toEqual(expect.arrayContaining(['type', 'label', 'fingerprint']));
+    expect(createSchema.properties).toHaveProperty('accounts');
+    expect(createSchema.properties).toHaveProperty('merge');
+    expect(createSchema.properties).toHaveProperty('modelSlug');
+  });
+
+  it('documents device delete as 204 with not-found and conflict errors', () => {
+    const deleteResponses = openApiSpec.paths['/devices/{deviceId}'].delete.responses;
+
+    expect(deleteResponses).toHaveProperty('204');
+    expect(deleteResponses[204]).not.toHaveProperty('content');
+    expect(deleteResponses[404].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/ApiError',
+    });
+    expect(deleteResponses[409].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/ApiError',
+    });
+  });
+
+  it('exports device schemas used by the item route contracts', () => {
+    expect(openApiSpec.components.schemas.UpdateDeviceRequest).toBeDefined();
+    expect(openApiSpec.components.schemas.DeviceMergeResponse).toBeDefined();
+    expect(openApiSpec.components.schemas.DeviceConflictResponse).toBeDefined();
+  });
 });

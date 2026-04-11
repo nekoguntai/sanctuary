@@ -8,20 +8,20 @@
  * - Component unmount during async load (cancelled flag)
  */
 
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { useSakuraPetalsMock } = vi.hoisted(() => ({
   useSakuraPetalsMock: vi.fn(),
 }));
 
-// Mock animatedPatterns to include a fake pattern with no matching animation file
-vi.mock('../../components/animatedPatterns', () => {
+// Mock registry-backed animated detection to include a fake pattern with no matching animation file
+vi.mock('../../themes/patterns', () => {
   const patterns = ['sakura-petals', 'snowfall', 'fireflies', 'test-nonexistent'] as const;
   const patternSet = new Set<string>(patterns);
   return {
     ANIMATED_PATTERNS: patterns,
-    isAnimatedPattern: (id: string) => patternSet.has(id),
+    isAnimatedBackgroundPattern: (id: string) => patternSet.has(id),
   };
 });
 
@@ -63,14 +63,14 @@ describe('AnimatedBackground lazy loading edge cases', () => {
   });
 
   it('renders canvas but no runner when glob has no matching module', async () => {
-    // 'test-nonexistent' passes isAnimatedPattern but has no file in import.meta.glob
+    // 'test-nonexistent' passes animated detection but has no file in import.meta.glob
     const { container } = render(
       <AnimatedBackground pattern="test-nonexistent" darkMode={false} />
     );
 
     await flushAsync();
 
-    // Canvas renders because pattern passes isAnimatedPattern, but no AnimationRunner
+    // Canvas renders because pattern passes animated detection, but no AnimationRunner
     expect(container.querySelector('canvas')).not.toBeNull();
   });
 

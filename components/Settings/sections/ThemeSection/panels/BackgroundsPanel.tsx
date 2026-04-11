@@ -6,16 +6,17 @@
 
 import React, { useState } from 'react';
 import { Search, X, Heart, Sparkles, Calendar, ChevronDown } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import type { BackgroundOption, SeasonalBackgrounds } from '../../../../../types';
 import { Season, themeRegistry } from '../../../../../themes';
-import { CATEGORIES, BackgroundCategory, getBackgroundsByCategory } from '../../../../../themes/backgroundCategories';
+import { CATEGORIES, type BackgroundCategory } from '../../../../../themes/backgroundCategories';
+import type { BackgroundIcon } from '../iconMaps';
 import { seasonIcons } from '../iconMaps';
 
 interface BackgroundInfo {
   id: BackgroundOption;
   name: string;
-  icon: LucideIcon;
+  icon: BackgroundIcon;
+  categories: readonly BackgroundCategory[];
 }
 
 interface BackgroundsPanelProps {
@@ -44,6 +45,7 @@ export const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({
   const [seasonalExpanded, setSeasonalExpanded] = useState(false);
 
   const allBackgrounds = [...staticBackgrounds, ...animatedBackgrounds];
+  const availableBackgroundIds = new Set(allBackgrounds.map((bg) => bg.id));
 
   const currentSeason = themeRegistry.getCurrentSeason();
   const seasonalBackground = themeRegistry.getSeasonalBackground(userSeasonalBgs);
@@ -57,17 +59,20 @@ export const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({
   };
 
   // Filter backgrounds based on active category and search query
-  const getFilteredBackgrounds = () => {
-    let filtered: typeof allBackgrounds = [];
-
-    if (activeCategory === 'all') {
-      filtered = [...allBackgrounds];
-    } else if (activeCategory === 'favorites') {
-      filtered = allBackgrounds.filter(bg => favoriteBackgrounds.includes(bg.id));
-    } else {
-      const categoryBgIds = getBackgroundsByCategory(activeCategory);
-      filtered = allBackgrounds.filter(bg => categoryBgIds.includes(bg.id));
+  const getBackgroundsForCategory = (category: BackgroundCategory) => {
+    if (category === 'all') {
+      return allBackgrounds;
     }
+
+    if (category === 'favorites') {
+      return allBackgrounds.filter(bg => favoriteBackgrounds.includes(bg.id));
+    }
+
+    return allBackgrounds.filter(bg => bg.categories.includes(category));
+  };
+
+  const getFilteredBackgrounds = () => {
+    let filtered = getBackgroundsForCategory(activeCategory);
 
     // Apply search filter
     if (searchQuery.trim()) {
@@ -115,8 +120,8 @@ export const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({
           {CATEGORIES.map(category => {
             const isActive = activeCategory === category.id;
             const count = category.id === 'favorites'
-              ? favoriteBackgrounds.length
-              : getBackgroundsByCategory(category.id).length;
+              ? favoriteBackgrounds.filter((bgId) => availableBackgroundIds.has(bgId)).length
+              : getBackgroundsForCategory(category.id).length;
 
             return (
               <button

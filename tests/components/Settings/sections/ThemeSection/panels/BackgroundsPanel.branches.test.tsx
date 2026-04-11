@@ -18,10 +18,6 @@ vi.mock('../../../../../../themes/backgroundCategories', () => ({
     { id: 'all', label: 'All', icon: 'A' },
     { id: 'favorites', label: 'Favorites', icon: 'F' },
   ],
-  getBackgroundsByCategory: vi.fn((category: string) => {
-    if (category === 'favorites') return ['minimal'];
-    return ['minimal', 'snowfall'];
-  }),
 }));
 
 import type { LucideIcon } from 'lucide-react';
@@ -38,8 +34,8 @@ const renderPanel = (
   render(
     <BackgroundsPanel
       currentBg="minimal"
-      staticBackgrounds={[{ id: 'minimal' as any, name: 'Minimal', icon: IconStub }]}
-      animatedBackgrounds={[{ id: 'snowfall' as any, name: 'Snowfall', icon: IconStub }]}
+      staticBackgrounds={[{ id: 'minimal' as any, name: 'Minimal', icon: IconStub, categories: ['minimal'] as any }]}
+      animatedBackgrounds={[{ id: 'snowfall' as any, name: 'Snowfall', icon: IconStub, categories: ['weather'] as any }]}
       favoriteBackgrounds={[]}
       userSeasonalBgs={{ spring: 'snowfall' } as any}
       onSelectBackground={onSelectBackground}

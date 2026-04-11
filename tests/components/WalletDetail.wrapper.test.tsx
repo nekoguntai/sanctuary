@@ -164,6 +164,7 @@ vi.mock('../../components/WalletDetail/tabs', () => ({
   UTXOTab: (props: any) => (
     <div data-testid="utxo-tab">
       <span data-testid="utxo-network">{props.network}</span>
+      <span data-testid="utxo-role">{props.userRole}</span>
       <button onClick={() => props.onToggleFreeze('tx-1', 0)}>utxo-freeze</button>
       <button onClick={() => props.onToggleFreeze('missing', 1)}>utxo-freeze-missing</button>
       <button onClick={() => props.onToggleSelect('utxo-1')}>utxo-select</button>
@@ -769,10 +770,24 @@ describe('WalletDetail wrapper behaviors', () => {
 
     await user.click(screen.getByRole('button', { name: /utxos/i }));
     expect(screen.getByTestId('utxo-network')).toHaveTextContent('mainnet');
+    expect(screen.getByTestId('utxo-role')).toHaveTextContent('viewer');
 
     mocks.locationState = { activeTab: 'drafts' };
     rerender(<WalletDetail />);
-    expect(screen.getByTestId('drafts-role')).toHaveTextContent('viewer');
+    expect(screen.getByTestId('transactions-tab')).toBeInTheDocument();
+    expect(screen.queryByTestId('drafts-tab')).not.toBeInTheDocument();
+
+    mocks.walletDataState = createWalletData({
+      wallet: {
+        ...walletWithFallbacks,
+        userRole: 'owner',
+      },
+      utxoStats: [{ id: 'stats-utxo', txid: 'stats-tx', vout: 1, amount: 2000 }],
+      loadingUtxoStats: false,
+    });
+    mocks.locationState = { activeTab: 'drafts' };
+    rerender(<WalletDetail />);
+    expect(screen.getByTestId('drafts-role')).toHaveTextContent('owner');
     expect(screen.getByTestId('drafts-type')).toHaveTextContent(WalletType.MULTI_SIG);
     await user.click(screen.getByRole('button', { name: 'drafts-single' }));
     expect(mocks.addAppNotification).toHaveBeenCalledWith(
@@ -781,7 +796,7 @@ describe('WalletDetail wrapper behaviors', () => {
 
     mocks.locationState = { activeTab: 'access' };
     rerender(<WalletDetail />);
-    expect(screen.getByTestId('access-role')).toHaveTextContent('viewer');
+    expect(screen.getByTestId('access-role')).toHaveTextContent('owner');
 
     mocks.locationState = { activeTab: 'log' };
     rerender(<WalletDetail />);

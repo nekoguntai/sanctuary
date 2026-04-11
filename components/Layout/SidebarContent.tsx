@@ -1,27 +1,19 @@
 import React from 'react';
 import {
-  LayoutDashboard,
-  Wallet as WalletIcon,
-  Settings,
   LogOut,
   Moon,
   Sun,
-  Cpu,
-  Users,
-  UserCircle,
-  Server,
-  Shield,
-  Cog,
-  Database,
-  FileText,
-  Brain,
-  Activity,
-  ToggleLeft,
 } from 'lucide-react';
 import { SanctuaryLogo, getWalletIcon, getDeviceIcon } from '../ui/CustomIcons';
 import { WalletType, isMultisigType } from '../../types';
 import { Wallet as ApiWallet } from '../../src/api/wallets';
 import { Device as ApiDevice } from '../../src/api/devices';
+import {
+  adminNavGroup,
+  getNavItemsBySection,
+  getRequiredNavItem,
+  type AppNavItem,
+} from '../../src/app/appRoutes';
 import { version } from '../../package.json';
 import { NotificationBell } from '../NotificationPanel';
 import { NavItem } from './NavItem';
@@ -59,6 +51,16 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
   onVersionClick,
   intelligenceAvailable,
 }) => {
+  const primaryNavItems = getNavItemsBySection('primary').filter((item) => {
+    return item.feature !== 'intelligence' || intelligenceAvailable;
+  });
+  const walletNavItem = getRequiredNavItem('wallets');
+  const devicesNavItem = getRequiredNavItem('devices');
+  const systemNavItemsBeforeAdmin = getNavItemsBySection('system').filter((item) => item.id !== 'settings');
+  const settingsNavItem = getRequiredNavItem('settings');
+  const adminNavItems = getNavItemsBySection('admin');
+  const renderSubNavIcon = (Icon: AppNavItem['icon']) => <Icon className="w-3 h-3" />;
+
   return (
     <>
       <div className="flex items-center h-20 flex-shrink-0 px-6 border-b border-sanctuary-200 dark:border-sanctuary-800">
@@ -67,11 +69,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-        <NavItem to="/" icon={LayoutDashboard} label="Dashboard" />
-
-        {intelligenceAvailable && (
-          <NavItem to="/intelligence" icon={Brain} label="Intelligence" />
-        )}
+        {primaryNavItems.map((item) => (
+          <NavItem key={item.id} to={item.to} icon={item.icon} label={item.label} />
+        ))}
 
         {/* Wallets Section */}
         <div className="pt-5 pb-1.5">
@@ -81,9 +81,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
         </div>
         <div className="space-y-1">
           <NavItem
-            to="/wallets"
-            icon={WalletIcon}
-            label="Wallets"
+            to={walletNavItem.to}
+            icon={walletNavItem.icon}
+            label={walletNavItem.label}
             hasSubmenu
             isOpen={expanded.wallets}
             onToggle={() => toggleSection('wallets')}
@@ -128,9 +128,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
         </div>
         <div className="space-y-1">
            <NavItem
-              to="/devices"
-              icon={Cpu}
-              label="Devices"
+              to={devicesNavItem.to}
+              icon={devicesNavItem.icon}
+              label={devicesNavItem.label}
               hasSubmenu
               isOpen={expanded.devices}
               onToggle={() => toggleSection('devices')}
@@ -162,69 +162,34 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
             System
           </div>
         </div>
-        <NavItem to="/account" icon={UserCircle} label="Account" />
+        {systemNavItemsBeforeAdmin.map((item) => (
+          <NavItem key={item.id} to={item.to} icon={item.icon} label={item.label} />
+        ))}
         {user?.isAdmin && (
           <div className="space-y-1 pt-2">
             <NavItem
-              to="/admin"
-              icon={Shield}
-              label="Administration"
+              to={adminNavGroup.to}
+              icon={adminNavGroup.icon}
+              label={adminNavGroup.label}
               hasSubmenu
               isOpen={expanded.admin}
               onToggle={() => toggleSection('admin')}
             />
             {expanded.admin && (
               <div className="animate-accordion-open space-y-0.5 mb-2 overflow-hidden">
-                <SubNavItem
-                  to="/admin/node-config"
-                  label="Node Config"
-                  icon={<Server className="w-3 h-3" />}
-                />
-                <SubNavItem
-                  to="/admin/settings"
-                  label="System Settings"
-                  icon={<Cog className="w-3 h-3" />}
-                />
-                <SubNavItem
-                  to="/admin/variables"
-                  label="Variables"
-                  icon={<Cog className="w-3 h-3" />}
-                />
-                <SubNavItem
-                  to="/admin/users-groups"
-                  label="Users & Groups"
-                  icon={<Users className="w-3 h-3" />}
-                />
-                <SubNavItem
-                  to="/admin/backup"
-                  label="Backup & Restore"
-                  icon={<Database className="w-3 h-3" />}
-                />
-                <SubNavItem
-                  to="/admin/audit-logs"
-                  label="Audit Logs"
-                  icon={<FileText className="w-3 h-3" />}
-                />
-                <SubNavItem
-                  to="/admin/ai"
-                  label="AI Assistant"
-                  icon={<Brain className="w-3 h-3" />}
-                />
-                <SubNavItem
-                  to="/admin/monitoring"
-                  label="Monitoring"
-                  icon={<Activity className="w-3 h-3" />}
-                />
-                <SubNavItem
-                  to="/admin/feature-flags"
-                  label="Feature Flags"
-                  icon={<ToggleLeft className="w-3 h-3" />}
-                />
+                {adminNavItems.map((item) => (
+                  <SubNavItem
+                    key={item.id}
+                    to={item.to}
+                    label={item.label}
+                    icon={renderSubNavIcon(item.icon)}
+                  />
+                ))}
               </div>
             )}
           </div>
         )}
-        <NavItem to="/settings" icon={Settings} label="Settings" />
+        <NavItem to={settingsNavItem.to} icon={settingsNavItem.icon} label={settingsNavItem.label} />
       </nav>
 
       <div className="flex-shrink-0 border-t border-sanctuary-200 dark:border-sanctuary-800">

@@ -5,7 +5,8 @@
  */
 
 // Tab types
-export type TabType = 'tx' | 'utxo' | 'addresses' | 'drafts' | 'stats' | 'access' | 'settings' | 'log';
+export { WALLET_DETAIL_TAB_IDS } from './tabDefinitions';
+export type { WalletDetailTabId as TabType } from './tabDefinitions';
 export type AddressSubTab = 'receive' | 'change';
 export type AccessSubTab = 'ownership' | 'sharing' | 'transfers';
 export type SettingsSubTab = 'general' | 'devices' | 'notifications' | 'advanced' | 'autopilot';

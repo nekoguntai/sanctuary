@@ -6,11 +6,10 @@
  */
 
 import React from 'react';
-import { Image as ImageIcon, Sparkles } from 'lucide-react';
 import { useUser } from '../../../../contexts/UserContext';
 import type { ThemeOption, BackgroundOption, SeasonalBackgrounds } from '../../../../types';
 import { Season, themeRegistry } from '../../../../themes';
-import { bgIconMap } from './iconMaps';
+import { getBackgroundPatternIcon } from './iconMaps';
 import { ColorThemePanel } from './panels/ColorThemePanel';
 import { BackgroundsPanel } from './panels/BackgroundsPanel';
 import { VisualSettingsPanel } from './panels/VisualSettingsPanel';
@@ -37,7 +36,8 @@ const AppearanceTab: React.FC = () => {
     .map(pattern => ({
       id: pattern.id as BackgroundOption,
       name: pattern.name,
-      icon: bgIconMap[pattern.id] || ImageIcon
+      icon: getBackgroundPatternIcon(pattern),
+      categories: pattern.categories ?? [],
     }));
 
   const animatedBackgrounds = allPatterns
@@ -45,7 +45,8 @@ const AppearanceTab: React.FC = () => {
     .map(pattern => ({
       id: pattern.id as BackgroundOption,
       name: pattern.name,
-      icon: bgIconMap[pattern.id] || Sparkles
+      icon: getBackgroundPatternIcon(pattern),
+      categories: pattern.categories ?? [],
     }));
 
   // Toggle a background as favorite

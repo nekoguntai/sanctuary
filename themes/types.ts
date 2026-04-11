@@ -58,6 +58,70 @@ export interface ThemeColors {
 /**
  * Background pattern definition
  */
+export type BackgroundCategory =
+  | 'all'
+  | 'favorites'
+  | 'minimal'
+  | 'geometric'
+  | 'bitcoin'
+  | 'nature'
+  | 'weather'
+  | 'water'
+  | 'zen'
+  | 'sky'
+  | 'creatures'
+  | 'landscape'
+  | 'whimsical';
+
+export type BackgroundPatternIconKey =
+  | 'image'
+  | 'waves'
+  | 'minus'
+  | 'server'
+  | 'globe'
+  | 'sparkles'
+  | 'shield'
+  | 'bitcoin'
+  | 'circle'
+  | 'binary'
+  | 'network'
+  | 'flower2'
+  | 'snowflake'
+  | 'box'
+  | 'sun'
+  | 'leaf'
+  | 'cloud-snow'
+  | 'bug'
+  | 'droplets'
+  | 'flame'
+  | 'cloud-rain'
+  | 'fish'
+  | 'tree-pine'
+  | 'flower'
+  | 'lamp'
+  | 'cloud'
+  | 'shell'
+  | 'train'
+  | 'mountain'
+  | 'bird'
+  | 'rabbit'
+  | 'star'
+  | 'sailboat'
+  | 'wind'
+  | 'haze'
+  | 'bell'
+  | 'party-popper'
+  | 'moon'
+  | 'tree-deciduous'
+  | 'heart'
+  | 'share2'
+  | 'palette'
+  | 'zap'
+  | 'send'
+  | 'hash'
+  | 'sanctuary-logo'
+  | 'sats';
+
 export interface BackgroundPattern {
   id: string;
   name: string;
@@ -65,7 +129,14 @@ export interface BackgroundPattern {
   svgLight?: string;  // SVG pattern for light mode
   svgDark?: string;   // SVG pattern for dark mode (if different)
   animated?: boolean; // True if this is an animated Canvas-based pattern
+  categories?: readonly BackgroundCategory[];
+  iconKey?: BackgroundPatternIconKey;
 }
+
+export type ThemeBackgroundPattern = BackgroundPattern & {
+  categories: readonly BackgroundCategory[];
+  iconKey: BackgroundPatternIconKey;
+};
 
 /**
  * Complete theme definition
@@ -84,7 +155,7 @@ export interface ThemeDefinition {
   };
 
   // Optional background patterns specific to this theme
-  patterns?: BackgroundPattern[];
+  patterns?: readonly ThemeBackgroundPattern[];
 }
 
 /**

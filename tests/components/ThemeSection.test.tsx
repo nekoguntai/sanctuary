@@ -36,10 +36,10 @@ vi.mock('../../themes', () => ({
     getSeasonalBackground: vi.fn((seasonalBackgrounds?: Record<string, string>) => seasonalBackgrounds?.spring || 'snowfall'),
     getDefaultSeasonalBackground: vi.fn(() => 'snowfall'),
     getAllPatterns: vi.fn(() => [
-      { id: 'minimal', name: 'Minimal', animated: false },
-      { id: 'zen', name: 'Zen', animated: false },
-      { id: 'snowfall', name: 'Snowfall', animated: true },
-      { id: 'sakura-redux', name: 'Sakura Redux', animated: true },
+      { id: 'minimal', name: 'Minimal', animated: false, categories: ['minimal'] },
+      { id: 'zen', name: 'Zen', animated: false, categories: ['minimal'] },
+      { id: 'snowfall', name: 'Snowfall', animated: true, categories: ['nature'] },
+      { id: 'sakura-redux', name: 'Sakura Redux', animated: true, categories: ['nature'] },
     ]),
   },
 }));
@@ -50,11 +50,6 @@ vi.mock('../../themes/backgroundCategories', () => ({
     { id: 'favorites', label: 'Favorites', icon: 'F' },
     { id: 'nature', label: 'Nature', icon: 'N' },
   ],
-  getBackgroundsByCategory: vi.fn((category: string) => {
-    if (category === 'favorites') return ['snowfall'];
-    if (category === 'nature') return ['snowfall', 'sakura-redux'];
-    return ['minimal', 'zen', 'snowfall', 'sakura-redux'];
-  }),
 }));
 
 vi.mock('../../components/ui/CustomIcons', () => ({

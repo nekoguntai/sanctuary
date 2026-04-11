@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { WalletType } from '../../types';
 import * as transactionsApi from '../../src/api/transactions';
@@ -13,6 +13,12 @@ import { logError } from '../../utils/errorHandler';
 import { LogTab } from './LogTab';
 import { WalletHeader } from './WalletHeader';
 import { TabBar } from './TabBar';
+import {
+  DEFAULT_WALLET_DETAIL_TAB,
+  canShowWalletDetailTab,
+  isWalletDetailTab,
+  resolveWalletDetailTab,
+} from './tabDefinitions';
 import {
   TransactionsTab,
   UTXOTab,
@@ -80,6 +86,7 @@ export const WalletDetail: React.FC = () => {
     walletShareInfo, setWalletShareInfo,
     fetchData,
   } = useWalletData({ id, user });
+  const walletUserRole = wallet?.userRole || 'viewer';
 
   // Sync, resync, and repair
   const {
@@ -186,8 +193,15 @@ export const WalletDetail: React.FC = () => {
   // ---------------------------------------------------------------------------
 
   // Check for activeTab in navigation state (e.g., from notification panel)
-  const initialTab = (location.state as { activeTab?: TabType } | null)?.activeTab || 'tx';
+  const requestedInitialTab = (location.state as { activeTab?: unknown } | null)?.activeTab;
+  const initialTab = isWalletDetailTab(requestedInitialTab)
+    ? requestedInitialTab
+    : DEFAULT_WALLET_DETAIL_TAB;
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const appliedLocationStateRef = useRef(location.state);
+  const visibleActiveTab = wallet && !canShowWalletDetailTab(activeTab, walletUserRole)
+    ? DEFAULT_WALLET_DETAIL_TAB
+    : activeTab;
   const [addressSubTab, setAddressSubTab] = useState<'receive' | 'change'>('receive');
   const [accessSubTab, setAccessSubTab] = useState<'ownership' | 'sharing' | 'transfers'>('ownership');
   const [settingsSubTab, setSettingsSubTab] = useState<SettingsSubTab>('general');
@@ -195,11 +209,27 @@ export const WalletDetail: React.FC = () => {
 
   // Update activeTab if navigation state changes
   useEffect(() => {
-    const stateTab = (location.state as { activeTab?: TabType } | null)?.activeTab;
-    if (stateTab && stateTab !== activeTab) {
-      setActiveTab(stateTab);
+    if (appliedLocationStateRef.current === location.state) {
+      return;
     }
-  }, [location.state]);
+
+    appliedLocationStateRef.current = location.state;
+    const stateTab = (location.state as { activeTab?: unknown } | null)?.activeTab;
+    if (!isWalletDetailTab(stateTab)) {
+      return;
+    }
+
+    const nextTab = wallet
+      ? resolveWalletDetailTab(stateTab, walletUserRole)
+      : stateTab;
+    setActiveTab((currentTab) => currentTab === nextTab ? currentTab : nextTab);
+  }, [location.state, wallet, walletUserRole]);
+
+  useEffect(() => {
+    if (wallet && activeTab !== visibleActiveTab) {
+      setActiveTab(visibleActiveTab);
+    }
+  }, [activeTab, visibleActiveTab, wallet]);
 
   // Export Modal State
   const [showExport, setShowExport] = useState(false);
@@ -221,7 +251,7 @@ export const WalletDetail: React.FC = () => {
 
   // Wallet logs hook - only enabled when Log tab is active
   const { logs, isPaused, isLoading: logsLoading, clearLogs, togglePause } = useWalletLogs(id, {
-    enabled: activeTab === 'log',
+    enabled: visibleActiveTab === 'log',
     maxEntries: 500,
   });
 
@@ -238,10 +268,10 @@ export const WalletDetail: React.FC = () => {
 
   // Load UTXO stats when stats tab is first opened
   useEffect(() => {
-    if (!id || activeTab !== 'stats') return;
+    if (!id || visibleActiveTab !== 'stats') return;
     if (utxoStats.length > 0 || loadingUtxoStats) return;
     loadUtxosForStats(id);
-  }, [activeTab, id, utxoStats.length, loadingUtxoStats]);
+  }, [visibleActiveTab, id, utxoStats.length, loadingUtxoStats]);
 
   // ---------------------------------------------------------------------------
   // Local handlers (not extracted - depend on local UI state)
@@ -334,15 +364,15 @@ export const WalletDetail: React.FC = () => {
 
       {/* Tabs */}
       <TabBar
-        activeTab={activeTab}
+        activeTab={visibleActiveTab}
         onTabChange={setActiveTab}
-        userRole={wallet.userRole || 'viewer'}
+        userRole={walletUserRole}
         draftsCount={draftsCount}
       />
 
       {/* Content Area */}
       <div className="min-h-[400px]">
-        {activeTab === 'tx' && (
+        {visibleActiveTab === 'tx' && (
           <TransactionsTab
             walletId={wallet.id}
             transactions={transactions}
@@ -374,12 +404,12 @@ export const WalletDetail: React.FC = () => {
           />
         )}
 
-        {activeTab === 'utxo' && (
+        {visibleActiveTab === 'utxo' && (
           <UTXOTab
             utxos={utxos}
             utxoTotalCount={utxoSummary?.count}
             onToggleFreeze={handleToggleFreeze}
-            userRole={wallet.userRole || 'viewer'}
+            userRole={walletUserRole}
             selectedUtxos={selectedUtxos}
             onToggleSelect={handleToggleSelect}
             onSendSelected={handleSendSelected}
@@ -393,7 +423,7 @@ export const WalletDetail: React.FC = () => {
           />
         )}
 
-        {activeTab === 'addresses' && (
+        {visibleActiveTab === 'addresses' && (
           <AddressesTab
             addresses={addresses}
             addressSummary={addressSummary}
@@ -418,20 +448,20 @@ export const WalletDetail: React.FC = () => {
           />
         )}
 
-        {activeTab === 'drafts' && (
+        {visibleActiveTab === 'drafts' && (
           <DraftsTab
             walletId={id!}
             walletType={wallet.type === WalletType.MULTI_SIG ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG}
             quorum={wallet.quorum}
             totalSigners={wallet.totalSigners}
-            userRole={wallet.userRole || 'viewer'}
+            userRole={walletUserRole}
             addresses={addresses}
             walletName={wallet.name}
             onDraftsChange={handleDraftsChange}
           />
         )}
 
-        {activeTab === 'stats' && (
+        {visibleActiveTab === 'stats' && (
           <StatsTab
             utxos={utxoStats.length > 0 ? utxoStats : utxos}
             balance={wallet.balance}
@@ -439,7 +469,7 @@ export const WalletDetail: React.FC = () => {
           />
         )}
 
-        {activeTab === 'log' && (
+        {visibleActiveTab === 'log' && (
           <LogTab
             logs={logs}
             isPaused={isPaused}
@@ -452,12 +482,12 @@ export const WalletDetail: React.FC = () => {
           />
         )}
 
-        {activeTab === 'access' && (
+        {visibleActiveTab === 'access' && (
           <AccessTab
             accessSubTab={accessSubTab}
             onAccessSubTabChange={setAccessSubTab}
             walletShareInfo={walletShareInfo}
-            userRole={wallet.userRole || 'viewer'}
+            userRole={walletUserRole}
             user={user}
             onShowTransferModal={() => setShowTransferModal(true)}
             selectedGroupToAdd={selectedGroupToAdd}
@@ -478,7 +508,7 @@ export const WalletDetail: React.FC = () => {
           />
         )}
 
-        {activeTab === 'settings' && (
+        {visibleActiveTab === 'settings' && (
           <SettingsTab
             settingsSubTab={settingsSubTab}
             onSettingsSubTabChange={setSettingsSubTab}

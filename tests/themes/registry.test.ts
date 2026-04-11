@@ -114,7 +114,7 @@ describe('ThemeRegistry', () => {
   it('manages global and theme-specific background patterns', () => {
     const registry = createRegistry();
     registry.register(createTheme('pattern-theme', {
-      patterns: [{ id: 'theme-stars', name: 'Theme Stars' }],
+      patterns: [{ id: 'theme-stars', name: 'Theme Stars', categories: ['sky'], iconKey: 'star' }],
     }));
     registry.registerPattern({ id: 'global-none', name: 'None' });
     registry.registerPatterns([{ id: 'global-grid', name: 'Grid' }]);

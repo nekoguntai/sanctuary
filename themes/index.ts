@@ -55,8 +55,23 @@ themeRegistry.registerPatterns(globalPatterns);
 
 // Re-export for convenience
 export { themeRegistry };
-export { globalPatterns };
-export type { ThemeDefinition, ThemeColors, BackgroundPattern, ThemeMetadata } from './types';
+export {
+  ANIMATED_PATTERNS,
+  GLOBAL_PATTERN_IDS,
+  globalPatterns,
+  isAnimatedBackgroundPattern,
+  isRegisteredBackgroundPattern,
+} from './patterns';
+export type { GlobalAnimatedPatternId, GlobalBackgroundPatternId } from './patterns';
+export type {
+  ThemeDefinition,
+  ThemeColors,
+  BackgroundCategory,
+  BackgroundPattern,
+  BackgroundPatternIconKey,
+  ThemeBackgroundPattern,
+  ThemeMetadata,
+} from './types';
 
 // Re-export seasonal utilities
 export {

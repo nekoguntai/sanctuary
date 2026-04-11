@@ -116,7 +116,7 @@ vi.mock('../../themes', () => ({
 vi.mock('../../themes/backgroundCategories', () => ({
   CATEGORIES: [],
   BACKGROUND_CATEGORIES: [],
-  getBackgroundsByCategory: vi.fn().mockReturnValue([]),
+  getCategoriesForBackground: vi.fn().mockReturnValue([]),
 }));
 
 // Mock lucide-react icons using simple JSX pattern that works

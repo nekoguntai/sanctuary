@@ -164,7 +164,7 @@ Sanctuary solves this by providing a watch-only interface that:
 - **14 color themes**: Sanctuary, Serenity, Forest, Cyber, Sunrise, Ocean, Sakura, Midnight, Bamboo, Copper, Desert, and more
 - **Seasonal themes** - Auto-switching based on date
 - **Dark mode** with inverted color scales
-- **66 backgrounds** including 56 animated canvas patterns
+- **72 backgrounds** including 56 animated canvas patterns
 - **Contrast control** - Adjustable background opacity
 
 ---
@@ -471,7 +471,7 @@ HTTP_PORT=8080
 5. **Hardware Wallet Native** - All major devices supported
 6. **Collaboration Built-In** - Team/family access
 7. **Advanced Bitcoin Features** - RBF, CPFP, UTXO control
-8. **Beautiful UI** - 14 themes, 66 backgrounds
+8. **Beautiful UI** - 14 themes, 72 backgrounds
 9. **Docker Container** - One-click deployment
 10. **Real-Time Updates** - WebSocket live sync
 

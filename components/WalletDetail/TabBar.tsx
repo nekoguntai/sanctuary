@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { TabType } from './types';
+import { getWalletDetailTabs } from './tabDefinitions';
+import type { TabType } from './types';
 
 interface TabBarProps {
   activeTab: TabType;
@@ -14,16 +15,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   userRole,
   draftsCount,
 }) => {
-  const tabs: TabType[] = [
-    'tx',
-    'utxo',
-    'addresses',
-    ...(userRole !== 'viewer' ? ['drafts' as TabType] : []),
-    'stats',
-    ...(userRole === 'owner' ? ['access' as TabType] : []),
-    'settings',
-    'log',
-  ];
+  const tabs = getWalletDetailTabs(userRole);
 
   const navRef = useRef<HTMLElement>(null);
   const [indicator, setIndicator] = useState({ left: 0, width: 0 });
@@ -61,17 +53,17 @@ export const TabBar: React.FC<TabBarProps> = ({
         />
         {tabs.map((tab) => (
           <button
-            key={tab}
-            data-active={activeTab === tab}
-            onClick={() => onTabChange(tab)}
+            key={tab.id}
+            data-active={activeTab === tab.id}
+            onClick={() => onTabChange(tab.id)}
             className={`${
-              activeTab === tab
+              activeTab === tab.id
                 ? 'text-primary-700 dark:text-primary-700'
                 : 'text-sanctuary-500 hover:text-sanctuary-700 dark:text-sanctuary-400 dark:hover:text-sanctuary-200'
             } whitespace-nowrap py-2 px-3.5 rounded-md font-medium text-sm capitalize transition-colors duration-200 relative z-10 focus-visible:ring-2 focus-visible:ring-primary-500`}
           >
-            {tab === 'tx' ? 'Transactions' : tab === 'utxo' ? 'UTXOs' : tab}
-            {tab === 'drafts' && draftsCount > 0 && (
+            {tab.label}
+            {tab.badge === 'drafts' && draftsCount > 0 && (
               <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-400 dark:bg-rose-500 text-[10px] font-bold text-white z-20">
                 {draftsCount > 9 ? '9+' : draftsCount}
               </span>

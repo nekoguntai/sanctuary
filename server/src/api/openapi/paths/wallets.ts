@@ -129,13 +129,8 @@ export const walletPaths = {
         },
       ],
       responses: {
-        200: {
+        204: {
           description: 'Wallet deleted',
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/SuccessResponse' },
-            },
-          },
         },
       },
     },

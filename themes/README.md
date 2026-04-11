@@ -85,6 +85,8 @@ export const myAwesomeTheme: ThemeDefinition = {
       id: 'my-pattern',
       name: 'My Pattern',
       description: 'Optional description',
+      categories: ['minimal'],
+      iconKey: 'image',
       svgLight: 'data:image/svg+xml,...',
       svgDark: 'data:image/svg+xml,...',
     },
@@ -150,20 +152,38 @@ Your colors are accessible via Tailwind classes:
 
 ### Global Backgrounds
 
-Global backgrounds (defined in `patterns.ts`) are available to all themes:
+Global backgrounds are defined in `patterns.ts`. This is the source of truth for background IDs, names, categories, icon keys, and animated/static metadata.
 
 - `minimal` - No pattern
 - `zen` - Dot grid
+- `dots` - Polka dot grid
+- `cross` - Crosshatch texture
+- `noise` - Subtle grain texture
 - `circuit` - Tech geometric
 - `topography` - Map lines
 - `waves` - Flowing water
 - `lines` - Diagonal stripes
 - `sanctuary` - Repeating logo
 - `sanctuary-hero` - Large centered logo
+- `hexagons` - Honeycomb grid
+- `triangles` - Geometric tessellation
+- `stars` - Starfield
+- `aurora` - Gradient mesh waves
+- `mountains` - Mountain silhouettes
+
+Animated canvas backgrounds also live in `patterns.ts` with `animated: true`. The animation hook file must exist in `components/animations` using the kebab-case to camelCase convention, such as `paper-airplanes` -> `paperAirplanes.ts`.
+
+To add a global background:
+
+1. Add the pattern entry in `themes/patterns.ts`.
+2. Add categories and an `iconKey` in the metadata maps in `themes/patterns.ts`.
+3. Add static CSS in `index.html` or an animation hook in `components/animations`.
+4. Update seasonal defaults in `themes/seasonal/index.ts` only if the background should be a seasonal default.
+5. Run the focused background tests.
 
 ### Theme-Specific Patterns
 
-Themes can define their own patterns by including a `patterns` array in the theme definition. These patterns will only appear when that theme is active.
+Themes can define their own patterns by including a `patterns` array in the theme definition. These patterns will only appear when that theme is active. Prefer adding category and icon metadata before exposing theme-specific patterns in Settings.
 
 ## Example Themes
 
@@ -215,6 +235,8 @@ export const oceanTheme: ThemeDefinition = {
     {
       id: 'ocean-waves',
       name: 'Ocean Waves',
+      categories: ['water'],
+      iconKey: 'waves',
       svgLight: 'data:image/svg+xml,%3Csvg...',
       svgDark: 'data:image/svg+xml,%3Csvg...',
     },

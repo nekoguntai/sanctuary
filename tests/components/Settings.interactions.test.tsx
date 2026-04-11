@@ -145,12 +145,7 @@ vi.mock('../../themes/backgroundCategories', () => ({
     { id: 'favorites', label: 'Favorites', icon: 'Fav' },
   ],
   BACKGROUND_CATEGORIES: [],
-  getBackgroundsByCategory: vi.fn((categoryId: string) => {
-    if (categoryId === 'favorites') {
-      return ['snowfall'];
-    }
-    return ['minimal', 'snowfall'];
-  }),
+  getCategoriesForBackground: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock('../../components/ui/Button', () => ({

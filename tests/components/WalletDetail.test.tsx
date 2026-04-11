@@ -290,9 +290,9 @@ describe('WalletDetail', () => {
     vi.mocked(draftsApi.getDrafts).mockResolvedValue([]);
   });
 
-  const renderWalletDetail = (walletId = 'wallet-1') => {
+  const renderWalletDetail = (walletId = 'wallet-1', state?: Record<string, unknown>) => {
     return render(
-      <MemoryRouter initialEntries={[`/wallets/${walletId}`]}>
+      <MemoryRouter initialEntries={[{ pathname: `/wallets/${walletId}`, state }]}>
         <Routes>
           <Route path="/wallets/:id" element={<WalletDetail />} />
         </Routes>
@@ -407,6 +407,20 @@ describe('WalletDetail', () => {
       await waitFor(() => {
         expect(screen.getByTestId('draft-list')).toBeInTheDocument();
       });
+    });
+
+    it('falls back to transactions when router state requests a hidden tab', async () => {
+      vi.mocked(walletsApi.getWallet).mockResolvedValue({
+        ...mockWallet,
+        userRole: 'viewer',
+      } as any);
+
+      renderWalletDetail('wallet-1', { activeTab: 'access' });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('transaction-list')).toBeInTheDocument();
+      });
+      expect(screen.queryByRole('button', { name: /^access$/i })).not.toBeInTheDocument();
     });
   });
 

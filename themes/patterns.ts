@@ -5,9 +5,17 @@
  * an SVG data URL for optimal performance.
  */
 
-import type { BackgroundPattern } from './types';
+import type { BackgroundCategory, BackgroundPattern, BackgroundPatternIconKey } from './types';
 
-export const globalPatterns: BackgroundPattern[] = [
+type BaseBackgroundPattern = Omit<BackgroundPattern, 'categories' | 'iconKey'>;
+type GlobalPatternWithMetadata<T extends BaseBackgroundPattern> = T & {
+  categories: readonly BackgroundCategory[];
+  iconKey: BackgroundPatternIconKey;
+};
+
+const defineBaseBackgroundPatterns = <const T extends readonly BaseBackgroundPattern[]>(patterns: T) => patterns;
+
+const baseGlobalPatterns = defineBaseBackgroundPatterns([
   {
     id: 'minimal',
     name: 'Minimal',
@@ -20,6 +28,24 @@ export const globalPatterns: BackgroundPattern[] = [
     description: 'Subtle dot grid pattern',
     // These patterns are defined in index.html CSS - don't override them
     // Let the CSS handle it for proper light/dark mode handling
+  },
+  {
+    id: 'dots',
+    name: 'Dots',
+    description: 'Regular polka dot grid',
+    // Defined in index.html CSS
+  },
+  {
+    id: 'cross',
+    name: 'Crosshatch',
+    description: 'Subtle cross-stitch texture',
+    // Defined in index.html CSS
+  },
+  {
+    id: 'noise',
+    name: 'Noise',
+    description: 'Subtle grain texture',
+    // Defined in index.html CSS
   },
   {
     id: 'circuit',
@@ -65,6 +91,12 @@ export const globalPatterns: BackgroundPattern[] = [
     // Defined in index.html CSS
   },
   {
+    id: 'triangles',
+    name: 'Triangles',
+    description: 'Geometric tessellation',
+    // Defined in index.html CSS
+  },
+  {
     id: 'butterfly-garden',
     name: 'Butterfly Garden',
     description: 'Colorful butterflies fluttering among flowers',
@@ -74,6 +106,18 @@ export const globalPatterns: BackgroundPattern[] = [
     id: 'stars',
     name: 'Stars',
     description: 'Scattered starfield pattern',
+    // Defined in index.html CSS
+  },
+  {
+    id: 'aurora',
+    name: 'Aurora',
+    description: 'Flowing gradient mesh waves',
+    // Defined in index.html CSS
+  },
+  {
+    id: 'mountains',
+    name: 'Mountains',
+    description: 'Layered mountain silhouettes',
     // Defined in index.html CSS
   },
   {
@@ -420,4 +464,184 @@ export const globalPatterns: BackgroundPattern[] = [
     description: 'Dark rolling clouds with dramatic lightning flashes and heavy rain',
     animated: true,
   },
-];
+] as const);
+
+export type GlobalBackgroundPatternId = (typeof baseGlobalPatterns)[number]['id'];
+export type GlobalAnimatedPatternId = Extract<
+  (typeof baseGlobalPatterns)[number],
+  { readonly animated: true }
+>['id'];
+
+const patternCategories = {
+  minimal: ['minimal'],
+  zen: ['minimal', 'zen'],
+  dots: ['minimal', 'geometric'],
+  cross: ['minimal', 'geometric'],
+  noise: ['minimal'],
+  circuit: ['geometric', 'bitcoin'],
+  topography: ['geometric', 'landscape'],
+  waves: ['geometric', 'water'],
+  lines: ['minimal', 'geometric'],
+  sanctuary: ['bitcoin', 'minimal'],
+  'sanctuary-hero': ['bitcoin'],
+  hexagons: ['geometric'],
+  triangles: ['geometric'],
+  'butterfly-garden': ['nature', 'creatures', 'whimsical'],
+  stars: ['sky', 'minimal'],
+  aurora: ['sky', 'weather'],
+  mountains: ['landscape'],
+  'dandelion-wishes': ['nature', 'whimsical'],
+  'misty-valley': ['landscape', 'zen'],
+  'gentle-waves': ['water', 'zen'],
+  'sakura-petals': ['nature', 'zen', 'whimsical'],
+  'floating-shields': ['bitcoin', 'whimsical'],
+  'bitcoin-particles': ['bitcoin'],
+  'stacking-blocks': ['bitcoin', 'geometric'],
+  'digital-rain': ['bitcoin', 'geometric'],
+  constellation: ['bitcoin', 'sky', 'geometric'],
+  'sanctuary-logo': ['bitcoin'],
+  snowfall: ['weather', 'whimsical'],
+  fireflies: ['nature', 'creatures', 'whimsical'],
+  'ink-drops': ['zen', 'water'],
+  'rippling-water': ['water', 'zen'],
+  'falling-leaves': ['nature', 'weather'],
+  'embers-rising': ['nature', 'weather'],
+  'gentle-rain': ['weather', 'zen'],
+  'northern-lights': ['weather', 'sky'],
+  'koi-shadows': ['zen', 'creatures', 'water'],
+  'bamboo-sway': ['zen', 'nature'],
+  'lotus-bloom': ['nature', 'water', 'zen'],
+  'floating-lanterns': ['whimsical', 'sky'],
+  'moonlit-clouds': ['sky', 'zen'],
+  'tide-pools': ['water', 'nature', 'creatures'],
+  'train-station': ['landscape', 'zen'],
+  'serene-meadows': ['nature', 'landscape', 'zen'],
+  'still-ponds': ['water', 'landscape', 'zen'],
+  'desert-dunes': ['landscape'],
+  'mountain-mist': ['zen', 'landscape'],
+  'duckling-parade': ['creatures', 'whimsical'],
+  'bunny-meadow': ['creatures', 'nature', 'whimsical'],
+  stargazing: ['sky', 'zen'],
+  'lavender-fields': ['nature', 'landscape'],
+  'zen-sand-garden': ['zen', 'minimal'],
+  'sunset-sailing': ['water', 'sky', 'landscape'],
+  'raindrop-window': ['weather', 'zen'],
+  'wind-chimes': ['whimsical', 'zen'],
+  'jellyfish-drift': ['water', 'creatures', 'whimsical'],
+  'sakura-redux': ['zen', 'nature', 'whimsical'],
+  'sats-symbol': ['bitcoin'],
+  fireworks: ['sky', 'whimsical'],
+  'hash-storm': ['bitcoin', 'geometric'],
+  'ice-crystals': ['weather', 'whimsical'],
+  'autumn-wind': ['nature', 'weather'],
+  'smoke-calligraphy': ['zen'],
+  breath: ['zen', 'minimal'],
+  'mycelium-network': ['nature', 'geometric'],
+  'oil-slick': ['geometric', 'whimsical'],
+  'bioluminescent-beach': ['water', 'creatures', 'whimsical'],
+  'volcanic-islands': ['landscape', 'weather'],
+  'tidal-patterns': ['water', 'geometric'],
+  eclipse: ['sky'],
+  'paper-boats': ['whimsical', 'water'],
+  'paper-airplanes': ['whimsical', 'sky'],
+  thunderstorm: ['weather', 'sky'],
+} satisfies Record<GlobalBackgroundPatternId, readonly BackgroundCategory[]>;
+
+const patternIconKeys = {
+  minimal: 'minus',
+  zen: 'image',
+  dots: 'circle',
+  cross: 'circle',
+  noise: 'sparkles',
+  circuit: 'server',
+  topography: 'globe',
+  waves: 'waves',
+  lines: 'minus',
+  sanctuary: 'sanctuary-logo',
+  'sanctuary-hero': 'sanctuary-logo',
+  hexagons: 'network',
+  triangles: 'network',
+  'butterfly-garden': 'bug',
+  stars: 'star',
+  aurora: 'sparkles',
+  mountains: 'mountain',
+  'dandelion-wishes': 'wind',
+  'misty-valley': 'haze',
+  'gentle-waves': 'waves',
+  'sakura-petals': 'flower2',
+  'floating-shields': 'shield',
+  'bitcoin-particles': 'bitcoin',
+  'stacking-blocks': 'box',
+  'digital-rain': 'binary',
+  constellation: 'network',
+  'sanctuary-logo': 'sanctuary-logo',
+  snowfall: 'snowflake',
+  fireflies: 'bug',
+  'ink-drops': 'droplets',
+  'rippling-water': 'waves',
+  'falling-leaves': 'leaf',
+  'embers-rising': 'flame',
+  'gentle-rain': 'cloud-rain',
+  'northern-lights': 'sparkles',
+  'koi-shadows': 'fish',
+  'bamboo-sway': 'tree-pine',
+  'lotus-bloom': 'flower',
+  'floating-lanterns': 'lamp',
+  'moonlit-clouds': 'cloud',
+  'tide-pools': 'shell',
+  'train-station': 'train',
+  'serene-meadows': 'tree-deciduous',
+  'still-ponds': 'droplets',
+  'desert-dunes': 'sun',
+  'mountain-mist': 'mountain',
+  'duckling-parade': 'bird',
+  'bunny-meadow': 'rabbit',
+  stargazing: 'star',
+  'lavender-fields': 'flower',
+  'zen-sand-garden': 'circle',
+  'sunset-sailing': 'sailboat',
+  'raindrop-window': 'cloud-rain',
+  'wind-chimes': 'bell',
+  'jellyfish-drift': 'shell',
+  'sakura-redux': 'flower2',
+  'sats-symbol': 'sats',
+  fireworks: 'party-popper',
+  'hash-storm': 'hash',
+  'ice-crystals': 'snowflake',
+  'autumn-wind': 'wind',
+  'smoke-calligraphy': 'wind',
+  breath: 'heart',
+  'mycelium-network': 'share2',
+  'oil-slick': 'palette',
+  'bioluminescent-beach': 'waves',
+  'volcanic-islands': 'mountain',
+  'tidal-patterns': 'shell',
+  eclipse: 'moon',
+  'paper-boats': 'sailboat',
+  'paper-airplanes': 'send',
+  thunderstorm: 'zap',
+} satisfies Record<GlobalBackgroundPatternId, BackgroundPatternIconKey>;
+
+type GlobalPattern = BackgroundPattern & GlobalPatternWithMetadata<(typeof baseGlobalPatterns)[number]>;
+
+export const globalPatterns = baseGlobalPatterns.map((pattern) => ({
+  ...pattern,
+  categories: patternCategories[pattern.id],
+  iconKey: patternIconKeys[pattern.id],
+})) as readonly GlobalPattern[];
+
+export const GLOBAL_PATTERN_IDS = globalPatterns.map((pattern) => pattern.id) as GlobalBackgroundPatternId[];
+export const ANIMATED_PATTERNS = globalPatterns
+  .filter((pattern) => pattern.animated === true)
+  .map((pattern) => pattern.id) as GlobalAnimatedPatternId[];
+
+const globalPatternSet = new Set<string>(GLOBAL_PATTERN_IDS);
+const animatedPatternSet = new Set<string>(ANIMATED_PATTERNS);
+
+export function isRegisteredBackgroundPattern(pattern: string): pattern is GlobalBackgroundPatternId {
+  return globalPatternSet.has(pattern);
+}
+
+export function isAnimatedBackgroundPattern(pattern: string): pattern is GlobalAnimatedPatternId {
+  return animatedPatternSet.has(pattern);
+}

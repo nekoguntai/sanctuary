@@ -6,6 +6,7 @@
 
 // Types
 export * from './types';
+export * from './tabDefinitions';
 
 // Custom Hooks
 export {

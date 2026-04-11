@@ -6,12 +6,14 @@
 
 import {
 BACKGROUND_CATEGORIES,
-BackgroundCategory,
 CATEGORIES,
 getBackgroundsByCategory,
 getCategoriesForBackground,
 searchBackgrounds,
 } from '../../themes/backgroundCategories';
+import type { BackgroundCategory } from '../../themes/backgroundCategories';
+import { globalPatterns } from '../../themes/patterns';
+import { bgIconMap } from '../../components/Settings/sections/ThemeSection/iconMaps';
 import type { BackgroundOption } from '../../types';
 
 describe('Background Categories', () => {
@@ -51,6 +53,12 @@ describe('Background Categories', () => {
   });
 
   describe('BACKGROUND_CATEGORIES mapping', () => {
+    it('is derived from registered global patterns', () => {
+      const registeredPatternIds = globalPatterns.map((pattern) => pattern.id);
+
+      expect(Object.keys(BACKGROUND_CATEGORIES)).toEqual(registeredPatternIds);
+    });
+
     it('should have categories for all backgrounds', () => {
       Object.entries(BACKGROUND_CATEGORIES).forEach(([, categories]) => {
         expect(categories.length).toBeGreaterThan(0);
@@ -79,6 +87,13 @@ describe('Background Categories', () => {
       expect(BACKGROUND_CATEGORIES['sakura-petals']).toContain('nature');
       expect(BACKGROUND_CATEGORIES['sakura-petals']).toContain('zen');
       expect(BACKGROUND_CATEGORIES['sakura-petals']).toContain('whimsical');
+    });
+
+    it('should keep registered pattern metadata complete for Settings', () => {
+      globalPatterns.forEach((pattern) => {
+        expect(pattern.categories.length).toBeGreaterThan(0);
+        expect(bgIconMap[pattern.iconKey]).toBeDefined();
+      });
     });
   });
 
@@ -109,8 +124,7 @@ describe('Background Categories', () => {
 
     it('should return all backgrounds for all category', () => {
       const backgrounds = getBackgroundsByCategory('all');
-      // Should return all backgrounds that have categories defined
-      expect(backgrounds.length).toBeGreaterThan(50);
+      expect(backgrounds).toEqual(globalPatterns.map((pattern) => pattern.id));
       expect(backgrounds).toContain('minimal');
       expect(backgrounds).toContain('sakura-petals');
       expect(backgrounds).toContain('bitcoin-particles');

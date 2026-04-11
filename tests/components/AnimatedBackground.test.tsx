@@ -28,6 +28,16 @@ isAnimatedPattern,
 } from '../../components/AnimatedBackground';
 import { globalPatterns } from '../../themes/patterns';
 
+const animationModules = import.meta.glob('../../components/animations/*.ts');
+
+const toCamelCase = (pattern: string): string => {
+  const [firstPart, ...remainingParts] = pattern.split('-');
+  return [
+    firstPart,
+    ...remainingParts.map((part) => part.charAt(0).toUpperCase() + part.slice(1)),
+  ].join('');
+};
+
 describe('AnimatedBackground', () => {
   describe('ANIMATED_PATTERNS array', () => {
     it('should contain paper-airplanes pattern', () => {
@@ -113,31 +123,23 @@ describe('AnimatedBackground', () => {
   });
 
   describe('Pattern Registry Consistency', () => {
-    it('should have all animated patterns marked as animated in globalPatterns', () => {
+    it('derives animated patterns from registered pattern metadata', () => {
       const animatedInRegistry = globalPatterns
         .filter((p) => p.animated === true)
         .map((p) => p.id);
 
-      // Every pattern in ANIMATED_PATTERNS should be marked animated in globalPatterns
-      ANIMATED_PATTERNS.forEach((patternId) => {
-        expect(animatedInRegistry).toContain(patternId);
-      });
+      expect(ANIMATED_PATTERNS).toEqual(animatedInRegistry);
     });
 
-    it('should have all animated patterns from globalPatterns in ANIMATED_PATTERNS', () => {
-      const animatedInRegistry = globalPatterns
-        .filter((p) => p.animated === true)
-        .map((p) => p.id);
+    it('keeps every registered animated pattern matched to a lazy-loadable module', () => {
+      const animationModuleNames = Object.keys(animationModules)
+        .map((modulePath) => modulePath.split('/').pop()?.replace(/\.ts$/, ''))
+        .filter((moduleName): moduleName is string => Boolean(moduleName) && moduleName !== 'index');
+      const animationModuleNameSet = new Set(animationModuleNames);
+      const animatedPatternModuleNames = ANIMATED_PATTERNS.map(toCamelCase);
 
-      // Every animated pattern in globalPatterns should be in ANIMATED_PATTERNS
-      animatedInRegistry.forEach((patternId) => {
-        expect(ANIMATED_PATTERNS).toContain(patternId as AnimatedPatternId);
-      });
-    });
-
-    it('should have matching counts between globalPatterns and ANIMATED_PATTERNS', () => {
-      const animatedCount = globalPatterns.filter((p) => p.animated === true).length;
-      expect(animatedCount).toBe(ANIMATED_PATTERNS.length);
+      expect(ANIMATED_PATTERNS.filter((pattern) => !animationModuleNameSet.has(toCamelCase(pattern)))).toEqual([]);
+      expect(animationModuleNames.filter((moduleName) => !animatedPatternModuleNames.includes(moduleName))).toEqual([]);
     });
   });
 
@@ -174,7 +176,24 @@ describe('AnimatedBackground', () => {
   });
 
   describe('Static Patterns', () => {
-    const staticPatterns = ['minimal', 'zen', 'circuit', 'topography', 'waves', 'lines', 'hexagons', 'stars'];
+    const staticPatterns = [
+      'minimal',
+      'zen',
+      'dots',
+      'cross',
+      'noise',
+      'circuit',
+      'topography',
+      'waves',
+      'lines',
+      'sanctuary',
+      'sanctuary-hero',
+      'hexagons',
+      'triangles',
+      'stars',
+      'aurora',
+      'mountains',
+    ];
 
     staticPatterns.forEach((patternId) => {
       it(`${patternId} should not be marked as animated`, () => {

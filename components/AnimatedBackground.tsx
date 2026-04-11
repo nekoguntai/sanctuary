@@ -8,12 +8,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ANIMATED_PATTERNS,
-  isAnimatedPattern,
-  type AnimatedPatternId,
-} from './animatedPatterns';
+  isAnimatedBackgroundPattern,
+  type GlobalAnimatedPatternId,
+} from '../themes/patterns';
 
-export { ANIMATED_PATTERNS, isAnimatedPattern };
-export type { AnimatedPatternId };
+export { ANIMATED_PATTERNS, isAnimatedBackgroundPattern };
+export { isAnimatedBackgroundPattern as isAnimatedPattern };
+export type AnimatedPatternId = GlobalAnimatedPatternId;
 
 interface AnimatedBackgroundProps {
   pattern: string;
@@ -52,11 +53,11 @@ const toCamelCase = (pattern: string): string => {
   return pascal.charAt(0).toLowerCase() + pascal.slice(1);
 };
 
-const getAnimationModulePath = (pattern: AnimatedPatternId): string => {
+const getAnimationModulePath = (pattern: GlobalAnimatedPatternId): string => {
   return `./animations/${toCamelCase(pattern)}.ts`;
 };
 
-const getAnimationHookExport = (pattern: AnimatedPatternId): string => {
+const getAnimationHookExport = (pattern: GlobalAnimatedPatternId): string => {
   return `use${toPascalCase(pattern)}`;
 };
 
@@ -79,7 +80,7 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
   const animationCanvasRef = canvasRef as React.RefObject<HTMLCanvasElement>;
   const [activeHook, setActiveHook] = useState<AnimationHook | null>(null);
 
-  const animatedPattern = isAnimatedPattern(pattern) ? pattern : null;
+  const animatedPattern = isAnimatedBackgroundPattern(pattern) ? pattern : null;
 
   useEffect(() => {
     let cancelled = false;

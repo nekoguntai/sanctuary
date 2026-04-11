@@ -115,7 +115,7 @@ class ThemeRegistry {
   /**
    * Register multiple themes at once
    */
-  registerMany(themes: ThemeDefinition[]): void {
+  registerMany(themes: readonly ThemeDefinition[]): void {
     themes.forEach(theme => this.register(theme));
   }
 
@@ -166,7 +166,7 @@ class ThemeRegistry {
   /**
    * Register multiple background patterns
    */
-  registerPatterns(patterns: BackgroundPattern[]): void {
+  registerPatterns(patterns: readonly BackgroundPattern[]): void {
     patterns.forEach(pattern => this.registerPattern(pattern));
   }
 

@@ -5,6 +5,7 @@
  * Handlers are checked in priority order (highest first) to detect formats.
  */
 
+import { PrioritizedRegistry } from '../../../../shared/utils/priorityRegistry';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import type {
@@ -22,7 +23,7 @@ const log = createLogger('IMPORT:SVC_REGISTRY');
  * Manages registration and detection of import format handlers.
  */
 class ImportFormatRegistry {
-  private handlers: ImportFormatHandler[] = [];
+  private handlers = new PrioritizedRegistry<ImportFormatHandler>('Import format handler');
   private config: ImportFormatRegistryConfig;
 
   constructor(config: ImportFormatRegistryConfig = {}) {
@@ -34,14 +35,7 @@ class ImportFormatRegistry {
    * Handlers are sorted by priority (highest first)
    */
   register(handler: ImportFormatHandler): void {
-    // Check for duplicate IDs
-    const existing = this.handlers.find((h) => h.id === handler.id);
-    if (existing) {
-      throw new Error(`Import format handler '${handler.id}' is already registered`);
-    }
-
-    this.handlers.push(handler);
-    this.handlers.sort((a, b) => b.priority - a.priority);
+    this.handlers.register(handler);
 
     if (this.config.debug) {
       log.debug('Registered import format handler', {
@@ -56,25 +50,21 @@ class ImportFormatRegistry {
    * Unregister a format handler by ID
    */
   unregister(id: string): boolean {
-    const index = this.handlers.findIndex((h) => h.id === id);
-    if (index === -1) return false;
-
-    this.handlers.splice(index, 1);
-    return true;
+    return this.handlers.unregister(id);
   }
 
   /**
    * Get a handler by ID
    */
   get(id: string): ImportFormatHandler | undefined {
-    return this.handlers.find((h) => h.id === id);
+    return this.handlers.get(id);
   }
 
   /**
    * Get all registered handlers
    */
   getAll(): ImportFormatHandler[] {
-    return [...this.handlers];
+    return this.handlers.getAll();
   }
 
   /**
@@ -82,28 +72,26 @@ class ImportFormatRegistry {
    * Returns the first handler that reports canHandle with detected: true
    */
   detect(input: string): ImportFormatHandler | null {
-    for (const handler of this.handlers) {
-      try {
-        const result = handler.canHandle(input);
-        if (result.detected) {
+    return this.handlers.detectFirst(
+      (handler) => handler.canHandle(input),
+      {
+        onDetected: (handler, result) => {
           if (this.config.debug) {
             log.debug('Format detected', {
               handler: handler.id,
               confidence: result.confidence,
             });
           }
-          return handler;
+        },
+        onError: (handler, error) => {
+          // canHandle should not throw, but handle gracefully
+          log.warn('Handler canHandle threw error', {
+            handler: handler.id,
+            error: getErrorMessage(error),
+          });
         }
-      } catch (error) {
-        // canHandle should not throw, but handle gracefully
-        log.warn('Handler canHandle threw error', {
-          handler: handler.id,
-          error: getErrorMessage(error),
-        });
       }
-    }
-
-    return null;
+    );
   }
 
   /**
@@ -111,21 +99,10 @@ class ImportFormatRegistry {
    * Useful for debugging or showing format options to user
    */
   detectAll(input: string): Array<{ handler: ImportFormatHandler; result: FormatDetectionResult }> {
-    const results: Array<{ handler: ImportFormatHandler; result: FormatDetectionResult }> = [];
-
-    for (const handler of this.handlers) {
-      try {
-        const result = handler.canHandle(input);
-        results.push({ handler, result });
-      } catch (error) {
-        results.push({
-          handler,
-          result: { detected: false, confidence: 0 },
-        });
-      }
-    }
-
-    return results.sort((a, b) => b.result.confidence - a.result.confidence);
+    return this.handlers.detectAll(
+      (handler) => handler.canHandle(input),
+      () => ({ detected: false, confidence: 0 })
+    ).map(({ entry, result }) => ({ handler: entry, result }));
   }
 
   /**
@@ -168,7 +145,7 @@ class ImportFormatRegistry {
    */
   getFileExtensions(): string[] {
     const extensions = new Set<string>();
-    for (const handler of this.handlers) {
+    for (const handler of this.handlers.getAll()) {
       if (handler.fileExtensions) {
         for (const ext of handler.fileExtensions) {
           extensions.add(ext);
@@ -182,7 +159,7 @@ class ImportFormatRegistry {
    * Get handler count
    */
   get count(): number {
-    return this.handlers.length;
+    return this.handlers.count;
   }
 }
 

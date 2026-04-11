@@ -5,6 +5,8 @@
  * Parsers are checked in priority order (highest first) to detect formats.
  */
 
+import { PrioritizedRegistry } from '../../shared/utils/priorityRegistry';
+import { extractErrorMessage } from '../../shared/utils/errors';
 import { createLogger } from '../../utils/logger';
 import type {
   DeviceParser,
@@ -21,7 +23,7 @@ const log = createLogger('DEVICE:PARSER');
  * Manages registration and detection of device import format parsers.
  */
 class DeviceParserRegistry {
-  private parsers: DeviceParser[] = [];
+  private parsers = new PrioritizedRegistry<DeviceParser>('Device parser');
   private config: DeviceParserRegistryConfig;
 
   constructor(config: DeviceParserRegistryConfig = {}) {
@@ -33,14 +35,7 @@ class DeviceParserRegistry {
    * Parsers are sorted by priority (highest first)
    */
   register(parser: DeviceParser): void {
-    // Check for duplicate IDs
-    const existing = this.parsers.find((p) => p.id === parser.id);
-    if (existing) {
-      throw new Error(`Device parser '${parser.id}' is already registered`);
-    }
-
-    this.parsers.push(parser);
-    this.parsers.sort((a, b) => b.priority - a.priority);
+    this.parsers.register(parser);
 
     if (this.config.debug) {
       log.debug('Registered device parser', {
@@ -55,25 +50,21 @@ class DeviceParserRegistry {
    * Unregister a parser by ID
    */
   unregister(id: string): boolean {
-    const index = this.parsers.findIndex((p) => p.id === id);
-    if (index === -1) return false;
-
-    this.parsers.splice(index, 1);
-    return true;
+    return this.parsers.unregister(id);
   }
 
   /**
    * Get a parser by ID
    */
   get(id: string): DeviceParser | undefined {
-    return this.parsers.find((p) => p.id === id);
+    return this.parsers.get(id);
   }
 
   /**
    * Get all registered parsers
    */
   getAll(): DeviceParser[] {
-    return [...this.parsers];
+    return this.parsers.getAll();
   }
 
   /**
@@ -81,28 +72,26 @@ class DeviceParserRegistry {
    * Returns the first parser that reports canParse with detected: true
    */
   detect(data: unknown): DeviceParser | null {
-    for (const parser of this.parsers) {
-      try {
-        const result = parser.canParse(data);
-        if (result.detected) {
+    return this.parsers.detectFirst(
+      (parser) => parser.canParse(data),
+      {
+        onDetected: (parser, result) => {
           if (this.config.debug) {
             log.debug('Format detected', {
               parser: parser.id,
               confidence: result.confidence,
             });
           }
-          return parser;
+        },
+        onError: (parser, error) => {
+          // canParse should not throw, but handle gracefully
+          log.warn('Parser canParse threw error', {
+            parser: parser.id,
+            error: extractErrorMessage(error, String(error)),
+          });
         }
-      } catch (error) {
-        // canParse should not throw, but handle gracefully
-        log.warn('Parser canParse threw error', {
-          parser: parser.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
       }
-    }
-
-    return null;
+    );
   }
 
   /**
@@ -110,21 +99,10 @@ class DeviceParserRegistry {
    * Useful for debugging or showing format options to user
    */
   detectAll(data: unknown): Array<{ parser: DeviceParser; result: FormatDetectionResult }> {
-    const results: Array<{ parser: DeviceParser; result: FormatDetectionResult }> = [];
-
-    for (const parser of this.parsers) {
-      try {
-        const result = parser.canParse(data);
-        results.push({ parser, result });
-      } catch {
-        results.push({
-          parser,
-          result: { detected: false, confidence: 0 },
-        });
-      }
-    }
-
-    return results.sort((a, b) => b.result.confidence - a.result.confidence);
+    return this.parsers.detectAll(
+      (parser) => parser.canParse(data),
+      () => ({ detected: false, confidence: 0 })
+    ).map(({ entry, result }) => ({ parser: entry, result }));
   }
 
   /**
@@ -163,7 +141,7 @@ class DeviceParserRegistry {
     } catch (error) {
       log.warn('Parser threw error during parse', {
         parser: parser.id,
-        error: error instanceof Error ? error.message : String(error),
+        error: extractErrorMessage(error, String(error)),
       });
       return null;
     }
@@ -187,7 +165,7 @@ class DeviceParserRegistry {
    * Get parser count
    */
   get count(): number {
-    return this.parsers.length;
+    return this.parsers.count;
   }
 
   /**
@@ -195,8 +173,8 @@ class DeviceParserRegistry {
    */
   getStats(): { parserCount: number; parsers: Array<{ id: string; name: string; priority: number }> } {
     return {
-      parserCount: this.parsers.length,
-      parsers: this.parsers.map((p) => ({
+      parserCount: this.parsers.count,
+      parsers: this.parsers.getAll().map((p) => ({
         id: p.id,
         name: p.name,
         priority: p.priority,

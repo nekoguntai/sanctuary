@@ -104,12 +104,31 @@ Verification:
 
 ### Phase 5: Registry Helper Evaluation
 
-Status: Not started
+Status: Completed 2026-04-11
 
 Goal: reduce exact duplicated priority/detect registry mechanics only where the abstraction is smaller than the duplication.
 
 Planned work:
 
-- Compare import and device parser registry behavior.
-- Extract a small helper only if it preserves their local semantics.
-- Do not force provider health/failover semantics onto unrelated registries.
+- Completed: compared import and device parser registry behavior and confirmed the shared mechanics are duplicate ID checks, descending priority ordering, immutable snapshots, first-match detection, detector error handling, and confidence-sorted `detectAll()` results.
+- Completed: added `shared/utils/priorityRegistry.ts` as a pure shared helper for those mechanics only.
+- Completed: refactored `server/src/services/import/registry.ts` to use the helper while preserving import-specific parse behavior, validation behavior, file extension collection, errors, and logging keys.
+- Completed: refactored `services/deviceParsers/registry.ts` to use the helper while preserving device-specific `null` parse behavior, JSON string fallback, stats shape, errors, and logging keys.
+- Completed: added focused helper tests in `tests/shared/priorityRegistry.test.ts`.
+- Completed: validated provider, export, notification channel, and script type registries as non-targets for this helper because their semantics are materially different.
+
+Verification:
+
+- Passed: `npx vitest run tests/shared/priorityRegistry.test.ts tests/services/deviceParsers/registry.behavior.test.ts`
+- Passed: `npx vitest run tests/services/deviceParsers/deviceParsers.test.ts tests/services/deviceParsers/registry.behavior.test.ts tests/services/deviceParsers/coldcardFlat.branches.test.ts tests/services/deviceParsers/coldcardNested.branches.test.ts tests/services/deviceParsers/keystone.branches.test.ts tests/shared/priorityRegistry.test.ts`
+- Passed: `cd server && npx vitest run tests/unit/services/import/importRegistry.test.ts`
+- Passed: `npx tsc --noEmit -p tsconfig.app.json --noUnusedLocals false --noUnusedParameters false`
+- Passed: `npx tsc --noEmit -p tsconfig.tests.json --noUnusedLocals false --noUnusedParameters false`
+- Passed: `cd server && npx tsc --noEmit`
+
+## Deferred And Follow-Up Work
+
+- Phase 4 deferred: migrating currently manual lifecycle services from `server/src/index.ts` into `registerService()` remains deferred until there is a specific service with dependency metadata that can move without changing database, Redis, migration, cache warmup, or server-listen timing. Before migrating one, add a startup/shutdown ordering test or harness that pins the expected timing.
+- Phase 5 non-goal: do not fold `server/src/providers/registry.ts` into `PrioritizedRegistry`. It has async provider lifecycle hooks, health caching, timers, and failover semantics that are not present in import or device parser registries.
+- Phase 5 non-goal: do not fold export, notification channel, or script type registries into `PrioritizedRegistry` unless their requirements change. Validation showed they are Map/capability/alias/dispatch registries, not priority-detect registries.
+- Future follow-up: if another extension point repeats the exact ID plus descending-priority plus detector-confidence mechanics, use `PrioritizedRegistry` instead of writing a bespoke array registry.

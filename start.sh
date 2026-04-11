@@ -81,18 +81,40 @@ check_ssl_expiry() {
                 local now_epoch=$(date +%s)
                 local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
 
-                if [ "$days_left" -le 0 ]; then
-                    echo ""
-                    echo -e "\033[0;31mSSL certificate has expired — auto-regenerating...\033[0m"
-                elif [ "$days_left" -lt 30 ]; then
-                    echo ""
-                    echo -e "\033[1;33mSSL certificate expires in $days_left days — auto-regenerating...\033[0m"
-                fi
-
                 if [ "$days_left" -lt 30 ]; then
-                    (cd "$SCRIPT_DIR/docker/nginx/ssl" && bash generate-certs.sh localhost)
-                    echo -e "\033[0;32mSSL certificate regenerated.\033[0m"
-                    echo ""
+                    # Only auto-regenerate self-signed certs; warn for CA-signed
+                    local issuer=$(openssl x509 -issuer -noout -in "$cert_file" 2>/dev/null)
+                    local subject=$(openssl x509 -subject -noout -in "$cert_file" 2>/dev/null)
+                    local is_self_signed=false
+                    if [ "$issuer" = "$subject" ]; then
+                        is_self_signed=true
+                    fi
+
+                    if [ "$days_left" -le 0 ]; then
+                        echo ""
+                        if [ "$is_self_signed" = true ]; then
+                            echo -e "\033[0;31mSSL certificate has expired — auto-regenerating...\033[0m"
+                        else
+                            echo -e "\033[0;31mWarning: SSL certificate has expired!\033[0m"
+                            echo "  This is a CA-signed certificate — renew it with your certificate provider."
+                            echo ""
+                        fi
+                    elif [ "$days_left" -lt 30 ]; then
+                        echo ""
+                        if [ "$is_self_signed" = true ]; then
+                            echo -e "\033[1;33mSSL certificate expires in $days_left days — auto-regenerating...\033[0m"
+                        else
+                            echo -e "\033[1;33mWarning: SSL certificate expires in $days_left days.\033[0m"
+                            echo "  This is a CA-signed certificate — renew it with your certificate provider."
+                            echo ""
+                        fi
+                    fi
+
+                    if [ "$is_self_signed" = true ]; then
+                        (cd "$SCRIPT_DIR/docker/nginx/ssl" && bash generate-certs.sh localhost)
+                        echo -e "\033[0;32mSSL certificate regenerated.\033[0m"
+                        echo ""
+                    fi
                 fi
             fi
         fi

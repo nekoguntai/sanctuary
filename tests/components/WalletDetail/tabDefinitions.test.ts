@@ -3,6 +3,7 @@ import {
   DEFAULT_WALLET_DETAIL_TAB,
   WALLET_DETAIL_TAB_IDS,
   canShowWalletDetailTab,
+  getWalletDetailTabDefinition,
   getWalletDetailTabs,
   isWalletDetailTab,
   resolveWalletDetailTab,
@@ -66,5 +67,11 @@ describe('wallet detail tab definitions', () => {
     expect(resolveWalletDetailTab('access', 'viewer')).toBe('tx');
     expect(resolveWalletDetailTab('drafts', 'viewer', 'settings')).toBe('settings');
     expect(resolveWalletDetailTab('unknown', 'owner')).toBe('tx');
+  });
+
+  it('throws when a requested tab definition is missing', () => {
+    expect(() => getWalletDetailTabDefinition('missing' as any)).toThrow(
+      'Missing wallet detail tab definition: missing'
+    );
   });
 });

@@ -61,4 +61,18 @@ describe('TabBar', () => {
 
     expect(screen.getByText('9+')).toBeInTheDocument();
   });
+
+  it('keeps rendering when no tab matches the active tab', () => {
+    render(
+      <TabBar
+        activeTab={'missing' as any}
+        onTabChange={vi.fn()}
+        userRole="viewer"
+        draftsCount={0}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Transactions' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'UTXOs' })).toBeInTheDocument();
+  });
 });

@@ -510,6 +510,28 @@ describe('WalletDetail wrapper behaviors', () => {
     });
   });
 
+  it('ignores invalid router-provided tab values', () => {
+    const { rerender } = render(<WalletDetail />);
+
+    mocks.locationState = { activeTab: 'not-a-tab' };
+    rerender(<WalletDetail />);
+
+    expect(screen.getByTestId('transactions-tab')).toBeInTheDocument();
+  });
+
+  it('handles repeated and pre-wallet router tab updates', () => {
+    const { rerender } = render(<WalletDetail />);
+
+    mocks.locationState = { activeTab: 'tx' };
+    rerender(<WalletDetail />);
+    expect(screen.getByTestId('transactions-tab')).toBeInTheDocument();
+
+    mocks.walletDataState = createWalletData({ loading: false, error: null, wallet: null });
+    mocks.locationState = { activeTab: 'stats' };
+    rerender(<WalletDetail />);
+    expect(screen.getByText('Loading wallet...')).toBeInTheDocument();
+  });
+
   it('handles header actions, tab interactions, modals, and successful API paths', async () => {
     const user = userEvent.setup();
 

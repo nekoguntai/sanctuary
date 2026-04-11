@@ -79,7 +79,7 @@ const AppRoutes: React.FC = () => {
             <Route
               key={route.path}
               path={route.path}
-              element={<Navigate to={route.to} replace={route.replace ?? false} />}
+              element={<Navigate to={route.to} replace={route.replace} />}
             />
           ))}
         </Routes>

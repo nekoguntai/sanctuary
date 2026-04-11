@@ -12,8 +12,9 @@ getCategoriesForBackground,
 searchBackgrounds,
 } from '../../themes/backgroundCategories';
 import type { BackgroundCategory } from '../../themes/backgroundCategories';
-import { globalPatterns } from '../../themes/patterns';
-import { bgIconMap } from '../../components/Settings/sections/ThemeSection/iconMaps';
+import { globalPatterns,isRegisteredBackgroundPattern } from '../../themes/patterns';
+import { Image as ImageIcon,Sparkles } from 'lucide-react';
+import { bgIconMap,getBackgroundPatternIcon } from '../../components/Settings/sections/ThemeSection/iconMaps';
 import type { BackgroundOption } from '../../types';
 
 describe('Background Categories', () => {
@@ -94,6 +95,17 @@ describe('Background Categories', () => {
         expect(pattern.categories.length).toBeGreaterThan(0);
         expect(bgIconMap[pattern.iconKey]).toBeDefined();
       });
+    });
+
+    it('identifies registered global pattern IDs', () => {
+      expect(isRegisteredBackgroundPattern(globalPatterns[0].id)).toBe(true);
+      expect(isRegisteredBackgroundPattern('__unknown__')).toBe(false);
+    });
+
+    it('resolves background pattern icons from explicit and fallback metadata', () => {
+      expect(getBackgroundPatternIcon({ animated: false, iconKey: 'sats' })).toBe(bgIconMap.sats);
+      expect(getBackgroundPatternIcon({ animated: true, iconKey: undefined })).toBe(Sparkles);
+      expect(getBackgroundPatternIcon({ animated: false, iconKey: undefined })).toBe(ImageIcon);
     });
   });
 

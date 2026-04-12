@@ -78,7 +78,7 @@ describe('backendEvents deviceTokens', () => {
       expect(devices).toEqual([{ id: 'd1', platform: 'ios', pushToken: 'tok', userId: 'u1' }]);
     });
 
-    it('falls back to legacy gateway header when secret is not configured', async () => {
+    it('still uses signed headers when gateway secret is empty', async () => {
       mockConfig.gatewaySecret = '';
       fetchMock.mockResolvedValueOnce({
         ok: true,
@@ -87,12 +87,17 @@ describe('backendEvents deviceTokens', () => {
 
       await getDevicesForUser('u1');
 
-      expect(mockGenerateRequestSignature).not.toHaveBeenCalled();
+      expect(mockGenerateRequestSignature).toHaveBeenCalledWith(
+        'GET',
+        '/api/v1/push/by-user/u1',
+        null
+      );
       expect(fetchMock).toHaveBeenCalledWith(
         'http://backend:3000/api/v1/push/by-user/u1',
         expect.objectContaining({
           headers: {
-            'X-Gateway-Request': 'true',
+            'X-Gateway-Signature': 'sig-123',
+            'X-Gateway-Timestamp': '1700000000000',
           },
           signal: expect.any(AbortSignal),
         })
@@ -162,7 +167,8 @@ describe('backendEvents deviceTokens', () => {
         expect.objectContaining({
           method: 'DELETE',
           headers: {
-            'X-Gateway-Request': 'true',
+            'X-Gateway-Signature': 'sig-123',
+            'X-Gateway-Timestamp': '1700000000000',
           },
           signal: expect.any(AbortSignal),
         })

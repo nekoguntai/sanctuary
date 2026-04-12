@@ -56,7 +56,7 @@ export function createQueryKeys(domain: string): QueryKeys {
 // Query Hook Factories
 // ---------------------------------------------------------------------------
 
-interface ListQueryOptions<TData> {
+interface ListQueryOptions {
   /** Refetch on an interval (ms) */
   refetchInterval?: number;
   /** How long data is considered fresh (ms) */
@@ -75,7 +75,7 @@ interface ListQueryOptions<TData> {
 export function createListQuery<TData>(
   keys: QueryKeys,
   queryFn: () => Promise<TData>,
-  options: ListQueryOptions<TData> = {}
+  options: ListQueryOptions = {}
 ) {
   const { refetchInterval, staleTime, keepPrevious = true } = options;
 
@@ -91,7 +91,7 @@ export function createListQuery<TData>(
   };
 }
 
-interface DetailQueryOptions<TData> {
+interface DetailQueryOptions {
   /** Refetch on an interval (ms) */
   refetchInterval?: number;
   /** How long data is considered fresh (ms) */
@@ -112,7 +112,7 @@ interface DetailQueryOptions<TData> {
 export function createDetailQuery<TData>(
   keys: QueryKeys,
   queryFn: (id: string) => Promise<TData>,
-  options: DetailQueryOptions<TData> = {}
+  options: DetailQueryOptions = {}
 ) {
   const { refetchInterval, staleTime, keepPrevious = false } = options;
 

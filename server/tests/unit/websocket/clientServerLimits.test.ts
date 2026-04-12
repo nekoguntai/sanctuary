@@ -18,6 +18,9 @@ vi.mock('../../../src/services/accessControl', () => ({
 }));
 
 vi.mock('../../../src/utils/jwt', () => ({
+  TokenAudience: {
+    ACCESS: 'sanctuary:access',
+  },
   verifyToken: mockVerifyToken,
 }));
 

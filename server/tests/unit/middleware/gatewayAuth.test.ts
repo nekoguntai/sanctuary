@@ -240,6 +240,33 @@ describe('Gateway Auth Middleware', () => {
       expect(mockNext).not.toHaveBeenCalled();
     });
 
+    it('should verify signatures against originalUrl for mounted routers', () => {
+      const body = { walletId: 'wallet-1', userId: 'user-1', action: 'broadcast' };
+      mockReq.method = 'POST';
+      mockReq.path = '/mobile-permissions/check';
+      mockReq.originalUrl = '/internal/mobile-permissions/check';
+      mockReq.body = body;
+      mockReq.headers = createValidHeaders('POST', '/internal/mobile-permissions/check', body);
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(statusMock).not.toHaveBeenCalled();
+    });
+
+    it('should reject signatures bound only to mounted req.path when originalUrl is present', () => {
+      mockReq.method = 'GET';
+      mockReq.path = '/by-user/user-1';
+      mockReq.originalUrl = '/api/v1/push/by-user/user-1';
+      mockReq.body = {};
+      mockReq.headers = createValidHeaders('GET', '/by-user/user-1', {});
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
     it('should handle non-hex signature gracefully', () => {
       mockReq.headers = {
         'x-gateway-signature': 'not-valid-hex-!!',
@@ -334,6 +361,18 @@ describe('Gateway Auth Middleware', () => {
 
       // Should produce valid signature even with empty body
       expect(result.signature).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('should distinguish empty arrays from empty objects', () => {
+      const timestamp = '1700000000000';
+      vi.spyOn(Date, 'now').mockReturnValue(Number(timestamp));
+
+      const emptyObject = generateGatewaySignature('POST', '/test', {}, secret);
+      const emptyArray = generateGatewaySignature('POST', '/test', [], secret);
+
+      expect(emptyObject.timestamp).toBe(timestamp);
+      expect(emptyArray.timestamp).toBe(timestamp);
+      expect(emptyArray.signature).not.toBe(emptyObject.signature);
     });
   });
 });

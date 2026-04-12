@@ -1,4 +1,4 @@
-import type { OllamaModel, OllamaContainerStatus, SystemResources } from '../../src/api/ai';
+import type { OllamaModel, OllamaContainerStatus } from '../../src/api/ai';
 import type { ModelDownloadProgress } from '../../hooks/websocket';
 
 export interface PopularModel {
@@ -77,10 +77,6 @@ export interface ContainerControlsProps {
 
 export interface EnableModalProps {
   showEnableModal: boolean;
-  isLoadingResources: boolean;
-  systemResources: SystemResources | null;
-  acknowledgeInsufficient: boolean;
-  onAcknowledgeChange: (checked: boolean) => void;
   onClose: () => void;
   onEnable: () => void;
 }

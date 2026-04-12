@@ -11,10 +11,6 @@ import { StatusTab } from '../../components/AISettings/tabs/StatusTab';
 describe('EnableModal', () => {
   const baseProps = {
     showEnableModal: true,
-    isLoadingResources: false,
-    systemResources: null,
-    acknowledgeInsufficient: false,
-    onAcknowledgeChange: vi.fn(),
     onClose: vi.fn(),
     onEnable: vi.fn(),
   };
@@ -49,12 +45,6 @@ describe('EnableModal', () => {
       ...baseProps,
       onClose,
       onEnable,
-      systemResources: {
-        ram: { available: 8192, total: 16384, sufficient: true },
-        disk: { available: 16384, sufficient: true },
-        gpu: { available: true, name: 'RTX' },
-        overall: { sufficient: true, warnings: [] },
-      } as any,
     };
 
     render(<EnableModal {...props} />);

@@ -123,7 +123,7 @@ export function validateConfig(): void {
   }
 
   if (!config.gatewaySecret) {
-    warnings.push('GATEWAY_SECRET is not set - internal gateway authentication disabled');
+    warnings.push('GATEWAY_SECRET is not set - internal gateway calls will be rejected by the backend');
   } else if (config.gatewaySecret.length < 32) {
     warnings.push('GATEWAY_SECRET is shorter than 32 characters');
   }

@@ -236,10 +236,6 @@ export default function AISettings() {
       {/* Enable AI Confirmation Modal */}
       <EnableModal
         showEnableModal={container.showEnableModal}
-        isLoadingResources={container.isLoadingResources}
-        systemResources={container.systemResources}
-        acknowledgeInsufficient={container.acknowledgeInsufficient}
-        onAcknowledgeChange={container.setAcknowledgeInsufficient}
         onClose={container.handleCloseEnableModal}
         onEnable={() => container.performToggleAI(true)}
       />

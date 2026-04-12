@@ -14,7 +14,6 @@ vi.mock('../../../../src/api/ai', () => ({
   detectOllama: vi.fn(),
   stopOllamaContainer: vi.fn(),
   getOllamaContainerStatus: vi.fn(),
-  getSystemResources: vi.fn(),
 }));
 
 vi.mock('../../../../hooks/useAIStatus', () => ({
@@ -74,11 +73,6 @@ describe('useContainerLifecycle', () => {
       running: false,
       status: 'stopped',
     } as never);
-    vi.mocked(aiApi.getSystemResources).mockResolvedValue({
-      ram: { sufficient: true },
-      disk: { sufficient: true },
-      overall: { sufficient: true, warnings: [] },
-    } as never);
   });
 
   it('toRunningContainerStatus handles null and object inputs', async () => {
@@ -100,20 +94,18 @@ describe('useContainerLifecycle', () => {
     });
   });
 
-  it('opens/close enable modal and loads resources when toggling from disabled', async () => {
+  it('opens and closes the enable modal when toggling from disabled', async () => {
     const { result } = renderLifecycle({ aiEnabled: false });
 
     await act(async () => {
       await result.current.handleToggleAI();
     });
     expect(result.current.showEnableModal).toBe(true);
-    expect(aiApi.getSystemResources).toHaveBeenCalled();
 
     act(() => {
       result.current.handleCloseEnableModal();
     });
     expect(result.current.showEnableModal).toBe(false);
-    expect(result.current.systemResources).toBeNull();
   });
 
   it('enables AI without starting containers (decoupled toggle)', async () => {
@@ -311,20 +303,6 @@ describe('useContainerLifecycle', () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
     expect(result.current.containerMessage).toBe('');
-  });
-
-  it('handles resource check failure when opening the enable modal', async () => {
-    vi.mocked(aiApi.getSystemResources).mockRejectedValueOnce(new Error('resources failed') as never);
-
-    const { result } = renderLifecycle({ aiEnabled: false });
-
-    await act(async () => {
-      await result.current.handleToggleAI();
-    });
-
-    expect(result.current.showEnableModal).toBe(true);
-    expect(result.current.systemResources).toBeNull();
-    expect(result.current.isLoadingResources).toBe(false);
   });
 
   it('continues enable flow when auto-detect throws after enabling', async () => {

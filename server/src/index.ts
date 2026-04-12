@@ -30,6 +30,7 @@ import { getErrorMessage } from './utils/errors';
 import { validateEncryptionKey } from './utils/encryption';
 import { requestLogger } from './middleware/requestLogger';
 import { requestTimeout } from './middleware/requestTimeout';
+import { defaultJsonParser, defaultUrlencodedParser } from './middleware/bodyParsing';
 import { apiVersionMiddleware } from './middleware/apiVersion';
 import { migrationService } from './services/migrationService';
 import { getStartupStatus, isSystemDegraded } from './services/startupManager';
@@ -128,9 +129,9 @@ app.use(compression({
   },
 }));
 
-// Body parsing (10MB default; backup/restore routes override with 200MB)
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Body parsing (10MB default; backup/restore routes use route-specific 200MB parser)
+app.use(defaultJsonParser());
+app.use(defaultUrlencodedParser());
 
 // Request logging and correlation IDs
 app.use(requestLogger);

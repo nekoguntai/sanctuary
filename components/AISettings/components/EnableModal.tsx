@@ -3,10 +3,6 @@ import type { EnableModalProps } from '../types';
 
 export function EnableModal({
   showEnableModal,
-  isLoadingResources,
-  systemResources,
-  acknowledgeInsufficient,
-  onAcknowledgeChange,
   onClose,
   onEnable,
 }: EnableModalProps) {

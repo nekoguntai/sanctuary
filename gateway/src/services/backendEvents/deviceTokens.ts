@@ -25,15 +25,10 @@ export async function getDevicesForUser(userId: string): Promise<DeviceInfo[]> {
     const path = `/api/v1/push/by-user/${userId}`;
     const headers: Record<string, string> = {};
 
-    // SEC-002: Add HMAC signature if gateway secret is configured
-    if (config.gatewaySecret) {
-      const { signature, timestamp } = generateRequestSignature('GET', path, null);
-      headers['X-Gateway-Signature'] = signature;
-      headers['X-Gateway-Timestamp'] = timestamp;
-    } else {
-      // Fallback to legacy header for backwards compatibility
-      headers['X-Gateway-Request'] = 'true';
-    }
+    // SEC-002: Backend requires HMAC signatures for internal gateway endpoints.
+    const { signature, timestamp } = generateRequestSignature('GET', path, null);
+    headers['X-Gateway-Signature'] = signature;
+    headers['X-Gateway-Timestamp'] = timestamp;
 
     const response = await fetch(`${config.backendUrl}${path}`, {
       headers,
@@ -66,15 +61,10 @@ export async function removeInvalidDevice(deviceId: string, token: string): Prom
     const path = `/api/v1/push/device/${deviceId}`;
     const headers: Record<string, string> = {};
 
-    // SEC-002: Add HMAC signature if gateway secret is configured
-    if (config.gatewaySecret) {
-      const { signature, timestamp } = generateRequestSignature('DELETE', path, null);
-      headers['X-Gateway-Signature'] = signature;
-      headers['X-Gateway-Timestamp'] = timestamp;
-    } else {
-      // Fallback to legacy header for backwards compatibility
-      headers['X-Gateway-Request'] = 'true';
-    }
+    // SEC-002: Backend requires HMAC signatures for internal gateway endpoints.
+    const { signature, timestamp } = generateRequestSignature('DELETE', path, null);
+    headers['X-Gateway-Signature'] = signature;
+    headers['X-Gateway-Timestamp'] = timestamp;
 
     const response = await fetch(`${config.backendUrl}${path}`, {
       method: 'DELETE',

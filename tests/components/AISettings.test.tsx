@@ -28,7 +28,6 @@ const mockPullModel = vi.fn();
 const mockGetOllamaContainerStatus = vi.fn();
 const mockStartOllamaContainer = vi.fn();
 const mockStopOllamaContainer = vi.fn();
-const mockGetSystemResources = vi.fn();
 
 vi.mock('../../src/api/ai', () => ({
   getAIStatus: () => mockGetAIStatus(),
@@ -38,7 +37,6 @@ vi.mock('../../src/api/ai', () => ({
   getOllamaContainerStatus: () => mockGetOllamaContainerStatus(),
   startOllamaContainer: () => mockStartOllamaContainer(),
   stopOllamaContainer: () => mockStopOllamaContainer(),
-  getSystemResources: () => mockGetSystemResources(),
 }));
 
 // Mock logger
@@ -120,13 +118,6 @@ const mockModels = {
   ],
 };
 
-const mockSystemResources = {
-  ram: { total: 16384, available: 8192, required: 4096, sufficient: true },
-  disk: { total: 512000, available: 100000, required: 8192, sufficient: true },
-  gpu: { available: false, name: null },
-  overall: { sufficient: true, warnings: [] },
-};
-
 describe('AISettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -142,7 +133,6 @@ describe('AISettings', () => {
     mockGetOllamaContainerStatus.mockResolvedValue({ available: false, exists: false, running: false, status: 'not-available' });
     mockStartOllamaContainer.mockResolvedValue({ success: true, message: 'Container started' });
     mockStopOllamaContainer.mockResolvedValue({ success: true, message: 'Container stopped' });
-    mockGetSystemResources.mockResolvedValue(mockSystemResources);
   });
 
   afterEach(() => {
@@ -210,7 +200,6 @@ describe('AISettings', () => {
       mockDetectOllama.mockReturnValue(pending as any);
       mockListModels.mockReturnValue(pending as any);
       mockPullModel.mockReturnValue(pending as any);
-      mockGetSystemResources.mockReturnValue(pending as any);
       global.fetch = vi.fn(() => pending as any);
       const { container } = render(<AISettings />);
 

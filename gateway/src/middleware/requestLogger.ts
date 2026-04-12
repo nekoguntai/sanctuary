@@ -42,6 +42,7 @@ import {
   extractClientIp,
   sanitizePath,
 } from '../../../shared/utils/request';
+import { generateGatewaySignature } from '../../../shared/utils/gatewayAuth';
 
 const log = createLogger('REQUEST');
 
@@ -57,22 +58,27 @@ async function sendToBackendAudit(
   details: Record<string, unknown>
 ): Promise<void> {
   try {
-    const response = await fetch(`${config.backendUrl}/api/v1/push/gateway-audit`, {
+    const path = '/api/v1/push/gateway-audit';
+    const body = {
+      event,
+      category: 'gateway',
+      severity: details.severity || 'info',
+      details,
+      ip: details.ip,
+      userAgent: details.userAgent,
+      userId: details.userId,
+      username: details.username,
+    };
+    const { signature, timestamp } = generateGatewaySignature('POST', path, body, config.gatewaySecret);
+
+    const response = await fetch(`${config.backendUrl}${path}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Gateway-Request': 'true',
+        'X-Gateway-Signature': signature,
+        'X-Gateway-Timestamp': timestamp,
       },
-      body: JSON.stringify({
-        event,
-        category: 'gateway',
-        severity: details.severity || 'info',
-        details,
-        ip: details.ip,
-        userAgent: details.userAgent,
-        userId: details.userId,
-        username: details.username,
-      }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(config.backendRequestTimeoutMs),
     });
 

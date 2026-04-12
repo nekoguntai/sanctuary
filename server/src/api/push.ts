@@ -22,13 +22,13 @@
  *
  * ## Internal Endpoints
  *
- * Some endpoints are internal (X-Gateway-Request: true) and not exposed to mobile apps:
+ * Some endpoints are internal (HMAC-signed gateway requests) and not exposed to mobile apps:
  * - GET /api/v1/push/by-user/:userId - Fetch devices for gateway push delivery
  *
  * ## Security
  *
  * - All user-facing endpoints require JWT authentication
- * - Internal endpoints check X-Gateway-Request header
+ * - Internal endpoints require HMAC gateway authentication headers
  * - Device tokens are only modifiable by the owning user
  */
 

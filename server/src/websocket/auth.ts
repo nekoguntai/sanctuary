@@ -9,7 +9,7 @@
  */
 
 import { IncomingMessage } from 'http';
-import { verifyToken } from '../utils/jwt';
+import { verifyToken, TokenAudience, type JWTPayload } from '../utils/jwt';
 import { createLogger } from '../utils/logger';
 import {
   AUTH_TIMEOUT_MS,
@@ -18,6 +18,19 @@ import {
 } from './types';
 
 const log = createLogger('WS:AUTH');
+
+/**
+ * WebSocket subscriptions require the same access-token boundary as HTTP APIs.
+ */
+async function verifyWebSocketAccessToken(token: string): Promise<JWTPayload> {
+  const decoded = await verifyToken(token, TokenAudience.ACCESS);
+
+  if (decoded.pending2FA) {
+    throw new Error('2FA verification required');
+  }
+
+  return decoded;
+}
 
 /**
  * Callback interface for auth operations that need to interact with the server
@@ -77,7 +90,7 @@ export function authenticateOnUpgrade(
   log.info(`WebSocket connection attempt from ${request.socket.remoteAddress}`);
 
   if (token) {
-    verifyToken(token)
+    verifyWebSocketAccessToken(token)
       .then((decoded) => {
         client.userId = decoded.userId;
 
@@ -137,7 +150,7 @@ export async function handleAuthMessage(
   }
 
   try {
-    const decoded = await verifyToken(token);
+    const decoded = await verifyWebSocketAccessToken(token);
     const userId = decoded.userId;
 
     // Check per-user connection limit

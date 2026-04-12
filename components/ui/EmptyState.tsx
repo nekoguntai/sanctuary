@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wallet, Cpu, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Button } from './Button';
 
 // Bespoke SVG illustration: minimalist vault door

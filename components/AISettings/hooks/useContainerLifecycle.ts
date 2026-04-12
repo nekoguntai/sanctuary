@@ -40,10 +40,6 @@ interface UseContainerLifecycleReturn {
 
   // Enable modal
   showEnableModal: boolean;
-  systemResources: aiApi.SystemResources | null;
-  isLoadingResources: boolean;
-  acknowledgeInsufficient: boolean;
-  setAcknowledgeInsufficient: (value: boolean) => void;
   handleCloseEnableModal: () => void;
   performToggleAI: (newValue: boolean) => Promise<void>;
 }
@@ -61,7 +57,6 @@ export function useContainerLifecycle({
   setAiEnabled,
   setAiEndpoint,
   setAiModel,
-  containerStatus,
   setContainerStatus,
   loadModels,
 }: UseContainerLifecycleParams): UseContainerLifecycleReturn {
@@ -76,9 +71,6 @@ export function useContainerLifecycle({
 
   // Enable confirmation modal state
   const [showEnableModal, setShowEnableModal] = useState(false);
-  const [systemResources, setSystemResources] = useState<aiApi.SystemResources | null>(null);
-  const [isLoadingResources, setIsLoadingResources] = useState(false);
-  const [acknowledgeInsufficient, setAcknowledgeInsufficient] = useState(false);
 
   const refreshContainerStatus = async () => {
     try {
@@ -89,29 +81,13 @@ export function useContainerLifecycle({
     }
   };
 
-  // Open the enable confirmation modal and fetch system resources
-  const handleOpenEnableModal = async () => {
+  // Open the enable confirmation modal.
+  const handleOpenEnableModal = () => {
     setShowEnableModal(true);
-    setIsLoadingResources(true);
-    setAcknowledgeInsufficient(false);
-    setSystemResources(null);
-
-    try {
-      const resources = await aiApi.getSystemResources();
-      setSystemResources(resources);
-    } catch (error) {
-      log.error('Failed to fetch system resources', { error });
-      // Still allow enabling even if resource check fails
-      setSystemResources(null);
-    } finally {
-      setIsLoadingResources(false);
-    }
   };
 
   const handleCloseEnableModal = () => {
     setShowEnableModal(false);
-    setSystemResources(null);
-    setAcknowledgeInsufficient(false);
   };
 
   // Called when user clicks the toggle — just enables/disables the feature
@@ -222,10 +198,6 @@ export function useContainerLifecycle({
     saveError,
     saveSuccess,
     showEnableModal,
-    systemResources,
-    isLoadingResources,
-    acknowledgeInsufficient,
-    setAcknowledgeInsufficient,
     handleCloseEnableModal,
     performToggleAI,
   };

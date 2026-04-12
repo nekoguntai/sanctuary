@@ -29,11 +29,11 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import crypto from 'crypto';
 import { config } from '../config';
 import { AuthenticatedRequest } from './auth';
 import { createLogger } from '../utils/logger';
 import { logSecurityEvent } from './requestLogger';
+import { generateGatewaySignature } from '../../../shared/utils/gatewayAuth';
 
 const log = createLogger('MOBILE-PERM');
 
@@ -63,17 +63,6 @@ interface PermissionCheckResponse {
 }
 
 /**
- * Generate HMAC signature for internal gateway requests
- */
-function generateGatewaySignature(payload: string, timestamp: number): string {
-  const message = `${timestamp}:${payload}`;
-  return crypto
-    .createHmac('sha256', config.gatewaySecret)
-    .update(message)
-    .digest('hex');
-}
-
-/**
  * Check mobile permission with backend
  */
 async function checkPermissionWithBackend(
@@ -81,19 +70,20 @@ async function checkPermissionWithBackend(
   userId: string,
   action: MobileAction
 ): Promise<PermissionCheckResponse> {
-  const timestamp = Date.now();
-  const payload = JSON.stringify({ walletId, userId, action });
-  const signature = generateGatewaySignature(payload, timestamp);
+  const path = '/internal/mobile-permissions/check';
+  const body = { walletId, userId, action };
+  const { signature, timestamp } = generateGatewaySignature('POST', path, body, config.gatewaySecret);
+  const payload = JSON.stringify(body);
 
   try {
     const response = await fetch(
-      `${config.backendUrl}/internal/mobile-permissions/check`,
+      `${config.backendUrl}${path}`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Gateway-Signature': signature,
-          'X-Gateway-Timestamp': timestamp.toString(),
+          'X-Gateway-Timestamp': timestamp,
         },
         body: payload,
       }

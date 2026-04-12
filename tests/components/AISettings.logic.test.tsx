@@ -10,7 +10,6 @@ const mockDeleteModel = vi.fn();
 const mockGetOllamaContainerStatus = vi.fn();
 const mockStartOllamaContainer = vi.fn();
 const mockStopOllamaContainer = vi.fn();
-const mockGetSystemResources = vi.fn();
 
 let downloadProgressListener: ((progress: any) => void) | null = null;
 
@@ -27,7 +26,6 @@ vi.mock('../../src/api/ai', () => ({
   getOllamaContainerStatus: () => mockGetOllamaContainerStatus(),
   startOllamaContainer: () => mockStartOllamaContainer(),
   stopOllamaContainer: () => mockStopOllamaContainer(),
-  getSystemResources: () => mockGetSystemResources(),
 }));
 
 vi.mock('../../utils/logger', () => ({
@@ -121,12 +119,6 @@ function setDefaultMocks() {
   mockGetOllamaContainerStatus.mockResolvedValue({ available: false, exists: false, running: false, status: 'not-available' });
   mockStartOllamaContainer.mockResolvedValue({ success: true, message: 'Started' });
   mockStopOllamaContainer.mockResolvedValue({ success: true, message: 'Stopped' });
-  mockGetSystemResources.mockResolvedValue({
-    ram: { total: 16384, available: 8192, required: 4096, sufficient: true },
-    disk: { total: 512000, available: 100000, required: 8192, sufficient: true },
-    gpu: { available: false, name: null },
-    overall: { sufficient: true, warnings: [] },
-  });
   global.fetch = vi.fn(() =>
     Promise.resolve({
       ok: true,
@@ -249,7 +241,6 @@ describe('AISettings logic branches', () => {
     await waitFor(() => {
       expect(screen.getByTestId('enable-modal')).toBeInTheDocument();
     });
-    expect(mockGetSystemResources).toHaveBeenCalled();
 
     fireEvent.click(screen.getByText('close-enable'));
     await waitFor(() => {

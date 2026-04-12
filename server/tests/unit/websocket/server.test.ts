@@ -33,6 +33,9 @@ const mockConfig = {
 };
 
 vi.mock('../../../src/utils/jwt', () => ({
+  TokenAudience: {
+    ACCESS: 'sanctuary:access',
+  },
   verifyToken: mockVerifyToken,
 }));
 

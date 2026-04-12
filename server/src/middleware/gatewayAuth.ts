@@ -24,9 +24,14 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { createHmac, createHash, timingSafeEqual } from 'crypto';
+import { timingSafeEqual } from 'crypto';
 import config from '../config';
 import { createLogger } from '../utils/logger';
+import {
+  createGatewaySignature,
+  generateGatewaySignature as generateSharedGatewaySignature,
+  hashGatewayBody,
+} from '../../../shared/utils/gatewayAuth';
 
 const log = createLogger('MW:GATEWAY_AUTH');
 
@@ -34,31 +39,6 @@ const log = createLogger('MW:GATEWAY_AUTH');
  * Maximum age for request signatures (5 minutes)
  */
 const MAX_SIGNATURE_AGE_MS = 5 * 60 * 1000;
-
-/**
- * Create HMAC signature for verification
- */
-function createSignature(
-  method: string,
-  path: string,
-  timestamp: string,
-  bodyHash: string,
-  secret: string
-): string {
-  const message = `${method.toUpperCase()}${path}${timestamp}${bodyHash}`;
-  return createHmac('sha256', secret).update(message).digest('hex');
-}
-
-/**
- * Create SHA256 hash of request body
- */
-function hashBody(body: unknown): string {
-  if (!body || (typeof body === 'object' && Object.keys(body).length === 0)) {
-    return '';
-  }
-  const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
-  return createHash('sha256').update(bodyStr).digest('hex');
-}
 
 /**
  * Time-safe comparison of signatures
@@ -74,6 +54,11 @@ function compareSignatures(provided: string, expected: string): boolean {
   } catch {
     return false;
   }
+}
+
+function getSignaturePath(req: Request): string {
+  // originalUrl preserves mount prefixes so the server verifies the same path the gateway signed.
+  return req.originalUrl || req.url || req.path;
 }
 
 /**
@@ -105,7 +90,7 @@ export function verifyGatewayRequest(
   // Check required headers
   if (!signature || !timestamp) {
     log.warn('Gateway request missing signature headers', {
-      path: req.path,
+      path: getSignaturePath(req),
       hasSignature: !!signature,
       hasTimestamp: !!timestamp,
     });
@@ -122,7 +107,7 @@ export function verifyGatewayRequest(
 
   if (isNaN(requestTime) || Math.abs(now - requestTime) > MAX_SIGNATURE_AGE_MS) {
     log.warn('Gateway request timestamp expired or invalid', {
-      path: req.path,
+      path: getSignaturePath(req),
       timestamp,
       age: now - requestTime,
     });
@@ -134,10 +119,11 @@ export function verifyGatewayRequest(
   }
 
   // Calculate expected signature
-  const bodyHash = hashBody(req.body);
-  const expectedSignature = createSignature(
+  const signaturePath = getSignaturePath(req);
+  const bodyHash = hashGatewayBody(req.body);
+  const expectedSignature = createGatewaySignature(
     req.method,
-    req.path,
+    signaturePath,
     timestamp,
     bodyHash,
     config.gatewaySecret
@@ -146,7 +132,7 @@ export function verifyGatewayRequest(
   // Compare signatures using timing-safe comparison
   if (!compareSignatures(signature, expectedSignature)) {
     log.warn('Gateway request signature mismatch', {
-      path: req.path,
+      path: signaturePath,
       method: req.method,
     });
     res.status(403).json({
@@ -156,7 +142,7 @@ export function verifyGatewayRequest(
     return;
   }
 
-  log.debug('Gateway request authenticated', { path: req.path });
+  log.debug('Gateway request authenticated', { path: signaturePath });
   next();
 }
 
@@ -170,8 +156,5 @@ export function generateGatewaySignature(
   body: unknown,
   secret: string
 ): { signature: string; timestamp: string } {
-  const timestamp = Date.now().toString();
-  const bodyHash = hashBody(body);
-  const signature = createSignature(method, path, timestamp, bodyHash, secret);
-  return { signature, timestamp };
+  return generateSharedGatewaySignature(method, path, body, secret);
 }

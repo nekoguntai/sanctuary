@@ -25,6 +25,7 @@ vi.mock('../../../src/config', () => ({
   config: {
     backendUrl: 'http://localhost:3000',
     backendRequestTimeoutMs: 5000,
+    gatewaySecret: 'test-gateway-secret-32-characters',
   },
 }));
 
@@ -389,7 +390,8 @@ describe('logSecurityEvent', () => {
         method: 'POST',
         headers: expect.objectContaining({
           'Content-Type': 'application/json',
-          'X-Gateway-Request': 'true',
+          'X-Gateway-Signature': expect.stringMatching(/^[a-f0-9]{64}$/),
+          'X-Gateway-Timestamp': expect.stringMatching(/^\d+$/),
         }),
         body: expect.stringContaining('RATE_LIMIT_EXCEEDED'),
       })

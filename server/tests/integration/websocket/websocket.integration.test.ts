@@ -6,6 +6,9 @@ import { verifyToken } from '../../../src/utils/jwt';
 import { checkWalletAccess } from '../../../src/services/accessControl';
 
 vi.mock('../../../src/utils/jwt', () => ({
+  TokenAudience: {
+    ACCESS: 'sanctuary:access',
+  },
   verifyToken: vi.fn(async (token: string) => ({ userId: token === 'good-token' ? 'user-1' : 'user-2' })),
 }));
 
@@ -95,7 +98,7 @@ describe('websocket integration', () => {
 
     expect(authenticated.data.success).toBe(true);
     expect(authenticated.data.userId).toBe('user-1');
-    expect(verifyToken).toHaveBeenCalledWith('good-token');
+    expect(verifyToken).toHaveBeenCalledWith('good-token', 'sanctuary:access');
 
     client.close();
     await waitForClose(client);

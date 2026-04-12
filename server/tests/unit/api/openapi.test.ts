@@ -552,6 +552,110 @@ describe('OpenAPI Docs', () => {
       });
   });
 
+  it('documents admin group management routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/admin/groups', 'get'],
+      ['/admin/groups', 'post'],
+      ['/admin/groups/{groupId}', 'put'],
+      ['/admin/groups/{groupId}', 'delete'],
+      ['/admin/groups/{groupId}/members', 'post'],
+      ['/admin/groups/{groupId}/members/{userId}', 'delete'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.components.schemas.AdminGroupRole.enum).toEqual(['member', 'admin']);
+    expect(openApiSpec.components.schemas.AdminGroup.required).toEqual([
+      'id',
+      'name',
+      'description',
+      'purpose',
+      'createdAt',
+      'updatedAt',
+      'members',
+    ]);
+    expect(openApiSpec.components.schemas.AdminGroup.properties.description).toMatchObject({
+      nullable: true,
+    });
+    expect(openApiSpec.components.schemas.AdminGroup.properties.purpose).toMatchObject({
+      nullable: true,
+    });
+    expect(openApiSpec.components.schemas.AdminGroup.properties.members.items).toEqual({
+      $ref: '#/components/schemas/AdminGroupMember',
+    });
+    expect(openApiSpec.components.schemas.AdminGroupMember.required).toEqual([
+      'userId',
+      'username',
+      'role',
+    ]);
+    expect(openApiSpec.components.schemas.AdminGroupMember.properties.role).toEqual({
+      $ref: '#/components/schemas/AdminGroupRole',
+    });
+    expect(openApiSpec.components.schemas.AdminCreateGroupRequest.required).toEqual(['name']);
+    expect(openApiSpec.components.schemas.AdminCreateGroupRequest.properties.memberIds.items).toEqual({
+      type: 'string',
+    });
+    expect(openApiSpec.components.schemas.AdminCreateGroupRequest).toHaveProperty(
+      'additionalProperties',
+      false,
+    );
+    expect(openApiSpec.components.schemas.AdminUpdateGroupRequest.required).toBeUndefined();
+    expect(openApiSpec.components.schemas.AdminUpdateGroupRequest.properties.description).toMatchObject({
+      nullable: true,
+    });
+    expect(openApiSpec.components.schemas.AdminAddGroupMemberRequest.required).toEqual(['userId']);
+    expect(openApiSpec.components.schemas.AdminAddGroupMemberRequest.properties.role).toEqual({
+      $ref: '#/components/schemas/AdminGroupRole',
+    });
+    expect(openApiSpec.paths['/admin/groups'].get.responses[200].content['application/json'].schema).toEqual({
+      type: 'array',
+      items: { $ref: '#/components/schemas/AdminGroup' },
+    });
+    expect(openApiSpec.paths['/admin/groups'].post.requestBody.content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/AdminCreateGroupRequest',
+    });
+    expect(openApiSpec.paths['/admin/groups'].post.responses[201].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/AdminGroup',
+    });
+    expect(openApiSpec.paths['/admin/groups/{groupId}'].put.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'groupId',
+        in: 'path',
+        required: true,
+      }),
+    );
+    expect(openApiSpec.paths['/admin/groups/{groupId}'].put.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminUpdateGroupRequest',
+      });
+    expect(openApiSpec.paths['/admin/groups/{groupId}'].delete.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminDeleteGroupResponse',
+      });
+    expect(openApiSpec.paths['/admin/groups/{groupId}/members'].post.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminAddGroupMemberRequest',
+      });
+    expect(openApiSpec.paths['/admin/groups/{groupId}/members'].post.responses).toHaveProperty('409');
+    expect(openApiSpec.paths['/admin/groups/{groupId}/members'].post.responses[201].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminGroupMember',
+      });
+    expect(openApiSpec.paths['/admin/groups/{groupId}/members/{userId}'].delete.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'userId',
+        in: 'path',
+        required: true,
+      }),
+    );
+    expect(openApiSpec.paths['/admin/groups/{groupId}/members/{userId}'].delete.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminRemoveGroupMemberResponse',
+      });
+  });
+
   it('documents admin audit log routes', () => {
     const routes: Array<[OpenApiPathKey, string]> = [
       ['/admin/audit-logs', 'get'],

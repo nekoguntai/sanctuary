@@ -520,6 +520,16 @@ describe('Admin Groups Routes', () => {
     expect(response.body.message).toBe('User ID is required');
   });
 
+  it('validates add-member role values', async () => {
+    const response = await request(app)
+      .post('/api/v1/admin/groups/group-1/members')
+      .send({ userId: 'u1', role: 'owner' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('Group member role must be member or admin');
+    expect(mockPrismaClient.group.findUnique).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when adding member to missing group', async () => {
     mockPrismaClient.group.findUnique.mockResolvedValue(null);
 

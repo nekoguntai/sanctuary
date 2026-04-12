@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { UuidSchema, UsernameSchema, EmailSchema, NetworkTypeSchema, PaginationSchema } from './common';
 import { PasswordSchema } from './auth';
 import { isKnownFeatureFlagKey, UNKNOWN_FEATURE_FLAG_KEY_MESSAGE } from '../../services/featureFlags/definitions';
+import { ADMIN_GROUP_ROLE_VALUES } from '../admin/groupRoles';
 
 // =============================================================================
 // Electrum Server Configuration
@@ -109,7 +110,7 @@ export const GroupIdParamSchema = z.object({
 
 export const AddGroupMemberSchema = z.object({
   userId: UuidSchema,
-  role: z.enum(['member', 'admin']).default('member'),
+  role: z.enum(ADMIN_GROUP_ROLE_VALUES).default('member'),
 });
 
 // =============================================================================

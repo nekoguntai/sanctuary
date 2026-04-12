@@ -13,6 +13,7 @@ import { auditService, AuditAction, AuditCategory } from '../../services/auditSe
 import { invalidateUserAccessCache } from '../../services/accessControl';
 import * as groupRepo from '../../repositories/groupRepository';
 import { findById as findUserById } from '../../repositories/userRepository';
+import { isAdminGroupRole } from './groupRoles';
 
 const router = Router();
 const log = createLogger('ADMIN_GROUP:ROUTE');
@@ -143,6 +144,11 @@ router.post('/:groupId/members', authenticate, requireAdmin, asyncHandler(async 
     throw new InvalidInputError('User ID is required');
   }
 
+  const memberRole = role || 'member';
+  if (!isAdminGroupRole(memberRole)) {
+    throw new InvalidInputError('Group member role must be member or admin');
+  }
+
   const group = await groupRepo.findById(groupId);
   if (!group) {
     throw new NotFoundError('Group not found');
@@ -158,7 +164,7 @@ router.post('/:groupId/members', authenticate, requireAdmin, asyncHandler(async 
     throw new ConflictError('User is already a member of this group');
   }
 
-  const membership = await groupRepo.addMember(groupId, userId, role || 'member');
+  const membership = await groupRepo.addMember(groupId, userId, memberRole);
 
   // Invalidate user's access cache (they now have access to group wallets)
   await invalidateUserAccessCache(userId);

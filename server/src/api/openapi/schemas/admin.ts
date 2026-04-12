@@ -18,6 +18,7 @@ import {
   DEFAULT_SMTP_PORT,
 } from '../../../constants';
 import { FEATURE_FLAG_KEYS } from '../../../services/featureFlags/definitions';
+import { ADMIN_GROUP_ROLE_VALUES } from '../../admin/groupRoles';
 
 const baseSettingsProperties = {
   registrationEnabled: { type: 'boolean', default: false },
@@ -124,6 +125,85 @@ export const adminSchemas = {
     additionalProperties: false,
   },
   AdminDeleteUserResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+    },
+    required: ['message'],
+  },
+  AdminGroupRole: {
+    type: 'string',
+    enum: [...ADMIN_GROUP_ROLE_VALUES],
+  },
+  AdminGroupMember: {
+    type: 'object',
+    properties: {
+      userId: { type: 'string' },
+      username: { type: 'string' },
+      role: { $ref: '#/components/schemas/AdminGroupRole' },
+    },
+    required: ['userId', 'username', 'role'],
+  },
+  AdminGroup: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      name: { type: 'string' },
+      description: { type: 'string', nullable: true },
+      purpose: { type: 'string', nullable: true },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+      members: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/AdminGroupMember' },
+      },
+    },
+    required: ['id', 'name', 'description', 'purpose', 'createdAt', 'updatedAt', 'members'],
+  },
+  AdminCreateGroupRequest: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', minLength: 1 },
+      description: { type: 'string', nullable: true },
+      purpose: { type: 'string', nullable: true },
+      memberIds: {
+        type: 'array',
+        items: { type: 'string' },
+      },
+    },
+    required: ['name'],
+    additionalProperties: false,
+  },
+  AdminUpdateGroupRequest: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', minLength: 1 },
+      description: { type: 'string', nullable: true },
+      purpose: { type: 'string', nullable: true },
+      memberIds: {
+        type: 'array',
+        items: { type: 'string' },
+      },
+    },
+    additionalProperties: false,
+  },
+  AdminAddGroupMemberRequest: {
+    type: 'object',
+    properties: {
+      userId: { type: 'string' },
+      role: { $ref: '#/components/schemas/AdminGroupRole' },
+    },
+    required: ['userId'],
+    additionalProperties: false,
+  },
+  AdminDeleteGroupResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+    },
+    required: ['message'],
+  },
+  AdminRemoveGroupMemberResponse: {
     type: 'object',
     properties: {
       message: { type: 'string' },

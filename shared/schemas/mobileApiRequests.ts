@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+/**
+ * Shared mobile API request contracts consumed by gateway validation, backend
+ * route validation, and OpenAPI schema definitions.
+ */
 export const MOBILE_ACTIONS = [
   'viewBalance',
   'viewTransactions',
@@ -152,24 +156,21 @@ export const MobileUpdateLabelRequestSchema = z.object({
     .nullable(),
 });
 
-export const MobilePermissionUpdateRequestSchema = z.object({
-  viewBalance: z.boolean().optional(),
-  viewTransactions: z.boolean().optional(),
-  viewUtxos: z.boolean().optional(),
-  createTransaction: z.boolean().optional(),
-  broadcast: z.boolean().optional(),
-  signPsbt: z.boolean().optional(),
-  generateAddress: z.boolean().optional(),
-  manageLabels: z.boolean().optional(),
-  manageDevices: z.boolean().optional(),
-  shareWallet: z.boolean().optional(),
-  deleteWallet: z.boolean().optional(),
-  approveTransaction: z.boolean().optional(),
-  managePolicies: z.boolean().optional(),
-}).strict().refine(
-  (permissions) => Object.keys(permissions).length > 0,
-  'At least one permission must be provided'
+const mobilePermissionUpdateShape = MOBILE_ACTIONS.reduce(
+  (shape, action) => {
+    shape[action] = z.boolean().optional();
+    return shape;
+  },
+  {} as Record<MobileAction, z.ZodOptional<z.ZodBoolean>>
 );
+
+export const MobilePermissionUpdateRequestSchema = z
+  .object(mobilePermissionUpdateShape)
+  .strict()
+  .refine(
+    (permissions) => Object.keys(permissions).length > 0,
+    'At least one permission must be provided'
+  );
 
 export const MobileDraftUpdateRequestSchema = z.object({
   signedPsbtBase64: z.string().min(1).optional(),

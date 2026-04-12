@@ -12,6 +12,14 @@ import {
   TRANSFER_STATUS_FILTER_VALUES,
   TRANSFER_STATUS_VALUES,
 } from '../../../src/services/transferService/types';
+import {
+  INSIGHT_SEVERITY_VALUES,
+  INSIGHT_STATUS_VALUES,
+  INSIGHT_TYPE_VALUES,
+  INSIGHT_UPDATE_STATUS_VALUES,
+  INTELLIGENCE_ENDPOINT_TYPE_VALUES,
+  INTELLIGENCE_MESSAGE_ROLE_VALUES,
+} from '../../../src/services/intelligence/types';
 
 type HandlerResponse = {
   statusCode: number;
@@ -403,5 +411,65 @@ describe('OpenAPI Docs', () => {
     expect(openApiSpec.paths['/transfers/{id}/decline'].post.requestBody.content['application/json'].schema).toEqual({
       $ref: '#/components/schemas/TransferDeclineRequest',
     });
+  });
+
+  it('documents Treasury Intelligence routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/intelligence/status', 'get'],
+      ['/intelligence/insights', 'get'],
+      ['/intelligence/insights/count', 'get'],
+      ['/intelligence/insights/{id}', 'patch'],
+      ['/intelligence/conversations', 'get'],
+      ['/intelligence/conversations', 'post'],
+      ['/intelligence/conversations/{id}/messages', 'get'],
+      ['/intelligence/conversations/{id}/messages', 'post'],
+      ['/intelligence/conversations/{id}', 'delete'],
+      ['/intelligence/settings/{walletId}', 'get'],
+      ['/intelligence/settings/{walletId}', 'patch'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    const insightSchema = openApiSpec.components.schemas.IntelligenceInsight;
+    expect(openApiSpec.components.schemas.IntelligenceStatusResponse.properties.endpointType.enum).toEqual([
+      ...INTELLIGENCE_ENDPOINT_TYPE_VALUES,
+    ]);
+    expect(insightSchema.properties.type.enum).toEqual([...INSIGHT_TYPE_VALUES]);
+    expect(insightSchema.properties.severity.enum).toEqual([...INSIGHT_SEVERITY_VALUES]);
+    expect(insightSchema.properties.status.enum).toEqual([...INSIGHT_STATUS_VALUES]);
+
+    expect(openApiSpec.components.schemas.IntelligenceUpdateInsightRequest.properties.status.enum).toEqual([
+      ...INSIGHT_UPDATE_STATUS_VALUES,
+    ]);
+    expect(openApiSpec.components.schemas.IntelligenceMessage.properties.role.enum).toEqual([
+      ...INTELLIGENCE_MESSAGE_ROLE_VALUES,
+    ]);
+    expect(openApiSpec.components.schemas.IntelligenceSettings.properties.typeFilter.items.enum).toEqual([
+      ...INSIGHT_TYPE_VALUES,
+    ]);
+
+    const insightParameters = openApiSpec.paths['/intelligence/insights'].get.parameters;
+    expect(insightParameters).toContainEqual(expect.objectContaining({
+      name: 'walletId',
+      in: 'query',
+      required: true,
+    }));
+    expect(insightParameters).toContainEqual(expect.objectContaining({
+      name: 'limit',
+      schema: expect.objectContaining({ maximum: 100, default: 50 }),
+    }));
+    expect(openApiSpec.paths['/intelligence/conversations'].get.parameters).toContainEqual(expect.objectContaining({
+      name: 'limit',
+      schema: expect.objectContaining({ default: 20 }),
+    }));
+
+    expect(
+      openApiSpec.paths['/intelligence/conversations/{id}/messages'].post.requestBody.content['application/json'].schema
+    ).toEqual({
+      $ref: '#/components/schemas/IntelligenceSendMessageRequest',
+    });
+    expect(openApiSpec.components.schemas.IntelligenceSendMessageRequest.required).toEqual(['content']);
   });
 });

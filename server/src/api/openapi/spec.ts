@@ -18,6 +18,7 @@ import { labelSchemas } from './schemas/labels';
 import { draftSchemas } from './schemas/drafts';
 import { payjoinSchemas } from './schemas/payjoin';
 import { transferSchemas } from './schemas/transfers';
+import { intelligenceSchemas } from './schemas/intelligence';
 
 // Paths
 import { authPaths } from './paths/auth';
@@ -31,6 +32,7 @@ import { labelPaths } from './paths/labels';
 import { draftPaths } from './paths/drafts';
 import { payjoinPaths } from './paths/payjoin';
 import { transferPaths } from './paths/transfers';
+import { intelligencePaths } from './paths/intelligence';
 
 export const openApiSpec = {
   openapi: '3.0.3',
@@ -65,6 +67,7 @@ export const openApiSpec = {
     { name: 'Mobile Permissions', description: 'Mobile wallet permission restrictions' },
     { name: 'Payjoin', description: 'BIP78 Payjoin sender and receiver operations' },
     { name: 'Transfers', description: 'Wallet and device ownership transfers' },
+    { name: 'Intelligence', description: 'Treasury Intelligence insights and conversations' },
     { name: 'Admin', description: 'Administrative operations' },
   ],
   paths: {
@@ -81,6 +84,7 @@ export const openApiSpec = {
     ...mobilePermissionPaths,
     ...payjoinPaths,
     ...transferPaths,
+    ...intelligencePaths,
   },
   components: {
     securitySchemes: {
@@ -105,6 +109,7 @@ export const openApiSpec = {
       ...mobilePermissionSchemas,
       ...payjoinSchemas,
       ...transferSchemas,
+      ...intelligenceSchemas,
     },
   },
 };

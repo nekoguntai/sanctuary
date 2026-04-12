@@ -37,6 +37,12 @@ import {
 } from '../../../src/services/walletImport/types';
 import { WALLET_EXPORT_FORMAT_VALUES } from '../../../src/services/export/types';
 import { DEFAULT_AUTOPILOT_SETTINGS } from '../../../src/services/autopilot/types';
+import {
+  VALID_ENFORCEMENT_MODES,
+  VALID_POLICY_TYPES,
+  VALID_SOURCE_TYPES,
+  VALID_VOTE_DECISIONS,
+} from '../../../src/services/vaultPolicy/types';
 
 type HandlerResponse = {
   statusCode: number;
@@ -331,6 +337,69 @@ describe('OpenAPI Docs', () => {
       'feeSnapshot',
       'settings',
     ]);
+  });
+
+  it('documents wallet policy and approval routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/wallets/{walletId}/policies/events', 'get'],
+      ['/wallets/{walletId}/policies/evaluate', 'post'],
+      ['/wallets/{walletId}/policies', 'get'],
+      ['/wallets/{walletId}/policies', 'post'],
+      ['/wallets/{walletId}/policies/{policyId}', 'get'],
+      ['/wallets/{walletId}/policies/{policyId}', 'patch'],
+      ['/wallets/{walletId}/policies/{policyId}', 'delete'],
+      ['/wallets/{walletId}/policies/{policyId}/addresses', 'get'],
+      ['/wallets/{walletId}/policies/{policyId}/addresses', 'post'],
+      ['/wallets/{walletId}/policies/{policyId}/addresses/{addressId}', 'delete'],
+      ['/wallets/{walletId}/drafts/{draftId}/approvals', 'get'],
+      ['/wallets/{walletId}/drafts/{draftId}/approvals/{requestId}/vote', 'post'],
+      ['/wallets/{walletId}/drafts/{draftId}/override', 'post'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.components.schemas.VaultPolicy.properties.type.enum).toEqual([
+      ...VALID_POLICY_TYPES,
+    ]);
+    expect(openApiSpec.components.schemas.VaultPolicy.properties.enforcement.enum).toEqual([
+      ...VALID_ENFORCEMENT_MODES,
+    ]);
+    expect(openApiSpec.components.schemas.VaultPolicy.properties.sourceType.enum).toEqual([
+      ...VALID_SOURCE_TYPES,
+    ]);
+    expect(openApiSpec.components.schemas.CreateVaultPolicyRequest.required).toEqual(['name', 'type', 'config']);
+    expect(openApiSpec.components.schemas.PolicyEvaluationRequest.required).toEqual(['recipient', 'amount']);
+    expect(openApiSpec.components.schemas.PolicyEvaluationRequest.properties.amount.oneOf).toContainEqual({
+      type: 'string',
+      pattern: '^\\d+$',
+    });
+    expect(openApiSpec.paths['/wallets/{walletId}/policies/events'].get.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'limit',
+        schema: expect.objectContaining({ maximum: 200, default: 50 }),
+      }),
+    );
+    expect(openApiSpec.paths['/wallets/{walletId}/policies'].post.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/CreateVaultPolicyRequest',
+      });
+    expect(openApiSpec.paths['/wallets/{walletId}/policies/{policyId}/addresses'].post.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/CreatePolicyAddressRequest',
+      });
+    expect(openApiSpec.components.schemas.ApprovalVoteRequest.properties.decision.enum).toEqual([
+      ...VALID_VOTE_DECISIONS,
+    ]);
+    expect(openApiSpec.paths['/wallets/{walletId}/drafts/{draftId}/approvals/{requestId}/vote'].post.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/ApprovalVoteRequest',
+      });
+    expect(openApiSpec.paths['/wallets/{walletId}/drafts/{draftId}/override'].post.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/OwnerOverrideRequest',
+      });
   });
 
   it('documents implemented device item routes', () => {

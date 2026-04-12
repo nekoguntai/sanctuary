@@ -16,6 +16,12 @@ import {
 } from '../../../services/walletImport/types';
 import { WALLET_EXPORT_FORMAT_VALUES } from '../../../services/export/types';
 import { DEFAULT_AUTOPILOT_SETTINGS } from '../../../services/autopilot/types';
+import {
+  VALID_ENFORCEMENT_MODES,
+  VALID_POLICY_TYPES,
+  VALID_SOURCE_TYPES,
+  VALID_VOTE_DECISIONS,
+} from '../../../services/vaultPolicy/types';
 
 export const walletSchemas = {
   Wallet: {
@@ -517,5 +523,227 @@ export const walletSchemas = {
       settings: { $ref: '#/components/schemas/WalletAutopilotSettings' },
     },
     required: ['utxoHealth', 'feeSnapshot', 'settings'],
+  },
+  VaultPolicy: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      walletId: { type: 'string', nullable: true },
+      groupId: { type: 'string', nullable: true },
+      name: { type: 'string' },
+      description: { type: 'string', nullable: true },
+      type: { type: 'string', enum: [...VALID_POLICY_TYPES] },
+      config: { type: 'object', additionalProperties: true },
+      priority: { type: 'integer' },
+      enforcement: { type: 'string', enum: [...VALID_ENFORCEMENT_MODES] },
+      enabled: { type: 'boolean' },
+      sourceType: { type: 'string', enum: [...VALID_SOURCE_TYPES] },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+    },
+    required: ['id', 'name', 'type', 'config', 'priority', 'enforcement', 'enabled'],
+  },
+  VaultPolicyListResponse: {
+    type: 'object',
+    properties: {
+      policies: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/VaultPolicy' },
+      },
+    },
+    required: ['policies'],
+  },
+  VaultPolicyResponse: {
+    type: 'object',
+    properties: {
+      policy: { $ref: '#/components/schemas/VaultPolicy' },
+    },
+    required: ['policy'],
+  },
+  CreateVaultPolicyRequest: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      description: { type: 'string' },
+      type: { type: 'string', enum: [...VALID_POLICY_TYPES] },
+      config: { type: 'object', additionalProperties: true },
+      priority: { type: 'integer' },
+      enforcement: { type: 'string', enum: [...VALID_ENFORCEMENT_MODES] },
+      enabled: { type: 'boolean' },
+    },
+    required: ['name', 'type', 'config'],
+    additionalProperties: false,
+  },
+  UpdateVaultPolicyRequest: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      description: { type: 'string' },
+      config: { type: 'object', additionalProperties: true },
+      priority: { type: 'integer' },
+      enforcement: { type: 'string', enum: [...VALID_ENFORCEMENT_MODES] },
+      enabled: { type: 'boolean' },
+    },
+    additionalProperties: false,
+  },
+  PolicyEvaluationOutput: {
+    type: 'object',
+    properties: {
+      address: { type: 'string' },
+      amount: { type: 'number' },
+    },
+    required: ['address', 'amount'],
+  },
+  PolicyEvaluationRequest: {
+    type: 'object',
+    properties: {
+      recipient: { type: 'string' },
+      amount: {
+        oneOf: [
+          { type: 'integer', minimum: 0 },
+          { type: 'string', pattern: '^\\d+$' },
+        ],
+      },
+      outputs: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/PolicyEvaluationOutput' },
+      },
+    },
+    required: ['recipient', 'amount'],
+    additionalProperties: false,
+  },
+  PolicyEvaluationResponse: {
+    type: 'object',
+    properties: {
+      allowed: { type: 'boolean' },
+      triggered: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            policyId: { type: 'string' },
+            policyName: { type: 'string' },
+            type: { type: 'string', enum: [...VALID_POLICY_TYPES] },
+            action: { type: 'string', enum: ['approval_required', 'blocked', 'monitored'] },
+            reason: { type: 'string' },
+          },
+          required: ['policyId', 'policyName', 'type', 'action', 'reason'],
+        },
+      },
+      limits: { type: 'object', additionalProperties: true },
+    },
+    required: ['allowed', 'triggered'],
+  },
+  PolicyEventsResponse: {
+    type: 'object',
+    properties: {
+      events: {
+        type: 'array',
+        items: { type: 'object', additionalProperties: true },
+      },
+      total: { type: 'integer', minimum: 0 },
+    },
+    required: ['events', 'total'],
+  },
+  PolicyAddress: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      policyId: { type: 'string' },
+      address: { type: 'string' },
+      label: { type: 'string', nullable: true },
+      listType: { type: 'string', enum: ['allow', 'deny'] },
+      addedBy: { type: 'string' },
+      createdAt: { type: 'string', format: 'date-time' },
+    },
+    required: ['id', 'policyId', 'address', 'listType'],
+  },
+  PolicyAddressListResponse: {
+    type: 'object',
+    properties: {
+      addresses: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/PolicyAddress' },
+      },
+    },
+    required: ['addresses'],
+  },
+  PolicyAddressResponse: {
+    type: 'object',
+    properties: {
+      address: { $ref: '#/components/schemas/PolicyAddress' },
+    },
+    required: ['address'],
+  },
+  CreatePolicyAddressRequest: {
+    type: 'object',
+    properties: {
+      address: { type: 'string', maxLength: 100 },
+      label: { type: 'string' },
+      listType: { type: 'string', enum: ['allow', 'deny'] },
+    },
+    required: ['address', 'listType'],
+    additionalProperties: false,
+  },
+  WalletPolicyDeleteResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean' },
+    },
+    required: ['success'],
+  },
+  WalletApprovalsResponse: {
+    type: 'object',
+    properties: {
+      approvals: {
+        type: 'array',
+        items: { type: 'object', additionalProperties: true },
+      },
+    },
+    required: ['approvals'],
+  },
+  ApprovalVoteRequest: {
+    type: 'object',
+    properties: {
+      decision: { type: 'string', enum: [...VALID_VOTE_DECISIONS] },
+      reason: { type: 'string' },
+    },
+    required: ['decision'],
+    additionalProperties: false,
+  },
+  ApprovalVoteResponse: {
+    type: 'object',
+    properties: {
+      vote: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          decision: { type: 'string', enum: [...VALID_VOTE_DECISIONS] },
+          reason: { type: 'string', nullable: true },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+        required: ['id', 'decision', 'createdAt'],
+      },
+      request: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          status: { type: 'string' },
+          requiredApprovals: { type: 'integer', minimum: 0 },
+          currentApprovals: { type: 'integer', minimum: 0 },
+          totalVotes: { type: 'integer', minimum: 0 },
+        },
+        required: ['id', 'status', 'requiredApprovals', 'currentApprovals', 'totalVotes'],
+      },
+    },
+    required: ['vote', 'request'],
+  },
+  OwnerOverrideRequest: {
+    type: 'object',
+    properties: {
+      reason: { type: 'string', minLength: 1 },
+    },
+    required: ['reason'],
+    additionalProperties: false,
   },
 } as const;

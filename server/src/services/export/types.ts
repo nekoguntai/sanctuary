@@ -7,6 +7,8 @@
 
 import type { ScriptType, Network } from '../bitcoin/descriptorParser';
 
+export const WALLET_EXPORT_FORMAT_VALUES = ['sparrow', 'descriptor', 'bluewallet', 'coldcard'] as const;
+
 /**
  * Wallet data for export
  */

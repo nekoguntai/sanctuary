@@ -14,6 +14,7 @@ import {
   WALLET_IMPORT_SCRIPT_TYPE_VALUES,
   WALLET_IMPORT_WALLET_TYPE_VALUES,
 } from '../../../services/walletImport/types';
+import { WALLET_EXPORT_FORMAT_VALUES } from '../../../services/export/types';
 
 export const walletSchemas = {
   Wallet: {
@@ -366,5 +367,26 @@ export const walletSchemas = {
       message: { type: 'string' },
     },
     required: ['success', 'message'],
+  },
+  WalletExportFormat: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', enum: [...WALLET_EXPORT_FORMAT_VALUES] },
+      name: { type: 'string' },
+      description: { type: 'string' },
+      extension: { type: 'string' },
+      mimeType: { type: 'string' },
+    },
+    required: ['id', 'name', 'description', 'extension', 'mimeType'],
+  },
+  WalletExportFormatsResponse: {
+    type: 'object',
+    properties: {
+      formats: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/WalletExportFormat' },
+      },
+    },
+    required: ['formats'],
   },
 } as const;

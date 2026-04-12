@@ -27,6 +27,7 @@ import { walletPaths } from './paths/wallets';
 import { walletSharingPaths } from './paths/walletSharing';
 import { walletImportPaths } from './paths/walletImport';
 import { walletHelperPaths } from './paths/walletHelpers';
+import { walletExportPaths } from './paths/walletExport';
 import { devicePaths } from './paths/devices';
 import { syncPaths, bitcoinPaths, pricePaths } from './paths/bitcoin';
 import { transactionPaths } from './paths/transactions';
@@ -82,6 +83,7 @@ export const openApiSpec = {
     ...walletSharingPaths,
     ...walletImportPaths,
     ...walletHelperPaths,
+    ...walletExportPaths,
     ...devicePaths,
     ...syncPaths,
     ...bitcoinPaths,

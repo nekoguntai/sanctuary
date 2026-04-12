@@ -35,6 +35,7 @@ import {
   WALLET_IMPORT_SCRIPT_TYPE_VALUES,
   WALLET_IMPORT_WALLET_TYPE_VALUES,
 } from '../../../src/services/walletImport/types';
+import { WALLET_EXPORT_FORMAT_VALUES } from '../../../src/services/export/types';
 
 type HandlerResponse = {
   statusCode: number;
@@ -248,6 +249,42 @@ describe('OpenAPI Docs', () => {
       .toEqual({
         $ref: '#/components/schemas/WalletRepairResponse',
       });
+  });
+
+  it('documents wallet export routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/wallets/{walletId}/export/labels', 'get'],
+      ['/wallets/{walletId}/export/formats', 'get'],
+      ['/wallets/{walletId}/export', 'get'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.components.schemas.WalletExportFormat.properties.id.enum).toEqual([
+      ...WALLET_EXPORT_FORMAT_VALUES,
+    ]);
+    expect(openApiSpec.paths['/wallets/{walletId}/export/formats'].get.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/WalletExportFormatsResponse',
+      });
+    expect(openApiSpec.paths['/wallets/{walletId}/export'].get.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'format',
+        schema: expect.objectContaining({
+          enum: [...WALLET_EXPORT_FORMAT_VALUES],
+          default: 'sparrow',
+        }),
+      }),
+    );
+    expect(openApiSpec.paths['/wallets/{walletId}/export'].get.responses[200].content).toHaveProperty(
+      'application/json',
+    );
+    expect(openApiSpec.paths['/wallets/{walletId}/export'].get.responses[200].content).toHaveProperty('text/plain');
+    expect(openApiSpec.paths['/wallets/{walletId}/export/labels'].get.responses[200].content).toHaveProperty(
+      'application/jsonl',
+    );
   });
 
   it('documents implemented device item routes', () => {

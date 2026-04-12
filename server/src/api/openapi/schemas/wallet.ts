@@ -316,4 +316,55 @@ export const walletSchemas = {
     },
     required: ['valid', 'descriptor', 'scriptType', 'firstAddress', 'xpub', 'fingerprint', 'accountPath'],
   },
+  WalletBalanceHistoryPoint: {
+    type: 'object',
+    properties: {
+      timestamp: { type: 'string' },
+      balance: { type: 'number' },
+    },
+    required: ['timestamp', 'balance'],
+  },
+  WalletBalanceHistoryResponse: {
+    type: 'object',
+    properties: {
+      timeframe: { type: 'string' },
+      currentBalance: { type: 'number' },
+      dataPoints: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/WalletBalanceHistoryPoint' },
+      },
+    },
+    required: ['timeframe', 'currentBalance', 'dataPoints'],
+  },
+  WalletGeneratedAddressResponse: {
+    type: 'object',
+    properties: {
+      address: { type: 'string' },
+    },
+    required: ['address'],
+  },
+  WalletAddDeviceRequest: {
+    type: 'object',
+    properties: {
+      deviceId: { type: 'string' },
+      signerIndex: { type: 'integer', minimum: 0 },
+    },
+    required: ['deviceId'],
+    additionalProperties: false,
+  },
+  WalletMessageResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+    },
+    required: ['message'],
+  },
+  WalletRepairResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean' },
+      message: { type: 'string' },
+    },
+    required: ['success', 'message'],
+  },
 } as const;

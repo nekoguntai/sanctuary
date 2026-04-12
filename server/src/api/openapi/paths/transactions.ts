@@ -185,6 +185,19 @@ export const transactionPaths = {
         403: apiErrorResponse,
       },
     },
+    post: {
+      tags: ['Wallets'],
+      summary: 'Generate wallet receiving address',
+      description: 'Generate the next receiving address for a wallet. Owner or signer access is required.',
+      security: bearerAuth,
+      parameters: [walletIdParameter],
+      responses: {
+        201: jsonResponse('Generated receiving address', '#/components/schemas/WalletGeneratedAddressResponse'),
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
   },
   '/wallets/{walletId}/addresses/generate': {
     post: {

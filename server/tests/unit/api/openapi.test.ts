@@ -202,6 +202,54 @@ describe('OpenAPI Docs', () => {
     });
   });
 
+  it('documents wallet analytics and helper routes without replacing address listing', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/wallets/{walletId}/balance-history', 'get'],
+      ['/wallets/{walletId}/addresses', 'get'],
+      ['/wallets/{walletId}/addresses', 'post'],
+      ['/wallets/{walletId}/devices', 'post'],
+      ['/wallets/{walletId}/repair', 'post'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.components.schemas.WalletBalanceHistoryResponse.required).toEqual([
+      'timeframe',
+      'currentBalance',
+      'dataPoints',
+    ]);
+    expect(openApiSpec.paths['/wallets/{walletId}/balance-history'].get.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'timeframe',
+        schema: expect.objectContaining({ default: '1M' }),
+      }),
+    );
+    expect(openApiSpec.paths['/wallets/{walletId}/addresses'].get.responses[200].content['application/json'].schema)
+      .toEqual({
+        type: 'array',
+        items: { $ref: '#/components/schemas/WalletAddress' },
+      });
+    expect(openApiSpec.paths['/wallets/{walletId}/addresses'].post.responses[201].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/WalletGeneratedAddressResponse',
+      });
+    expect(openApiSpec.components.schemas.WalletAddDeviceRequest.required).toEqual(['deviceId']);
+    expect(openApiSpec.paths['/wallets/{walletId}/devices'].post.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/WalletAddDeviceRequest',
+      });
+    expect(openApiSpec.paths['/wallets/{walletId}/devices'].post.responses[201].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/WalletMessageResponse',
+      });
+    expect(openApiSpec.paths['/wallets/{walletId}/repair'].post.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/WalletRepairResponse',
+      });
+  });
+
   it('documents implemented device item routes', () => {
     const deviceItemPath = openApiSpec.paths['/devices/{deviceId}'];
 

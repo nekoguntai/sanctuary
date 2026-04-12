@@ -22,6 +22,40 @@ export const labelSchemas = {
     },
     required: ['id', 'walletId', 'name', 'createdAt', 'updatedAt'],
   },
+  LabelWithRelations: {
+    allOf: [
+      { $ref: '#/components/schemas/Label' },
+      {
+        type: 'object',
+        properties: {
+          transactions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: true,
+            },
+          },
+          addresses: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: true,
+            },
+          },
+        },
+      },
+    ],
+  },
+  LabelIdsRequest: {
+    type: 'object',
+    properties: {
+      labelIds: {
+        type: 'array',
+        items: { type: 'string' },
+      },
+    },
+    required: ['labelIds'],
+  },
   CreateLabelRequest: {
     type: 'object',
     properties: {

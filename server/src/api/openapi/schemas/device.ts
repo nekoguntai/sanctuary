@@ -10,6 +10,59 @@ import {
 } from '../../../../../shared/schemas/mobileApiRequests';
 
 export const deviceSchemas = {
+  DeviceModel: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      name: { type: 'string' },
+      slug: { type: 'string' },
+      manufacturer: { type: 'string' },
+      connectivity: {
+        type: 'array',
+        items: { type: 'string' },
+      },
+      secureElement: { type: 'boolean' },
+      openSource: { type: 'boolean' },
+      airGapped: { type: 'boolean' },
+      supportsBitcoinOnly: { type: 'boolean' },
+      supportsMultisig: { type: 'boolean' },
+      supportsTaproot: { type: 'boolean' },
+      supportsPassphrase: { type: 'boolean' },
+      scriptTypes: {
+        type: 'array',
+        items: { type: 'string' },
+      },
+      hasScreen: { type: 'boolean' },
+      screenType: { type: 'string', nullable: true },
+      integrationTested: { type: 'boolean' },
+      releaseYear: { type: 'integer', nullable: true },
+      discontinued: { type: 'boolean' },
+      imageUrl: { type: 'string', nullable: true },
+      websiteUrl: { type: 'string', nullable: true },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+    },
+    required: [
+      'id',
+      'name',
+      'slug',
+      'manufacturer',
+      'connectivity',
+      'secureElement',
+      'openSource',
+      'airGapped',
+      'supportsBitcoinOnly',
+      'supportsMultisig',
+      'supportsTaproot',
+      'supportsPassphrase',
+      'scriptTypes',
+      'hasScreen',
+      'integrationTested',
+      'discontinued',
+      'createdAt',
+      'updatedAt',
+    ],
+  },
   DeviceAccount: {
     type: 'object',
     properties: {
@@ -87,6 +140,55 @@ export const deviceSchemas = {
       },
     },
     required: ['id', 'label', 'fingerprint', 'type'],
+  },
+  DeviceShareInfo: {
+    type: 'object',
+    properties: {
+      group: {
+        type: 'object',
+        nullable: true,
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+        },
+        required: ['id', 'name'],
+      },
+      users: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            username: { type: 'string' },
+            role: { type: 'string', enum: ['owner', 'viewer'] },
+          },
+          required: ['id', 'username', 'role'],
+        },
+      },
+    },
+    required: ['group', 'users'],
+  },
+  DeviceShareUserRequest: {
+    type: 'object',
+    properties: {
+      targetUserId: { type: 'string' },
+    },
+    required: ['targetUserId'],
+  },
+  DeviceShareGroupRequest: {
+    type: 'object',
+    properties: {
+      groupId: { type: 'string', nullable: true },
+    },
+  },
+  DeviceShareResult: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean' },
+      message: { type: 'string' },
+      groupName: { type: 'string', nullable: true },
+    },
+    required: ['success', 'message'],
   },
   CreateDeviceRequest: {
     type: 'object',

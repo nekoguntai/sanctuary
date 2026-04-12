@@ -1963,6 +1963,91 @@ describe('OpenAPI Docs', () => {
     }
   });
 
+  it('documents public device catalog, account, and sharing routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/devices/models', 'get'],
+      ['/devices/models/{slug}', 'get'],
+      ['/devices/manufacturers', 'get'],
+      ['/devices/{deviceId}/accounts', 'get'],
+      ['/devices/{deviceId}/accounts', 'post'],
+      ['/devices/{deviceId}/accounts/{accountId}', 'delete'],
+      ['/devices/{deviceId}/share', 'get'],
+      ['/devices/{deviceId}/share/user', 'post'],
+      ['/devices/{deviceId}/share/user/{targetUserId}', 'delete'],
+      ['/devices/{deviceId}/share/group', 'post'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.paths['/devices/models'].get).not.toHaveProperty('security');
+    expect(openApiSpec.paths['/devices/models/{slug}'].get).not.toHaveProperty('security');
+    expect(openApiSpec.paths['/devices/manufacturers'].get).not.toHaveProperty('security');
+
+    const modelParameters = openApiSpec.paths['/devices/models'].get.parameters;
+    expect(modelParameters).toContainEqual(expect.objectContaining({
+      name: 'manufacturer',
+      in: 'query',
+    }));
+    expect(modelParameters).toContainEqual(expect.objectContaining({
+      name: 'airGapped',
+      in: 'query',
+      schema: expect.objectContaining({ type: 'boolean' }),
+    }));
+    expect(modelParameters).toContainEqual(expect.objectContaining({
+      name: 'connectivity',
+      in: 'query',
+    }));
+    expect(modelParameters).toContainEqual(expect.objectContaining({
+      name: 'showDiscontinued',
+      in: 'query',
+      schema: expect.objectContaining({ type: 'boolean' }),
+    }));
+
+    expect(openApiSpec.components.schemas.DeviceModel.required).toEqual(expect.arrayContaining([
+      'id',
+      'slug',
+      'name',
+      'manufacturer',
+      'connectivity',
+      'scriptTypes',
+    ]));
+    expect(openApiSpec.components.schemas.DeviceModel.properties.connectivity.items).toEqual({ type: 'string' });
+    expect(openApiSpec.components.schemas.DeviceModel.properties.scriptTypes.items).toEqual({ type: 'string' });
+
+    expect(
+      openApiSpec.paths['/devices/{deviceId}/accounts'].post.requestBody.content['application/json'].schema
+    ).toEqual({
+      $ref: '#/components/schemas/DeviceAccountInput',
+    });
+    expect(
+      openApiSpec.paths['/devices/{deviceId}/accounts'].get.responses[200].content['application/json'].schema.items
+    ).toEqual({
+      $ref: '#/components/schemas/DeviceAccount',
+    });
+    expect(openApiSpec.paths['/devices/{deviceId}/accounts/{accountId}'].delete.responses[204])
+      .not.toHaveProperty('content');
+
+    expect(
+      openApiSpec.paths['/devices/{deviceId}/share/user'].post.requestBody.content['application/json'].schema
+    ).toEqual({
+      $ref: '#/components/schemas/DeviceShareUserRequest',
+    });
+    expect(
+      openApiSpec.paths['/devices/{deviceId}/share/group'].post.requestBody.content['application/json'].schema
+    ).toEqual({
+      $ref: '#/components/schemas/DeviceShareGroupRequest',
+    });
+    expect(openApiSpec.components.schemas.DeviceShareInfo.required).toEqual(['group', 'users']);
+    expect(openApiSpec.components.schemas.DeviceShareUserRequest.required).toEqual(['targetUserId']);
+    expect(openApiSpec.components.schemas.DeviceShareGroupRequest.properties.groupId).toMatchObject({
+      type: 'string',
+      nullable: true,
+    });
+    expect(openApiSpec.components.schemas.DeviceShareResult.required).toEqual(['success', 'message']);
+  });
+
   it('documents device create merge and conflict statuses', () => {
     const createResponses = openApiSpec.paths['/devices'].post.responses;
     const createSchema = openApiSpec.components.schemas.CreateDeviceRequest;
@@ -2100,6 +2185,57 @@ describe('OpenAPI Docs', () => {
       ...MOBILE_DRAFT_STATUS_VALUES,
     ]);
     expect(openApiSpec.components.schemas.UpdateDraftRequest).toHaveProperty('additionalProperties', false);
+  });
+
+  it('documents wallet label detail and transaction/address label association routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/wallets/{walletId}/labels/{labelId}', 'get'],
+      ['/transactions/{transactionId}/labels', 'get'],
+      ['/transactions/{transactionId}/labels', 'post'],
+      ['/transactions/{transactionId}/labels', 'put'],
+      ['/transactions/{transactionId}/labels/{labelId}', 'delete'],
+      ['/addresses/{addressId}/labels', 'get'],
+      ['/addresses/{addressId}/labels', 'post'],
+      ['/addresses/{addressId}/labels', 'put'],
+      ['/addresses/{addressId}/labels/{labelId}', 'delete'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(
+      openApiSpec.paths['/wallets/{walletId}/labels/{labelId}'].get.responses[200]
+        .content['application/json'].schema
+    ).toEqual({
+      $ref: '#/components/schemas/LabelWithRelations',
+    });
+    expect(openApiSpec.components.schemas.LabelWithRelations.allOf).toContainEqual({
+      $ref: '#/components/schemas/Label',
+    });
+
+    const labelIdsSchema = openApiSpec.components.schemas.LabelIdsRequest;
+    expect(labelIdsSchema.required).toEqual(['labelIds']);
+    expect(labelIdsSchema.properties.labelIds.items).toEqual({ type: 'string' });
+
+    for (const path of [
+      '/transactions/{transactionId}/labels',
+      '/addresses/{addressId}/labels',
+    ] as const) {
+      for (const method of ['post', 'put'] as const) {
+        expect(openApiSpec.paths[path][method].requestBody.content['application/json'].schema).toEqual({
+          $ref: '#/components/schemas/LabelIdsRequest',
+        });
+        expect(openApiSpec.paths[path][method].responses[200].content['application/json'].schema.items).toEqual({
+          $ref: '#/components/schemas/Label',
+        });
+      }
+    }
+
+    expect(openApiSpec.paths['/transactions/{transactionId}/labels/{labelId}'].delete.responses[204])
+      .not.toHaveProperty('content');
+    expect(openApiSpec.paths['/addresses/{addressId}/labels/{labelId}'].delete.responses[204])
+      .not.toHaveProperty('content');
   });
 
   it('documents gateway-exposed push routes without internal gateway routes', () => {

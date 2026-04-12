@@ -40,6 +40,102 @@ const baseSettingsProperties = {
   'smtp.configured': { type: 'boolean', default: false },
 } as const;
 
+const NODE_CONFIG_TYPE_VALUES = ['electrum'] as const;
+const NODE_CONNECTION_MODE_VALUES = ['singleton', 'pool'] as const;
+const NODE_LOAD_BALANCING_VALUES = ['round_robin', 'least_connections', 'failover_only'] as const;
+const NODE_MEMPOOL_ESTIMATOR_VALUES = ['simple', 'mempool_space'] as const;
+
+const nodeConfigPortInputSchema = {
+  oneOf: [
+    { type: 'string', pattern: '^\\d+$' },
+    { type: 'integer', minimum: 1, maximum: 65535 },
+  ],
+} as const;
+
+const nodeConfigCountInputSchema = {
+  oneOf: [
+    { type: 'string', pattern: '^\\d+$' },
+    { type: 'integer', minimum: 0 },
+  ],
+} as const;
+
+const nodeConfigNullablePortInputSchema = { ...nodeConfigPortInputSchema, nullable: true } as const;
+const nodeConfigNullableCountInputSchema = { ...nodeConfigCountInputSchema, nullable: true } as const;
+const nodeConnectionModeSchema = { type: 'string', enum: [...NODE_CONNECTION_MODE_VALUES] } as const;
+const nodeLoadBalancingSchema = { type: 'string', enum: [...NODE_LOAD_BALANCING_VALUES] } as const;
+const nodeMempoolEstimatorSchema = { type: 'string', enum: [...NODE_MEMPOOL_ESTIMATOR_VALUES] } as const;
+
+const nodeConfigResponseProperties = {
+  type: { type: 'string', enum: [...NODE_CONFIG_TYPE_VALUES] },
+  host: { type: 'string' },
+  port: { type: 'string' },
+  useSsl: { type: 'boolean' },
+  allowSelfSignedCert: { type: 'boolean' },
+  user: { type: 'string', nullable: true },
+  hasPassword: { type: 'boolean' },
+  explorerUrl: { type: 'string', nullable: true },
+  feeEstimatorUrl: { type: 'string', nullable: true },
+  mempoolEstimator: nodeMempoolEstimatorSchema,
+  poolEnabled: { type: 'boolean' },
+  poolMinConnections: { type: 'integer', minimum: 0 },
+  poolMaxConnections: { type: 'integer', minimum: 0 },
+  poolLoadBalancing: nodeLoadBalancingSchema,
+  mainnetMode: nodeConnectionModeSchema,
+  mainnetSingletonHost: { type: 'string', nullable: true },
+  mainnetSingletonPort: { type: 'integer', nullable: true, minimum: 1, maximum: 65535 },
+  mainnetSingletonSsl: { type: 'boolean', nullable: true },
+  mainnetPoolMin: { type: 'integer', nullable: true, minimum: 0 },
+  mainnetPoolMax: { type: 'integer', nullable: true, minimum: 0 },
+  mainnetPoolLoadBalancing: nodeLoadBalancingSchema,
+  testnetEnabled: { type: 'boolean' },
+  testnetMode: nodeConnectionModeSchema,
+  testnetSingletonHost: { type: 'string', nullable: true },
+  testnetSingletonPort: { type: 'integer', nullable: true, minimum: 1, maximum: 65535 },
+  testnetSingletonSsl: { type: 'boolean', nullable: true },
+  testnetPoolMin: { type: 'integer', nullable: true, minimum: 0 },
+  testnetPoolMax: { type: 'integer', nullable: true, minimum: 0 },
+  testnetPoolLoadBalancing: nodeLoadBalancingSchema,
+  signetEnabled: { type: 'boolean' },
+  signetMode: nodeConnectionModeSchema,
+  signetSingletonHost: { type: 'string', nullable: true },
+  signetSingletonPort: { type: 'integer', nullable: true, minimum: 1, maximum: 65535 },
+  signetSingletonSsl: { type: 'boolean', nullable: true },
+  signetPoolMin: { type: 'integer', nullable: true, minimum: 0 },
+  signetPoolMax: { type: 'integer', nullable: true, minimum: 0 },
+  signetPoolLoadBalancing: nodeLoadBalancingSchema,
+  proxyEnabled: { type: 'boolean' },
+  proxyHost: { type: 'string', nullable: true },
+  proxyPort: { type: 'integer', nullable: true, minimum: 1, maximum: 65535 },
+  proxyUsername: { type: 'string', nullable: true },
+  proxyPassword: {
+    type: 'string',
+    nullable: true,
+    description: 'Masked as ******** when a proxy password is configured.',
+  },
+  servers: {
+    type: 'array',
+    items: { $ref: '#/components/schemas/AdminElectrumServer' },
+  },
+} as const;
+
+const nodeConfigUpdateRequestProperties = {
+  ...nodeConfigResponseProperties,
+  port: nodeConfigPortInputSchema,
+  user: { type: 'string', nullable: true },
+  password: { type: 'string', format: 'password' },
+  proxyPort: nodeConfigNullablePortInputSchema,
+  proxyPassword: { type: 'string', format: 'password' },
+  mainnetSingletonPort: nodeConfigNullablePortInputSchema,
+  mainnetPoolMin: nodeConfigNullableCountInputSchema,
+  mainnetPoolMax: nodeConfigNullableCountInputSchema,
+  testnetSingletonPort: nodeConfigNullablePortInputSchema,
+  testnetPoolMin: nodeConfigNullableCountInputSchema,
+  testnetPoolMax: nodeConfigNullableCountInputSchema,
+  signetSingletonPort: nodeConfigNullablePortInputSchema,
+  signetPoolMin: nodeConfigNullableCountInputSchema,
+  signetPoolMax: nodeConfigNullableCountInputSchema,
+} as const;
+
 export const adminSchemas = {
   AdminVersionResponse: {
     type: 'object',
@@ -402,6 +498,126 @@ export const adminSchemas = {
       success: { type: 'boolean' },
     },
     required: ['success'],
+  },
+  AdminElectrumServer: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      nodeConfigId: { type: 'string' },
+      network: { type: 'string', enum: ['mainnet', 'testnet', 'signet', 'regtest'] },
+      label: { type: 'string' },
+      host: { type: 'string' },
+      port: { type: 'integer', minimum: 1, maximum: 65535 },
+      useSsl: { type: 'boolean' },
+      priority: { type: 'integer', minimum: 0 },
+      enabled: { type: 'boolean' },
+      lastHealthCheck: { type: 'string', format: 'date-time', nullable: true },
+      healthCheckFails: { type: 'integer', minimum: 0 },
+      isHealthy: { type: 'boolean' },
+      lastHealthCheckError: { type: 'string', nullable: true },
+      supportsVerbose: { type: 'boolean', nullable: true },
+      lastCapabilityCheck: { type: 'string', format: 'date-time', nullable: true },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+    },
+    required: ['id', 'host', 'port', 'priority'],
+    additionalProperties: true,
+  },
+  AdminNodeConfig: {
+    type: 'object',
+    properties: nodeConfigResponseProperties,
+    required: [
+      'type',
+      'host',
+      'port',
+      'useSsl',
+      'allowSelfSignedCert',
+      'explorerUrl',
+      'feeEstimatorUrl',
+      'mempoolEstimator',
+      'poolEnabled',
+      'poolMinConnections',
+      'poolMaxConnections',
+      'poolLoadBalancing',
+      'servers',
+    ],
+  },
+  AdminNodeConfigUpdateRequest: {
+    type: 'object',
+    properties: nodeConfigUpdateRequestProperties,
+    required: ['type', 'host', 'port'],
+    additionalProperties: false,
+  },
+  AdminNodeConfigUpdateResponse: {
+    allOf: [
+      { $ref: '#/components/schemas/AdminNodeConfig' },
+      {
+        type: 'object',
+        properties: {
+          message: { type: 'string' },
+        },
+        required: ['message'],
+      },
+    ],
+  },
+  AdminNodeConfigTestRequest: {
+    type: 'object',
+    properties: {
+      type: { type: 'string', enum: [...NODE_CONFIG_TYPE_VALUES] },
+      host: { type: 'string' },
+      port: nodeConfigPortInputSchema,
+      useSsl: { type: 'boolean', default: false },
+    },
+    required: ['type', 'host', 'port'],
+    additionalProperties: false,
+  },
+  AdminNodeConfigTestSuccessResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', enum: [true] },
+      blockHeight: { type: 'integer', minimum: 0 },
+      message: { type: 'string' },
+    },
+    required: ['success', 'message'],
+  },
+  AdminNodeConfigTestFailedResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', enum: [false] },
+      error: { type: 'string', enum: ['Connection Failed'] },
+      message: { type: 'string' },
+    },
+    required: ['success', 'error', 'message'],
+  },
+  AdminProxyTestRequest: {
+    type: 'object',
+    properties: {
+      host: { type: 'string' },
+      port: nodeConfigPortInputSchema,
+      username: { type: 'string' },
+      password: { type: 'string', format: 'password' },
+    },
+    required: ['host', 'port'],
+    additionalProperties: false,
+  },
+  AdminProxyTestSuccessResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', enum: [true] },
+      message: { type: 'string' },
+      exitIp: { type: 'string' },
+      isTorExit: { type: 'boolean' },
+    },
+    required: ['success', 'message', 'exitIp', 'isTorExit'],
+  },
+  AdminProxyTestFailedResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', enum: [false] },
+      error: { type: 'string', enum: ['Tor Verification Failed'] },
+      message: { type: 'string' },
+    },
+    required: ['success', 'error', 'message'],
   },
   AdminFeatureFlagKey: {
     type: 'string',

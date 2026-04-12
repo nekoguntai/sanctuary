@@ -587,6 +587,165 @@ describe('OpenAPI Docs', () => {
     ]);
   });
 
+  it('documents admin node config and proxy test routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/admin/node-config', 'get'],
+      ['/admin/node-config', 'put'],
+      ['/admin/node-config/test', 'post'],
+      ['/admin/proxy/test', 'post'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.components.schemas.AdminNodeConfig.required).toEqual([
+      'type',
+      'host',
+      'port',
+      'useSsl',
+      'allowSelfSignedCert',
+      'explorerUrl',
+      'feeEstimatorUrl',
+      'mempoolEstimator',
+      'poolEnabled',
+      'poolMinConnections',
+      'poolMaxConnections',
+      'poolLoadBalancing',
+      'servers',
+    ]);
+    expect(openApiSpec.components.schemas.AdminNodeConfig.properties.type.enum).toEqual(['electrum']);
+    expect(openApiSpec.components.schemas.AdminNodeConfig.properties.port).toEqual({ type: 'string' });
+    expect(openApiSpec.components.schemas.AdminNodeConfig.properties.proxyPassword).toMatchObject({
+      nullable: true,
+    });
+    expect(openApiSpec.components.schemas.AdminNodeConfig.properties.servers.items).toEqual({
+      $ref: '#/components/schemas/AdminElectrumServer',
+    });
+    expect(openApiSpec.components.schemas.AdminElectrumServer.required).toEqual([
+      'id',
+      'host',
+      'port',
+      'priority',
+    ]);
+
+    expect(openApiSpec.paths['/admin/node-config'].get.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminNodeConfig',
+      });
+    expect(openApiSpec.paths['/admin/node-config'].put.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminNodeConfigUpdateRequest',
+      });
+    expect(openApiSpec.paths['/admin/node-config'].put.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminNodeConfigUpdateResponse',
+      });
+
+    expect(openApiSpec.components.schemas.AdminNodeConfigUpdateRequest.required).toEqual([
+      'type',
+      'host',
+      'port',
+    ]);
+    expect(openApiSpec.components.schemas.AdminNodeConfigUpdateRequest).toHaveProperty(
+      'additionalProperties',
+      false,
+    );
+    expect(openApiSpec.components.schemas.AdminNodeConfigUpdateRequest.properties.port.oneOf)
+      .toContainEqual({
+        type: 'integer',
+        minimum: 1,
+        maximum: 65535,
+      });
+    expect(openApiSpec.components.schemas.AdminNodeConfigUpdateRequest.properties.port.oneOf)
+      .toContainEqual({
+        type: 'string',
+        pattern: '^\\d+$',
+      });
+    expect(openApiSpec.components.schemas.AdminNodeConfigUpdateRequest.properties.mainnetPoolMin).toMatchObject({
+      nullable: true,
+      oneOf: expect.arrayContaining([
+        {
+          type: 'string',
+          pattern: '^\\d+$',
+        },
+      ]),
+    });
+    expect(openApiSpec.components.schemas.AdminNodeConfigUpdateRequest.properties.servers.items).toEqual({
+      $ref: '#/components/schemas/AdminElectrumServer',
+    });
+    expect(openApiSpec.components.schemas.AdminNodeConfigUpdateResponse.allOf).toContainEqual({
+      $ref: '#/components/schemas/AdminNodeConfig',
+    });
+
+    expect(openApiSpec.paths['/admin/node-config/test'].post.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminNodeConfigTestRequest',
+      });
+    expect(openApiSpec.components.schemas.AdminNodeConfigTestRequest.required).toEqual([
+      'type',
+      'host',
+      'port',
+    ]);
+    expect(openApiSpec.components.schemas.AdminNodeConfigTestRequest.properties.type.enum).toEqual(['electrum']);
+    expect(openApiSpec.components.schemas.AdminNodeConfigTestRequest.properties.port.oneOf)
+      .toContainEqual({
+        type: 'string',
+        pattern: '^\\d+$',
+      });
+    expect(openApiSpec.paths['/admin/node-config/test'].post.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminNodeConfigTestSuccessResponse',
+      });
+    expect(openApiSpec.paths['/admin/node-config/test'].post.responses[500].content['application/json'].schema.oneOf)
+      .toContainEqual({
+        $ref: '#/components/schemas/AdminNodeConfigTestFailedResponse',
+      });
+    expect(openApiSpec.paths['/admin/node-config/test'].post.responses[500].content['application/json'].schema.oneOf)
+      .toContainEqual({
+        $ref: '#/components/schemas/ApiError',
+      });
+    expect(openApiSpec.components.schemas.AdminNodeConfigTestFailedResponse.properties.error.enum)
+      .toEqual(['Connection Failed']);
+
+    expect(openApiSpec.paths['/admin/proxy/test'].post.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminProxyTestRequest',
+      });
+    expect(openApiSpec.components.schemas.AdminProxyTestRequest.required).toEqual(['host', 'port']);
+    expect(openApiSpec.components.schemas.AdminProxyTestRequest.properties.port.oneOf)
+      .toContainEqual({
+        type: 'integer',
+        minimum: 1,
+        maximum: 65535,
+      });
+    expect(openApiSpec.components.schemas.AdminProxyTestRequest.properties.port.oneOf)
+      .toContainEqual({
+        type: 'string',
+        pattern: '^\\d+$',
+      });
+    expect(openApiSpec.paths['/admin/proxy/test'].post.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminProxyTestSuccessResponse',
+      });
+    expect(openApiSpec.paths['/admin/proxy/test'].post.responses[500].content['application/json'].schema.oneOf)
+      .toContainEqual({
+        $ref: '#/components/schemas/AdminProxyTestFailedResponse',
+      });
+    expect(openApiSpec.paths['/admin/proxy/test'].post.responses[500].content['application/json'].schema.oneOf)
+      .toContainEqual({
+        $ref: '#/components/schemas/ApiError',
+      });
+    expect(openApiSpec.components.schemas.AdminProxyTestSuccessResponse.required).toEqual([
+      'success',
+      'message',
+      'exitIp',
+      'isTorExit',
+    ]);
+    expect(openApiSpec.components.schemas.AdminProxyTestFailedResponse.properties.error.enum)
+      .toEqual(['Tor Verification Failed']);
+  });
+
   it('documents admin user management routes', () => {
     const routes: Array<[OpenApiPathKey, string]> = [
       ['/admin/users', 'get'],

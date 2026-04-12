@@ -82,6 +82,17 @@ const jsonResponse = (description: string, schemaRef: string) => ({
   },
 });
 
+const jsonOneOfResponse = (description: string, schemaRefs: string[]) => ({
+  description,
+  content: {
+    'application/json': {
+      schema: {
+        oneOf: schemaRefs.map((schemaRef) => ({ $ref: schemaRef })),
+      },
+    },
+  },
+});
+
 const jsonDownloadResponse = (description: string, schemaRef: string) => ({
   description,
   headers: {
@@ -238,6 +249,72 @@ export const adminPaths = {
         403: apiErrorResponse,
         429: jsonResponse('Support package generation already in progress', '#/components/schemas/AdminSimpleErrorResponse'),
         500: apiErrorResponse,
+      },
+    },
+  },
+  '/admin/node-config': {
+    get: {
+      tags: ['Admin'],
+      summary: 'Get node configuration',
+      description: 'Get the default Electrum node configuration, including network pool settings, proxy settings, and configured server pool entries.',
+      security: bearerAuth,
+      responses: {
+        200: jsonResponse('Node configuration', '#/components/schemas/AdminNodeConfig'),
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+    put: {
+      tags: ['Admin'],
+      summary: 'Update node configuration',
+      description: 'Update the default Electrum node configuration and reset the active node client so it reconnects on the next request.',
+      security: bearerAuth,
+      requestBody: jsonRequestBody('#/components/schemas/AdminNodeConfigUpdateRequest'),
+      responses: {
+        200: jsonResponse('Updated node configuration', '#/components/schemas/AdminNodeConfigUpdateResponse'),
+        400: apiErrorResponse,
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+  },
+  '/admin/node-config/test': {
+    post: {
+      tags: ['Admin'],
+      summary: 'Test node configuration',
+      description: 'Test an Electrum node connection using the provided host, port, and SSL mode without saving the configuration.',
+      security: bearerAuth,
+      requestBody: jsonRequestBody('#/components/schemas/AdminNodeConfigTestRequest'),
+      responses: {
+        200: jsonResponse('Node connection test succeeded', '#/components/schemas/AdminNodeConfigTestSuccessResponse'),
+        400: apiErrorResponse,
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: jsonOneOfResponse('Node connection test failed or unexpected error', [
+          '#/components/schemas/AdminNodeConfigTestFailedResponse',
+          '#/components/schemas/ApiError',
+        ]),
+      },
+    },
+  },
+  '/admin/proxy/test': {
+    post: {
+      tags: ['Admin'],
+      summary: 'Test SOCKS5 proxy',
+      description: 'Test SOCKS5/Tor proxy connectivity by verifying .onion reachability and attempting to resolve the Tor exit IP.',
+      security: bearerAuth,
+      requestBody: jsonRequestBody('#/components/schemas/AdminProxyTestRequest'),
+      responses: {
+        200: jsonResponse('Proxy test succeeded', '#/components/schemas/AdminProxyTestSuccessResponse'),
+        400: apiErrorResponse,
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: jsonOneOfResponse('Proxy test failed or unexpected error', [
+          '#/components/schemas/AdminProxyTestFailedResponse',
+          '#/components/schemas/ApiError',
+        ]),
       },
     },
   },

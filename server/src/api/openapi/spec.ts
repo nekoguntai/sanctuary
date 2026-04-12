@@ -16,6 +16,7 @@ import { pushSchemas } from './schemas/push';
 import { mobilePermissionSchemas } from './schemas/mobilePermissions';
 import { labelSchemas } from './schemas/labels';
 import { draftSchemas } from './schemas/drafts';
+import { payjoinSchemas } from './schemas/payjoin';
 
 // Paths
 import { authPaths } from './paths/auth';
@@ -27,6 +28,7 @@ import { pushPaths } from './paths/push';
 import { mobilePermissionPaths } from './paths/mobilePermissions';
 import { labelPaths } from './paths/labels';
 import { draftPaths } from './paths/drafts';
+import { payjoinPaths } from './paths/payjoin';
 
 export const openApiSpec = {
   openapi: '3.0.3',
@@ -59,6 +61,7 @@ export const openApiSpec = {
     { name: 'Price', description: 'Price information' },
     { name: 'Push', description: 'Mobile push device registration' },
     { name: 'Mobile Permissions', description: 'Mobile wallet permission restrictions' },
+    { name: 'Payjoin', description: 'BIP78 Payjoin sender and receiver operations' },
     { name: 'Admin', description: 'Administrative operations' },
   ],
   paths: {
@@ -73,6 +76,7 @@ export const openApiSpec = {
     ...draftPaths,
     ...pushPaths,
     ...mobilePermissionPaths,
+    ...payjoinPaths,
   },
   components: {
     securitySchemes: {
@@ -95,6 +99,7 @@ export const openApiSpec = {
       ...draftSchemas,
       ...pushSchemas,
       ...mobilePermissionSchemas,
+      ...payjoinSchemas,
     },
   },
 };

@@ -291,4 +291,55 @@ describe('OpenAPI Docs', () => {
     expect(updateSchema).toHaveProperty('minProperties', 1);
     expect(openApiSpec.components.schemas.MobilePermissionUpdateResponse).toBeDefined();
   });
+
+  it('documents Payjoin management and BIP78 receiver routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/payjoin/status', 'get'],
+      ['/payjoin/eligibility/{walletId}', 'get'],
+      ['/payjoin/address/{addressId}/uri', 'get'],
+      ['/payjoin/parse-uri', 'post'],
+      ['/payjoin/attempt', 'post'],
+      ['/payjoin/{addressId}', 'post'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.components.schemas.PayjoinStatusResponse).toBeDefined();
+    expect(openApiSpec.components.schemas.PayjoinEligibilityResponse.properties.status.enum).toEqual([
+      'ready',
+      'no-utxos',
+      'all-frozen',
+      'pending-confirmations',
+      'all-locked',
+      'unavailable',
+    ]);
+    expect(openApiSpec.components.schemas.PayjoinAttemptRequest.properties.network.enum).toEqual([
+      'mainnet',
+      'testnet',
+      'regtest',
+    ]);
+    expect(openApiSpec.components.schemas.PayjoinReceiverError.enum).toEqual([
+      'version-unsupported',
+      'unavailable',
+      'not-enough-money',
+      'original-psbt-rejected',
+      'receiver-error',
+    ]);
+
+    const receiverPath = openApiSpec.paths['/payjoin/{addressId}'].post;
+    expect(receiverPath).not.toHaveProperty('security');
+    expect(receiverPath.requestBody.content['text/plain'].schema).toMatchObject({
+      type: 'string',
+      minLength: 1,
+    });
+    expect(receiverPath.responses[200].content['text/plain'].schema).toMatchObject({
+      type: 'string',
+      minLength: 1,
+    });
+    expect(receiverPath.responses[400].content['text/plain'].schema).toEqual({
+      $ref: '#/components/schemas/PayjoinReceiverError',
+    });
+  });
 });

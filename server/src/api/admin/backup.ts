@@ -8,12 +8,18 @@ import { Router } from 'express';
 import express from 'express';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { asyncHandler } from '../../errors/errorHandler';
-import { InvalidInputError } from '../../errors/ApiError';
 import { createLogger } from '../../utils/logger';
 import { backupService, SanctuaryBackup } from '../../services/backupService';
 import { auditService, AuditAction, AuditCategory } from '../../services/auditService';
 import { userRepository } from '../../repositories';
 import { verifyPassword } from '../../utils/password';
+import {
+  ConfirmRestoreSchema,
+  CreateBackupSchema,
+  EncryptionKeysRequestSchema,
+  RestoreBackupSchema,
+} from '../schemas/admin';
+import { parseAdminRequestBody } from './requestValidation';
 
 const router = Router();
 const log = createLogger('ADMIN_BACKUP:ROUTE');
@@ -36,10 +42,11 @@ const largeBodyParser = express.json({ limit: '200mb' });
  */
 router.post('/encryption-keys', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   // Require password re-authentication for this sensitive operation
-  const { password } = req.body;
-  if (!password) {
-    throw new InvalidInputError('Password confirmation required to view encryption keys');
-  }
+  const { password } = parseAdminRequestBody(
+    EncryptionKeysRequestSchema,
+    req.body,
+    'Password confirmation required to view encryption keys'
+  );
 
   const user = await userRepository.findByIdWithSelect(req.user!.userId, { password: true });
 
@@ -77,7 +84,7 @@ router.post('/encryption-keys', authenticate, requireAdmin, asyncHandler(async (
  * Response: JSON file download
  */
 router.post('/backup', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { includeCache, description } = req.body;
+  const { includeCache, description } = parseAdminRequestBody(CreateBackupSchema, req.body);
   const adminUser = req.user?.username || 'unknown';
 
   log.info('Creating backup', { adminUser, includeCache });
@@ -120,11 +127,7 @@ router.post('/backup', authenticate, requireAdmin, asyncHandler(async (req, res)
  * Response: ValidationResult
  */
 router.post('/backup/validate', largeBodyParser, authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { backup } = req.body;
-
-  if (!backup) {
-    throw new InvalidInputError('Missing backup data');
-  }
+  const { backup } = parseAdminRequestBody(RestoreBackupSchema, req.body, 'Missing backup data');
 
   const validation = await backupService.validateBackup(backup);
   res.json(validation);
@@ -143,20 +146,18 @@ router.post('/backup/validate', largeBodyParser, authenticate, requireAdmin, asy
  * Response: RestoreResult
  */
 router.post('/restore', largeBodyParser, authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { backup, confirmationCode } = req.body;
+  const { backup } = parseAdminRequestBody(
+    ConfirmRestoreSchema,
+    req.body,
+    (issues) => issues.some((issue) => issue.path[0] === 'confirmationCode')
+      ? 'To restore from backup, send confirmationCode: "CONFIRM_RESTORE" in the request body. WARNING: This will delete all existing data.'
+      : 'Missing backup data'
+  );
   const adminUser = req.user?.username || 'unknown';
-
-  // Require explicit confirmation
-  if (confirmationCode !== 'CONFIRM_RESTORE') {
-    throw new InvalidInputError('To restore from backup, send confirmationCode: "CONFIRM_RESTORE" in the request body. WARNING: This will delete all existing data.');
-  }
-
-  if (!backup) {
-    throw new InvalidInputError('Missing backup data');
-  }
+  const backupToRestore = backup as unknown as SanctuaryBackup;
 
   // Validate before restore
-  const validation = await backupService.validateBackup(backup);
+  const validation = await backupService.validateBackup(backupToRestore);
   if (!validation.valid) {
     return res.status(400).json({
       error: 'Invalid Backup',
@@ -167,12 +168,12 @@ router.post('/restore', largeBodyParser, authenticate, requireAdmin, asyncHandle
 
   log.info('Starting restore', {
     adminUser,
-    backupDate: backup.meta?.createdAt,
-    backupCreatedBy: backup.meta?.createdBy,
+    backupDate: backupToRestore.meta?.createdAt,
+    backupCreatedBy: backupToRestore.meta?.createdBy,
   });
 
   // Perform restore
-  const result = await backupService.restoreFromBackup(backup as SanctuaryBackup);
+  const result = await backupService.restoreFromBackup(backupToRestore);
 
   if (!result.success) {
     log.error('Restore failed', { adminUser, error: result.error });
@@ -194,8 +195,8 @@ router.post('/restore', largeBodyParser, authenticate, requireAdmin, asyncHandle
     details: {
       tablesRestored: result.tablesRestored,
       recordsRestored: result.recordsRestored,
-      backupDate: backup.meta?.createdAt,
-      backupCreatedBy: backup.meta?.createdBy,
+      backupDate: backupToRestore.meta?.createdAt,
+      backupCreatedBy: backupToRestore.meta?.createdBy,
     },
   });
 

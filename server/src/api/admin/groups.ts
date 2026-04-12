@@ -7,13 +7,14 @@
 import { Router } from 'express';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { asyncHandler } from '../../errors/errorHandler';
-import { InvalidInputError, NotFoundError, ConflictError } from '../../errors/ApiError';
+import { NotFoundError, ConflictError } from '../../errors/ApiError';
 import { createLogger } from '../../utils/logger';
 import { auditService, AuditAction, AuditCategory } from '../../services/auditService';
 import { invalidateUserAccessCache } from '../../services/accessControl';
 import * as groupRepo from '../../repositories/groupRepository';
 import { findById as findUserById } from '../../repositories/userRepository';
-import { isAdminGroupRole } from './groupRoles';
+import { AddGroupMemberSchema, CreateGroupSchema, UpdateGroupSchema } from '../schemas/admin';
+import { parseAdminRequestBody } from './requestValidation';
 
 const router = Router();
 const log = createLogger('ADMIN_GROUP:ROUTE');
@@ -49,11 +50,11 @@ router.get('/', authenticate, requireAdmin, asyncHandler(async (_req, res) => {
  * Create a new group (admin only)
  */
 router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { name, description, purpose, memberIds } = req.body;
-
-  if (!name) {
-    throw new InvalidInputError('Group name is required');
-  }
+  const { name, description, purpose, memberIds } = parseAdminRequestBody(
+    CreateGroupSchema,
+    req.body,
+    'Group name is required'
+  );
 
   const group = await groupRepo.create({
     name,
@@ -61,7 +62,7 @@ router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
     purpose: purpose || null,
   });
 
-  if (memberIds && Array.isArray(memberIds) && memberIds.length > 0) {
+  if (memberIds?.length) {
     await groupRepo.addMembers(group.id, memberIds);
   }
 
@@ -82,12 +83,13 @@ router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
  */
 router.put('/:groupId', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { groupId } = req.params;
-  const { name, description, purpose, memberIds } = req.body;
 
   const existingGroup = await groupRepo.findById(groupId);
   if (!existingGroup) {
     throw new NotFoundError('Group not found');
   }
+
+  const { name, description, purpose, memberIds } = parseAdminRequestBody(UpdateGroupSchema, req.body);
 
   await groupRepo.update(groupId, {
     name: name || existingGroup.name,
@@ -95,7 +97,7 @@ router.put('/:groupId', authenticate, requireAdmin, asyncHandler(async (req, res
     purpose: purpose !== undefined ? purpose : existingGroup.purpose,
   });
 
-  if (memberIds !== undefined && Array.isArray(memberIds)) {
+  if (memberIds !== undefined) {
     await groupRepo.setMembers(groupId, memberIds);
   }
 
@@ -138,16 +140,13 @@ router.delete('/:groupId', authenticate, requireAdmin, asyncHandler(async (req, 
  */
 router.post('/:groupId/members', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { groupId } = req.params;
-  const { userId, role } = req.body;
-
-  if (!userId) {
-    throw new InvalidInputError('User ID is required');
-  }
-
-  const memberRole = role || 'member';
-  if (!isAdminGroupRole(memberRole)) {
-    throw new InvalidInputError('Group member role must be member or admin');
-  }
+  const { userId, role: memberRole } = parseAdminRequestBody(
+    AddGroupMemberSchema,
+    req.body,
+    (issues) => issues.some((issue) => issue.path[0] === 'role')
+      ? 'Group member role must be member or admin'
+      : 'User ID is required'
+  );
 
   const group = await groupRepo.findById(groupId);
   if (!group) {

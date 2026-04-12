@@ -28,7 +28,7 @@ export const CreateElectrumServerSchema = z.object({
   host: z.string().min(1, 'Host is required'),
   port: z.coerce.number().int().min(1).max(65535),
   useSsl: z.boolean().default(true),
-  priority: z.number().int().min(0).max(100).default(50),
+  priority: z.number().int().min(0).max(100).optional(),
   enabled: z.boolean().default(true),
   network: NetworkTypeSchema.default('mainnet'),
 });
@@ -46,11 +46,11 @@ export const UpdateElectrumServerSchema = z.object({
 export const TestElectrumServerSchema = z.object({
   host: z.string().min(1, 'Host is required'),
   port: z.coerce.number().int().min(1).max(65535),
-  useSsl: z.boolean().default(true),
+  useSsl: z.boolean().default(false),
 });
 
 export const ReorderElectrumServersSchema = z.object({
-  serverIds: z.array(UuidSchema).min(1, 'At least one server ID is required'),
+  serverIds: z.array(z.string().min(1)).min(1, 'At least one server ID is required'),
 });
 
 // =============================================================================
@@ -78,7 +78,7 @@ export const CreateUserSchema = z.object({
 export const UpdateUserSchema = z.object({
   username: UsernameSchema.optional(),
   password: PasswordSchema.optional(),
-  email: EmailSchema.optional(),
+  email: z.union([EmailSchema, z.literal('')]).optional(),
   isAdmin: z.boolean().optional(),
 });
 
@@ -91,17 +91,17 @@ export const UserIdParamSchema = z.object({
 // =============================================================================
 
 export const CreateGroupSchema = z.object({
-  name: z.string().min(1, 'Group name is required').max(100),
-  description: z.string().max(500).optional(),
-  purpose: z.string().max(200).optional(),
-  memberIds: z.array(UuidSchema).optional(),
+  name: z.string({ message: 'Group name is required' }).min(1, 'Group name is required').max(100),
+  description: z.string().max(500).optional().nullable(),
+  purpose: z.string().max(200).optional().nullable(),
+  memberIds: z.array(z.string().min(1)).optional(),
 });
 
 export const UpdateGroupSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  description: z.string().max(500).optional(),
-  purpose: z.string().max(200).optional(),
-  memberIds: z.array(UuidSchema).optional(),
+  description: z.string().max(500).optional().nullable(),
+  purpose: z.string().max(200).optional().nullable(),
+  memberIds: z.array(z.string().min(1)).optional(),
 });
 
 export const GroupIdParamSchema = z.object({
@@ -109,8 +109,10 @@ export const GroupIdParamSchema = z.object({
 });
 
 export const AddGroupMemberSchema = z.object({
-  userId: UuidSchema,
-  role: z.enum(ADMIN_GROUP_ROLE_VALUES).default('member'),
+  userId: z.string({ message: 'User ID is required' }).min(1, 'User ID is required'),
+  role: z.enum(ADMIN_GROUP_ROLE_VALUES, {
+    message: 'Group member role must be member or admin',
+  }).default('member'),
 });
 
 // =============================================================================
@@ -131,13 +133,25 @@ export const CreateBackupSchema = z.object({
   description: z.string().max(500).optional(),
 });
 
+export const EncryptionKeysRequestSchema = z.object({
+  password: z.string().min(1, 'Password confirmation required to view encryption keys'),
+});
+
+const BackupPayloadSchema = z.object({
+  meta: z.record(z.string(), z.unknown()),
+  data: z.record(z.string(), z.unknown()),
+}).passthrough();
+
 export const RestoreBackupSchema = z.object({
-  backup: z.string().min(1, 'Backup data is required'),
+  backup: BackupPayloadSchema,
 });
 
 export const ConfirmRestoreSchema = z.object({
-  backup: z.string().min(1, 'Backup data is required'),
-  confirmationCode: z.string().min(1, 'Confirmation code is required'),
+  backup: BackupPayloadSchema,
+  confirmationCode: z.string().refine(
+    (code) => code === 'CONFIRM_RESTORE',
+    'Confirmation code must be CONFIRM_RESTORE'
+  ),
 });
 
 // =============================================================================

@@ -12,9 +12,27 @@ import { InvalidInputError, NotFoundError, ConflictError } from '../../errors/Ap
 import { createLogger } from '../../utils/logger';
 import { testNodeConfig } from '../../services/bitcoin/nodeClient';
 import { reloadElectrumServers } from '../../services/bitcoin/electrumPool';
+import {
+  CreateElectrumServerSchema,
+  ReorderElectrumServersSchema,
+  TestElectrumServerSchema,
+  UpdateElectrumServerSchema,
+} from '../schemas/admin';
+import { parseAdminRequestBody } from './requestValidation';
 
 const router = Router();
 const log = createLogger('ADMIN_ELECTRUM:ROUTE');
+const ELECTRUM_NETWORK_VALUES = ['mainnet', 'testnet', 'signet', 'regtest'] as const;
+const ELECTRUM_NETWORK_MESSAGE = `Invalid network. Must be one of: ${ELECTRUM_NETWORK_VALUES.join(', ')}`;
+
+function formatElectrumServerValidation(requiredMessage: string) {
+  return (issues: Array<{ path: PropertyKey[]; message: string }>): string => {
+    if (issues.some((issue) => issue.path[0] === 'network')) {
+      return ELECTRUM_NETWORK_MESSAGE;
+    }
+    return requiredMessage;
+  };
+}
 
 /**
  * GET /api/v1/admin/electrum-servers
@@ -45,16 +63,16 @@ router.get('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
  * NOTE: This route MUST be defined before /:network and /:id to avoid route conflicts
  */
 router.post('/test-connection', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { host, port, useSsl } = req.body;
-
-  if (!host || !port) {
-    throw new InvalidInputError('Host and port are required');
-  }
+  const { host, port, useSsl } = parseAdminRequestBody(
+    TestElectrumServerSchema,
+    req.body,
+    'Host and port are required'
+  );
 
   // Test connection using nodeClient's testNodeConfig
   const result = await testNodeConfig({
     host,
-    port: parseInt(port, 10),
+    port,
     protocol: useSsl ? 'ssl' : 'tcp',
   });
 
@@ -79,11 +97,11 @@ router.post('/test-connection', authenticate, requireAdmin, asyncHandler(async (
  * NOTE: This route MUST be defined before /:id to avoid ":id = 'reorder'" matching
  */
 router.put('/reorder', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { serverIds } = req.body;
-
-  if (!Array.isArray(serverIds)) {
-    throw new InvalidInputError('serverIds must be an array');
-  }
+  const { serverIds } = parseAdminRequestBody(
+    ReorderElectrumServersSchema,
+    req.body,
+    'serverIds must be an array'
+  );
 
   // Update priorities based on array order
   await nodeConfigRepository.electrumServer.reorderPriorities(
@@ -106,9 +124,8 @@ router.get('/:network', authenticate, requireAdmin, asyncHandler(async (req, res
   const { network } = req.params;
 
   // Validate network
-  const validNetworks = ['mainnet', 'testnet', 'signet', 'regtest'];
-  if (!validNetworks.includes(network)) {
-    throw new InvalidInputError(`Invalid network. Must be one of: ${validNetworks.join(', ')}`);
+  if (!(ELECTRUM_NETWORK_VALUES as readonly string[]).includes(network)) {
+    throw new InvalidInputError(ELECTRUM_NETWORK_MESSAGE);
   }
 
   const nodeConfig = await nodeConfigRepository.findDefault();
@@ -132,23 +149,18 @@ router.get('/:network', authenticate, requireAdmin, asyncHandler(async (req, res
  *   - network: Network (mainnet, testnet, signet, regtest) - defaults to mainnet
  */
 router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { label, host, port, useSsl, priority, enabled, network } = req.body;
+  const { label, host, port, useSsl, priority, enabled, network } = parseAdminRequestBody(
+    CreateElectrumServerSchema,
+    req.body,
+    formatElectrumServerValidation('Label, host, and port are required')
+  );
 
-  // Validation
-  if (!label || !host || !port) {
-    throw new InvalidInputError('Label, host, and port are required');
-  }
-
-  const serverNetwork = network || 'mainnet';
-  const validNetworks = ['mainnet', 'testnet', 'signet', 'regtest'];
-  if (!validNetworks.includes(serverNetwork)) {
-    throw new InvalidInputError(`Invalid network. Must be one of: ${validNetworks.join(', ')}`);
-  }
+  const serverNetwork = network;
 
   // Check for duplicate (same host, port, and network)
   const existingServer = await nodeConfigRepository.electrumServer.findByHostAndPort(
     host,
-    parseInt(port.toString(), 10),
+    port,
     serverNetwork,
   );
 
@@ -162,8 +174,8 @@ router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
     type: 'electrum',
     network: serverNetwork,
     host: host,
-    port: parseInt(port.toString(), 10),
-    useSsl: useSsl ?? true,
+    port,
+    useSsl,
     isDefault: true,
   });
 
@@ -175,10 +187,10 @@ router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
     network: serverNetwork,
     label,
     host,
-    port: parseInt(port.toString(), 10),
-    useSsl: useSsl ?? true,
+    port,
+    useSsl,
     priority: priority ?? (maxPriority + 1),
-    enabled: enabled ?? true,
+    enabled,
   });
 
   log.info('Electrum server added', { id: server.id, label, host, port, network: serverNetwork });
@@ -195,7 +207,6 @@ router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
  */
 router.put('/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { label, host, port, useSsl, priority, enabled, network } = req.body;
 
   const server = await nodeConfigRepository.electrumServer.findById(id);
 
@@ -203,16 +214,17 @@ router.put('/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => 
     throw new NotFoundError('Electrum server not found');
   }
 
-  // Validate network if provided
+  const { label, host, port, useSsl, priority, enabled, network } = parseAdminRequestBody(
+    UpdateElectrumServerSchema,
+    req.body,
+    formatElectrumServerValidation('Invalid Electrum server update')
+  );
+
   const serverNetwork = network ?? server.network;
-  const validNetworks = ['mainnet', 'testnet', 'signet', 'regtest'];
-  if (!validNetworks.includes(serverNetwork)) {
-    throw new InvalidInputError(`Invalid network. Must be one of: ${validNetworks.join(', ')}`);
-  }
 
   // Check for duplicate (same host, port, and network, excluding this server)
   const newHost = host ?? server.host;
-  const newPort = port ? parseInt(port.toString(), 10) : server.port;
+  const newPort = port ?? server.port;
   const existingServer = await nodeConfigRepository.electrumServer.findByHostAndPort(
     newHost, newPort, serverNetwork, id,
   );
@@ -224,7 +236,7 @@ router.put('/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => 
   const updatedServer = await nodeConfigRepository.electrumServer.update(id, {
     label: label ?? server.label,
     host: host ?? server.host,
-    port: port ? parseInt(port.toString(), 10) : server.port,
+    port: port ?? server.port,
     useSsl: useSsl ?? server.useSsl,
     priority: priority ?? server.priority,
     enabled: enabled ?? server.enabled,

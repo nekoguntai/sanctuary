@@ -7,7 +7,16 @@
 
 import { describe, it, expect } from 'vitest';
 import { PasswordSchema, RegisterSchema } from '../../../src/api/schemas/auth';
-import { SystemSettingsUpdateSchema } from '../../../src/api/schemas/admin';
+import {
+  AddGroupMemberSchema,
+  ConfirmRestoreSchema,
+  CreateGroupSchema,
+  ReorderElectrumServersSchema,
+  RestoreBackupSchema,
+  SystemSettingsUpdateSchema,
+  TestElectrumServerSchema,
+  UpdateUserSchema,
+} from '../../../src/api/schemas/admin';
 
 describe('Auth Schemas', () => {
   describe('PasswordSchema', () => {
@@ -56,6 +65,58 @@ describe('Auth Schemas', () => {
 });
 
 describe('Admin Schemas', () => {
+  describe('UpdateUserSchema', () => {
+    it('allows empty email so admins can clear existing email addresses', () => {
+      const result = UpdateUserSchema.safeParse({ email: '' });
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('Group schemas', () => {
+    it('accepts repository string IDs for group member lists and direct member additions', () => {
+      expect(CreateGroupSchema.safeParse({
+        name: 'Team',
+        memberIds: ['user-1', 'user-2'],
+      }).success).toBe(true);
+
+      expect(AddGroupMemberSchema.safeParse({ userId: 'user-1', role: 'admin' }).success).toBe(true);
+      expect(AddGroupMemberSchema.safeParse({ userId: 'user-1', role: 'owner' }).success).toBe(false);
+    });
+  });
+
+  describe('Electrum server schemas', () => {
+    it('accepts repository string IDs for reorder requests and defaults ad hoc tests to TCP', () => {
+      expect(ReorderElectrumServersSchema.safeParse({ serverIds: ['srv-3', 'srv-1'] }).success).toBe(true);
+
+      const result = TestElectrumServerSchema.safeParse({ host: 'electrum.example.com', port: '50002' });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.useSsl).toBe(false);
+      }
+    });
+  });
+
+  describe('Backup schemas', () => {
+    const backup = {
+      meta: {
+        version: '1.0',
+        appVersion: '0.8.32',
+        schemaVersion: 1,
+        createdAt: '2026-04-12T00:00:00.000Z',
+        createdBy: 'admin',
+        includesCache: false,
+        recordCounts: {},
+      },
+      data: {},
+    };
+
+    it('accepts backup objects and enforces explicit restore confirmation', () => {
+      expect(RestoreBackupSchema.safeParse({ backup }).success).toBe(true);
+      expect(ConfirmRestoreSchema.safeParse({ backup, confirmationCode: 'NOPE' }).success).toBe(false);
+      expect(ConfirmRestoreSchema.safeParse({ backup, confirmationCode: 'CONFIRM_RESTORE' }).success).toBe(true);
+    });
+  });
+
   describe('SystemSettingsUpdateSchema', () => {
     it('should accept object with settings', () => {
       const result = SystemSettingsUpdateSchema.safeParse({ key: 'value' });

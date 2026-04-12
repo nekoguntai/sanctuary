@@ -27,6 +27,8 @@ import {
 } from '../../constants';
 import { encrypt, isEncrypted } from '../../utils/encryption';
 import { clearTransporterCache } from '../../services/email';
+import { SystemSettingsUpdateSchema } from '../schemas/admin';
+import { parseAdminRequestBody } from './requestValidation';
 
 const router = Router();
 const log = createLogger('ADMIN_SETTINGS:ROUTE');
@@ -83,7 +85,11 @@ router.get('/', authenticate, requireAdmin, asyncHandler(async (_req, res) => {
  * Update system settings (admin only)
  */
 router.put('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const updates = req.body;
+  const updates = parseAdminRequestBody(
+    SystemSettingsUpdateSchema,
+    req.body,
+    'At least one setting is required'
+  );
 
   // Validate confirmation thresholds relationship
   if (updates.confirmationThreshold !== undefined || updates.deepConfirmationThreshold !== undefined) {

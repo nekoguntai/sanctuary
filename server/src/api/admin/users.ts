@@ -10,13 +10,45 @@ import { authenticate, requireAdmin } from '../../middleware/auth';
 import { asyncHandler } from '../../errors/errorHandler';
 import { InvalidInputError, NotFoundError, ConflictError } from '../../errors/ApiError';
 import { createLogger } from '../../utils/logger';
-import { hashPassword, validatePasswordStrength } from '../../utils/password';
-import { isValidEmail } from '../../utils/validators';
+import { hashPassword } from '../../utils/password';
 import { auditService, AuditAction, AuditCategory } from '../../services/auditService';
 import { revokeAllUserTokens } from '../../services/tokenRevocation';
+import { CreateUserSchema, UpdateUserSchema } from '../schemas/admin';
+import { parseAdminRequestBody } from './requestValidation';
 
 const router = Router();
 const log = createLogger('ADMIN_USER:ROUTE');
+
+function hasIssueFor(issues: Array<{ path: PropertyKey[]; code: string }>, field: string): boolean {
+  return issues.some((issue) => issue.path[0] === field);
+}
+
+function hasMissingIssueFor(issues: Array<{ path: PropertyKey[]; code: string }>, fields: string[]): boolean {
+  return issues.some((issue) => fields.includes(String(issue.path[0])) && issue.code === 'invalid_type');
+}
+
+function formatCreateUserValidation(issues: Array<{ path: PropertyKey[]; code: string; message: string }>): string {
+  if (hasMissingIssueFor(issues, ['username', 'password', 'email'])) {
+    return 'Username, password, and email are required';
+  }
+  if (hasIssueFor(issues, 'password')) {
+    return 'Password does not meet security requirements';
+  }
+  if (hasIssueFor(issues, 'email')) {
+    return 'Invalid email address format';
+  }
+  return issues.map((issue) => issue.message).join(', ');
+}
+
+function formatUpdateUserValidation(issues: Array<{ path: PropertyKey[]; code: string; message: string }>): string {
+  if (hasIssueFor(issues, 'password')) {
+    return 'Password does not meet security requirements';
+  }
+  if (hasIssueFor(issues, 'email')) {
+    return 'Invalid email address format';
+  }
+  return issues.map((issue) => issue.message).join(', ');
+}
 
 /**
  * GET /api/v1/admin/users
@@ -33,27 +65,11 @@ router.get('/', authenticate, requireAdmin, asyncHandler(async (_req, res) => {
  * Create a new user (admin only)
  */
 router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { username, password, email, isAdmin } = req.body;
-
-  // Validation - email is now required for all users
-  if (!username || !password || !email) {
-    throw new InvalidInputError('Username, password, and email are required');
-  }
-
-  if (username.length < 3) {
-    throw new InvalidInputError('Username must be at least 3 characters');
-  }
-
-  // Validate email format
-  if (!isValidEmail(email)) {
-    throw new InvalidInputError('Invalid email address format');
-  }
-
-  // Validate password strength using the same rules as user registration
-  const passwordValidation = validatePasswordStrength(password);
-  if (!passwordValidation.valid) {
-    throw new InvalidInputError('Password does not meet security requirements');
-  }
+  const { username, password, email, isAdmin } = parseAdminRequestBody(
+    CreateUserSchema,
+    req.body,
+    formatCreateUserValidation
+  );
 
   // Check if username already exists
   const existingUser = await userRepository.findByUsername(username);
@@ -108,7 +124,6 @@ router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
  */
 router.put('/:userId', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  const { username, password, email, isAdmin } = req.body;
 
   // Check if user exists
   const existingUser = await userRepository.findById(userId);
@@ -116,6 +131,12 @@ router.put('/:userId', authenticate, requireAdmin, asyncHandler(async (req, res)
   if (!existingUser) {
     throw new NotFoundError('User not found');
   }
+
+  const { username, password, email, isAdmin } = parseAdminRequestBody(
+    UpdateUserSchema,
+    req.body,
+    formatUpdateUserValidation
+  );
 
   // Build update data
   const updateData: Record<string, unknown> = {};
@@ -132,10 +153,6 @@ router.put('/:userId', authenticate, requireAdmin, asyncHandler(async (req, res)
   if (email !== undefined) {
     const normalizedEmail = email ? email.toLowerCase() : null;
     if (normalizedEmail && normalizedEmail !== existingUser.email) {
-      if (!isValidEmail(normalizedEmail)) {
-        throw new InvalidInputError('Invalid email address format');
-      }
-
       // Check if new email is taken
       const emailTaken = await userRepository.findByEmail(normalizedEmail);
       if (emailTaken) {
@@ -154,11 +171,6 @@ router.put('/:userId', authenticate, requireAdmin, asyncHandler(async (req, res)
   }
 
   if (password) {
-    // Validate password strength using the same rules as user registration
-    const passwordValidation = validatePasswordStrength(password);
-    if (!passwordValidation.valid) {
-      throw new InvalidInputError('Password does not meet security requirements');
-    }
     updateData.password = await hashPassword(password);
   }
 

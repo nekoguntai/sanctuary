@@ -6,7 +6,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="$PROJECT_ROOT/docker-compose.test.yml"
 TEST_DB_CONTAINER="sanctuary-test-db"
-TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgresql://test:test@localhost:5433/sanctuary_test?schema=public}"
+TEST_POSTGRES_PORT="${TEST_POSTGRES_PORT:-5433}"
+TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgresql://test:test@localhost:${TEST_POSTGRES_PORT}/sanctuary_test?schema=public}"
+TEST_JWT_SECRET="${JWT_SECRET:-integration-test-jwt-secret-32-characters-minimum}"
+TEST_ENCRYPTION_KEY="${ENCRYPTION_KEY:-integration-test-encryption-key-32-chars}"
+TEST_ENCRYPTION_SALT="${ENCRYPTION_SALT:-integration-test-encryption-salt}"
+TEST_GATEWAY_SECRET="${GATEWAY_SECRET:-integration-test-gateway-secret-32-characters}"
 DB_HEALTH_TIMEOUT_SECONDS="${INTEGRATION_DB_TIMEOUT_SECONDS:-60}"
 KEEP_DB="${INTEGRATION_KEEP_DB:-false}"
 
@@ -69,11 +74,19 @@ echo "Running Prisma generate + migrate deploy..."
   cd "$PROJECT_ROOT/server"
   TEST_DATABASE_URL="$TEST_DATABASE_URL" \
   DATABASE_URL="$TEST_DATABASE_URL" \
+  JWT_SECRET="$TEST_JWT_SECRET" \
+  ENCRYPTION_KEY="$TEST_ENCRYPTION_KEY" \
+  ENCRYPTION_SALT="$TEST_ENCRYPTION_SALT" \
+  GATEWAY_SECRET="$TEST_GATEWAY_SECRET" \
   NODE_ENV=test \
   npx prisma generate >/dev/null
 
   TEST_DATABASE_URL="$TEST_DATABASE_URL" \
   DATABASE_URL="$TEST_DATABASE_URL" \
+  JWT_SECRET="$TEST_JWT_SECRET" \
+  ENCRYPTION_KEY="$TEST_ENCRYPTION_KEY" \
+  ENCRYPTION_SALT="$TEST_ENCRYPTION_SALT" \
+  GATEWAY_SECRET="$TEST_GATEWAY_SECRET" \
   NODE_ENV=test \
   npx prisma migrate deploy
 )
@@ -84,11 +97,19 @@ echo "Running server integration tests..."
   if [[ "$#" -gt 0 ]]; then
     TEST_DATABASE_URL="$TEST_DATABASE_URL" \
     DATABASE_URL="$TEST_DATABASE_URL" \
+    JWT_SECRET="$TEST_JWT_SECRET" \
+    ENCRYPTION_KEY="$TEST_ENCRYPTION_KEY" \
+    ENCRYPTION_SALT="$TEST_ENCRYPTION_SALT" \
+    GATEWAY_SECRET="$TEST_GATEWAY_SECRET" \
     NODE_ENV=test \
     npx vitest run --no-file-parallelism --maxWorkers 1 "$@"
   else
     TEST_DATABASE_URL="$TEST_DATABASE_URL" \
     DATABASE_URL="$TEST_DATABASE_URL" \
+    JWT_SECRET="$TEST_JWT_SECRET" \
+    ENCRYPTION_KEY="$TEST_ENCRYPTION_KEY" \
+    ENCRYPTION_SALT="$TEST_ENCRYPTION_SALT" \
+    GATEWAY_SECRET="$TEST_GATEWAY_SECRET" \
     NODE_ENV=test \
     npm run test:integration
   fi

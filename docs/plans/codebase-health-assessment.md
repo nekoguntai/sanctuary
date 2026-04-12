@@ -251,7 +251,7 @@ Phase 1 is closed for the current route surface. Continue route-surface sweeps a
 
 ## Phase 2 Progress Notes
 
-Status: **Runbook baseline complete; proof work pending**
+Status: **Partial proof complete; monitoring stack and alert receiver proof pending**
 
 Completed in the first Phase 2 slice:
 
@@ -259,12 +259,19 @@ Completed in the first Phase 2 slice:
 - Bound optional monitoring stack host ports to `127.0.0.1` by default via `MONITORING_BIND_ADDR`, with explicit documentation for intentional remote exposure.
 - Updated server push route tests so gateway-internal HMAC verification preserves `originalUrl` and signs the same full `/api/v1/push/...` paths the gateway uses, including gateway audit persistence.
 
+Completed in the 2026-04-12 Phase 2 proof slice:
+
+- Added `npm run test:ops:phase2`, backed by `server/tests/integration/ops/phase2OperationsProof.integration.test.ts`, to run a disposable PostgreSQL operations drill through the existing integration test database runner.
+- Made the integration-test Postgres host port configurable with `TEST_POSTGRES_PORT` after the local default `5433` port was already allocated during the drill.
+- Ran and recorded a non-production backup/restore drill against `sanctuary-test-db` on `localhost:55433`. The drill seeded user/group/wallet/wallet-user/audit rows, created and validated a backup, deleted the rows, restored through `backupService.restoreFromBackup(...)`, and verified the rows and relationship were restored.
+- Recorded gateway audit persistence proof using the real backend push router and the actual gateway `logSecurityEvent` helper with a shared `GATEWAY_SECRET`. The drill verified a signed `RATE_LIMIT_EXCEEDED` event persisted as a gateway audit row and an unsigned audit request returned `403` without persistence.
+- Added evidence in `docs/plans/phase2-operations-proof-2026-04-12T08-44-39-1000.md` and linked the repeatable proof command from `docs/OPERATIONS_RUNBOOKS.md` and `docs/RELEASE_GATES.md`.
+
 Remaining Phase 2 work:
 
-- Run and record a real backup/restore drill against a non-production database.
 - Exercise the monitoring stack locally and capture any environment-specific runbook adjustments.
 - Add durable alert receiver configuration once production notification channels are chosen.
-- Record gateway audit persistence evidence in an environment with backend and gateway using the production-style HMAC path.
+- Run a full multi-container backend/gateway audit exercise if the in-process HMAC proof is not considered sufficient for production-readiness signoff.
 
 ## Phase 3 Progress Notes
 
@@ -367,6 +374,7 @@ cd gateway && npm run build
 cd ai-proxy && npm run build
 cd server && npx vitest run tests/unit/middleware/gatewayAuth.test.ts tests/unit/middleware/bodyParsing.test.ts tests/unit/websocket/auth.test.ts tests/unit/middleware/validate.test.ts tests/unit/api/openapi.test.ts tests/unit/shared/gatewayAuth.test.ts
 cd gateway && npx vitest run tests/unit/middleware/mobilePermission.test.ts tests/unit/middleware/validateRequest.test.ts tests/unit/routes/proxy.test.ts tests/unit/middleware/requestLogger.test.ts tests/unit/utils/logger.test.ts
+TEST_POSTGRES_PORT=55433 npm run test:ops:phase2
 ```
 
 Fresh check outcomes:
@@ -375,6 +383,7 @@ Fresh check outcomes:
 All checks above passed.
 Server targeted tests: 6 files passed, 52 tests passed.
 Gateway targeted tests: 5 files passed, 178 tests passed in the initial refresh; the latest Phase 1 gateway route/request-validation/mobile-permission rerun passed 3 files, 158 tests after shared mobile-permission and draft schema expansion.
+Phase 2 ops proof passed on disposable PostgreSQL: 1 integration file / 3 tests, using `sanctuary-test-db` on `localhost:55433` after the default `5433` port was already allocated.
 The latest Phase 1 server OpenAPI/mobile-permission/types rerun passed 3 files, 72 tests after shared mobile-permission and draft schema expansion.
 The latest Phase 1 gateway request-validation/proxy rerun passed 2 files, 149 tests after transaction/PSBT/device schema expansion.
 The latest Phase 1 server OpenAPI/device rerun passed 2 files, 87 tests after transaction/PSBT/device schema expansion.
@@ -420,4 +429,4 @@ Not run in this refresh:
 - Dependency audits.
 - Phase 3 authenticated benchmark or scale-out smoke.
 - Monitoring stack exercise.
-- Non-production backup/restore drill.
+- Full multi-container backend/gateway audit exercise.

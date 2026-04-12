@@ -5,6 +5,12 @@ Status: Phase 2 operations baseline
 
 This document maps the existing monitoring stack and alert rules to concrete triage steps. It intentionally starts with the alerts and failure modes already present in the repo instead of inventing new operational processes.
 
+## Phase 2 Proof Records
+
+- 2026-04-12: `docs/plans/phase2-operations-proof-2026-04-12T08-44-39-1000.md` records a passing disposable PostgreSQL backup/restore drill and gateway audit persistence drill.
+- Run repeatable local proof with `npm run test:ops:phase2`.
+- If local port `5433` is already allocated, run with an alternate host port, for example `TEST_POSTGRES_PORT=55433 npm run test:ops:phase2`.
+
 ## Monitoring Exposure
 
 The optional monitoring stack in `docker-compose.monitoring.yml` binds host ports to `127.0.0.1` by default through `MONITORING_BIND_ADDR`.
@@ -210,6 +216,17 @@ Immediate triage:
 - Confirm frontend/Nginx/client body limits match the intended 200MB admin restore limit.
 - Confirm disk capacity before retrying restore.
 
+Verification:
+
+```bash
+npm run test:ops:phase2
+```
+
+Expected behavior:
+
+- The disposable PostgreSQL backup/restore drill creates, validates, deletes, restores, and rechecks representative rows.
+- The test database uses `docker-compose.test.yml`; set `TEST_POSTGRES_PORT` when the default local port is unavailable.
+
 Mitigation:
 
 - Do not retry a restore against production until the backup file validates.
@@ -238,6 +255,7 @@ Verification:
 ```bash
 cd server && npx vitest run tests/unit/api/push.test.ts tests/unit/middleware/gatewayAuth.test.ts
 cd gateway && npx vitest run tests/unit/middleware/requestLogger.test.ts
+npm run test:ops:phase2
 ```
 
 Expected behavior:
@@ -245,6 +263,7 @@ Expected behavior:
 - Gateway audit delivery is fire-and-forget and should not break client requests.
 - Backend `POST /api/v1/push/gateway-audit` must reject unsigned requests.
 - Signed gateway audit events must create `auditLogRepository` entries with `source: gateway`.
+- The Phase 2 ops proof sends an event through the actual gateway `logSecurityEvent` helper and verifies the persisted backend audit-log row in PostgreSQL.
 
 Mitigation:
 

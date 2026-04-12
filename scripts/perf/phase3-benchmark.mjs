@@ -2,6 +2,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { isIP } from 'node:net';
 import { basename, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
@@ -27,6 +28,7 @@ const backupFile = process.env.SANCTUARY_BACKUP_FILE || '';
 const allowRestore = process.env.SANCTUARY_ALLOW_RESTORE === 'true';
 const strictMode = process.env.SANCTUARY_BENCHMARK_STRICT === 'true';
 const provisionLocalFixture = process.env.SANCTUARY_BENCHMARK_PROVISION === 'true';
+const allowPrivateProvisionTarget = process.env.SANCTUARY_BENCHMARK_ALLOW_PRIVATE_PROVISION === 'true';
 const createBenchmarkBackup = process.env.SANCTUARY_BENCHMARK_CREATE_BACKUP === 'true';
 const benchmarkUsername = process.env.SANCTUARY_BENCHMARK_USERNAME || 'admin';
 const benchmarkPassword = process.env.SANCTUARY_BENCHMARK_PASSWORD || 'sanctuary';
@@ -48,6 +50,7 @@ const scenarios = [];
 const skipped = [];
 const fixture = {
   provisionRequested: provisionLocalFixture,
+  privateProvisionAllowed: allowPrivateProvisionTarget,
   tokenSource: token ? 'environment' : null,
   walletSource: walletId ? 'environment' : null,
   backupSource: backupFile ? 'file' : null,
@@ -662,6 +665,7 @@ function renderMarkdown(result) {
     '## Fixture',
     '',
     `Provision requested: ${result.environment.fixture.provisionRequested ? 'yes' : 'no'}`,
+    `Private target allowed: ${result.environment.fixture.privateProvisionAllowed ? 'yes' : 'no'}`,
     `Token source: ${result.environment.fixture.tokenSource || 'none'}`,
     `Wallet source: ${result.environment.fixture.walletSource || 'none'}`,
     `Backup source: ${result.environment.fixture.backupSource || 'none'}`
@@ -721,9 +725,17 @@ function shouldAllowInsecureTls(...urls) {
 }
 
 function assertLocalProvisionTarget() {
-  if (!isLocalUrl(apiBaseUrl)) {
-    throw new Error('SANCTUARY_BENCHMARK_PROVISION=true is only allowed for localhost, 127.0.0.1, or ::1 API targets');
+  if (isLocalUrl(apiBaseUrl)) {
+    return;
   }
+  if (allowPrivateProvisionTarget && isPrivateNetworkUrl(apiBaseUrl)) {
+    return;
+  }
+
+  const privateHint = isPrivateNetworkUrl(apiBaseUrl)
+    ? '; set SANCTUARY_BENCHMARK_ALLOW_PRIVATE_PROVISION=true only for private non-production targets'
+    : '';
+  throw new Error(`SANCTUARY_BENCHMARK_PROVISION=true is only allowed for localhost, 127.0.0.1, or ::1 API targets by default${privateHint}`);
 }
 
 function getDatasetLabel() {
@@ -751,6 +763,23 @@ function formatBodyForError(body) {
 function isLocalUrl(value) {
   const hostname = new URL(value).hostname;
   return ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(hostname);
+}
+
+function isPrivateNetworkUrl(value) {
+  const hostname = new URL(value).hostname.replace(/^\[|\]$/g, '');
+  const ipVersion = isIP(hostname);
+  if (ipVersion === 4) {
+    const [first, second] = hostname.split('.').map((part) => Number.parseInt(part, 10));
+    return first === 10
+      || (first === 172 && second >= 16 && second <= 31)
+      || (first === 192 && second === 168)
+      || (first === 169 && second === 254);
+  }
+  if (ipVersion === 6) {
+    const normalized = hostname.toLowerCase();
+    return normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:');
+  }
+  return false;
 }
 
 function trimTrailingSlash(value) {

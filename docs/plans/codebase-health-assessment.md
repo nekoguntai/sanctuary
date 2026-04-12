@@ -2,7 +2,7 @@
 
 Date: 2026-04-11 (Pacific/Honolulu)
 Owner: TBD
-Status: Phase 4 maintainability work in progress; Phase 3 benchmark action items are carried forward
+Status: Phase 4 baseline complete; Phase 3 benchmark action items are carried forward
 
 ## Scope
 
@@ -211,6 +211,7 @@ Completed so far:
 - Added `npm run perf:phase3`, a dependency-free benchmark harness that records Markdown and JSON run evidence under `docs/plans/`.
 - Recorded the first unauthenticated local smoke run in `docs/plans/phase3-benchmark-2026-04-12T04-00-40-678Z.md`. Frontend health, API health, gateway health, and WebSocket protocol readiness passed; authenticated wallet list, large wallet transaction history, wallet sync queueing, backup validation, and restore were skipped because no operator token, wallet ID, or backup file was provided.
 - Added opt-in local fixture provisioning for the Phase 3 harness with `SANCTUARY_BENCHMARK_PROVISION=true`: the harness can log into a local seeded instance, create or reuse a testnet benchmark wallet, and optionally generate an in-memory backup with `SANCTUARY_BENCHMARK_CREATE_BACKUP=true`.
+- Recorded a private local smoke run against `https://10.14.23.93:8443` in `docs/plans/phase3-benchmark-2026-04-12T05-12-14-935Z.md`. Frontend health, API health, gateway health, and WebSocket handshake passed; authenticated fixture provisioning was skipped because the default `admin` / `sanctuary` credentials returned `401 Invalid username or password`.
 - Explicitly kept production worker scale-out unsupported until a non-production worker scale-out smoke test proves recurring ownership, distributed locks, and Electrum subscriptions are safe.
 
 Remaining Phase 3 work:
@@ -220,9 +221,10 @@ Remaining Phase 3 work:
 - Calibrate the scripted benchmark harness with realistic dataset size, request counts, concurrency, and strict release thresholds after the first authenticated run.
 - Validate backend scale-out with at least two backend instances and Redis-backed WebSocket broadcast delivery.
 
-Phase 3 action items carried forward while Phase 4 begins:
+Phase 3 action items carried forward after Phase 4:
 
-- Use `SANCTUARY_BENCHMARK_PROVISION=true` against a local seeded instance to capture wallet list, transaction history, wallet sync queue, and optional backup validation smoke evidence without manually obtaining a token and wallet ID.
+- Use `SANCTUARY_BENCHMARK_PROVISION=true` against a local seeded instance to capture wallet list, transaction history, wallet sync queue, and optional backup validation smoke evidence without manually obtaining a token and wallet ID. For the private local target at `https://10.14.23.93:8443`, include `SANCTUARY_BENCHMARK_ALLOW_PRIVATE_PROVISION=true` and `SANCTUARY_INSECURE_TLS=true` when it uses the local development certificate.
+- Provide valid local benchmark credentials via `SANCTUARY_BENCHMARK_USERNAME` and `SANCTUARY_BENCHMARK_PASSWORD`, or provide `SANCTUARY_TOKEN` plus `SANCTUARY_WALLET_ID`, so the authenticated local fixture path can create/reuse the benchmark wallet.
 - Obtain a representative non-production `SANCTUARY_TOKEN` and `SANCTUARY_WALLET_ID` for large-wallet transaction history and wallet sync queue benchmarks.
 - Obtain a non-production `SANCTUARY_ADMIN_TOKEN` and representative `SANCTUARY_BACKUP_FILE` for backup validation, with `SANCTUARY_ALLOW_RESTORE=true` only in a restore-safe environment.
 - Stand up or identify two backend/WebSocket endpoints sharing Redis so the Redis-backed cross-instance WebSocket broadcast smoke test can be recorded.
@@ -230,7 +232,7 @@ Phase 3 action items carried forward while Phase 4 begins:
 
 ## Phase 4 Start Notes
 
-Status: **In progress as of 2026-04-12**
+Status: **Baseline complete as of 2026-04-12**
 
 Phase 4 is not dependent on completing the remaining Phase 3 benchmark runs. It should focus on maintainability guardrails that are objectively good regardless of benchmark timing: centralized validation for new and touched backend routes, gateway log redaction, release-gate documentation, and opportunistic cleanup only where files are already being changed.
 
@@ -258,7 +260,7 @@ Completed in the third Phase 4 slice:
 - Marked the Phase 3 performance and scale gate as pending operator evidence instead of treating skipped authenticated benchmarks as proof.
 - Documented that `npm run typecheck:tests` is advisory until its existing unused-symbol baseline is cleaned up.
 
-Remaining Phase 4 work:
+Ongoing post-Phase 4 hygiene:
 
 - Continue adopting centralized backend request validation as routes are touched.
 - Keep large-file cleanup opportunistic and tied to files already being changed.

@@ -1331,6 +1331,14 @@ describe('Transaction HTTP Routes', () => {
         amount: BigInt(42000),
       })
     );
+    expect(mockBroadcastAndSave).toHaveBeenCalledWith(
+      walletId,
+      'cHNi',
+      expect.objectContaining({
+        recipient: 'tb1qpsbt-recipient',
+        amount: 42000,
+      })
+    );
   });
 
   it('proceeds without policy eval when PSBT parsing fails and no recipient/amount supplied', async () => {

@@ -41,6 +41,10 @@ export const MOBILE_API_REQUEST_LIMITS = {
   minFeeRate: 0.1,
 } as const;
 
+const feeRateMinimumMessage = `feeRate must be at least ${MOBILE_API_REQUEST_LIMITS.minFeeRate} sat/vB`;
+const transactionEstimateRequiredMessage = 'recipient, amount, and feeRate are required';
+const psbtRecipientRequiredMessage = 'Each recipient must have address and amount';
+
 export const MobileLoginRequestSchema = z.object({
   username: z
     .string()
@@ -196,9 +200,12 @@ const MobileDecoyOutputsRequestSchema = z.object({
 });
 
 export const MobileTransactionCreateRequestSchema = MobileTransactionMetadataSchema.extend({
-  recipient: z.string().min(1, 'recipient is required'),
-  amount: z.number().min(1, 'amount is required'),
-  feeRate: z.number().min(MOBILE_API_REQUEST_LIMITS.minFeeRate),
+  recipient: z.string({ message: 'recipient is required' }).min(1, 'recipient is required'),
+  amount: z.number({ message: 'amount is required' }).min(1, 'amount is required'),
+  feeRate: z.number({ message: 'feeRate is required' }).min(
+    MOBILE_API_REQUEST_LIMITS.minFeeRate,
+    feeRateMinimumMessage
+  ),
   selectedUtxoIds: z.array(z.string()).optional(),
   enableRBF: z.boolean().optional(),
   sendMax: z.boolean().optional(),
@@ -207,9 +214,16 @@ export const MobileTransactionCreateRequestSchema = MobileTransactionMetadataSch
 });
 
 export const MobileTransactionEstimateRequestSchema = z.object({
-  recipient: z.string().min(1, 'recipient is required'),
-  amount: z.number().min(1, 'amount is required'),
-  feeRate: z.number().min(MOBILE_API_REQUEST_LIMITS.minFeeRate),
+  recipient: z
+    .string({ message: transactionEstimateRequiredMessage })
+    .min(1, transactionEstimateRequiredMessage),
+  amount: z
+    .number({ message: transactionEstimateRequiredMessage })
+    .min(1, transactionEstimateRequiredMessage),
+  feeRate: z.number({ message: transactionEstimateRequiredMessage }).min(
+    MOBILE_API_REQUEST_LIMITS.minFeeRate,
+    feeRateMinimumMessage
+  ),
   selectedUtxoIds: z.array(z.string()).optional(),
 });
 
@@ -226,18 +240,23 @@ export const MobileTransactionBroadcastRequestSchema = MobileTransactionMetadata
 );
 
 const MobilePsbtRecipientSchema = z.object({
-  address: z.string().min(1, 'address is required'),
-  amount: z.number().min(1, 'amount is required'),
+  address: z.string({ message: psbtRecipientRequiredMessage }).min(1, psbtRecipientRequiredMessage),
+  amount: z.number({ message: psbtRecipientRequiredMessage }).min(1, psbtRecipientRequiredMessage),
 });
 
 export const MobilePsbtCreateRequestSchema = z.object({
-  recipients: z.array(MobilePsbtRecipientSchema).min(1, 'recipients array is required'),
-  feeRate: z.number().min(MOBILE_API_REQUEST_LIMITS.minFeeRate),
+  recipients: z
+    .array(MobilePsbtRecipientSchema, { message: 'recipients array is required' })
+    .min(1, 'recipients array is required'),
+  feeRate: z.number({ message: 'feeRate is required' }).min(
+    MOBILE_API_REQUEST_LIMITS.minFeeRate,
+    feeRateMinimumMessage
+  ),
   utxoIds: z.array(z.string()).optional(),
 });
 
 export const MobilePsbtBroadcastRequestSchema = MobileTransactionMetadataSchema.extend({
-  signedPsbt: z.string().min(1, 'signedPsbt is required'),
+  signedPsbt: z.string({ message: 'signedPsbt is required' }).min(1, 'signedPsbt is required'),
 });
 
 export const MobileDeviceAccountRequestSchema = z.object({

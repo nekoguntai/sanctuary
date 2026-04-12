@@ -12,10 +12,15 @@ import { requireWalletAccess } from '../../middleware/walletAccess';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { asyncHandler } from '../../errors/errorHandler';
-import { ValidationError, ForbiddenError } from '../../errors/ApiError';
+import { ForbiddenError } from '../../errors/ApiError';
 import { auditService, AuditCategory, AuditAction } from '../../services/auditService';
 import { policyEvaluationEngine } from '../../services/vaultPolicy';
 import * as txService from '../../services/bitcoin/transactionService';
+import {
+  MobilePsbtBroadcastRequestSchema,
+  MobileTransactionBroadcastRequestSchema,
+} from '../../../../shared/schemas/mobileApiRequests';
+import { parseTransactionRequestBody } from './requestValidation';
 
 const router = Router();
 const log = createLogger('TX_BROADCAST:ROUTE');
@@ -38,12 +43,7 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
     label,
     memo,
     utxos,
-  } = req.body;
-
-  // Validation - require either signedPsbtBase64 or rawTxHex
-  if (!signedPsbtBase64 && !rawTxHex) {
-    throw new ValidationError('Either signedPsbtBase64 or rawTxHex is required');
-  }
+  } = parseTransactionRequestBody(MobileTransactionBroadcastRequestSchema, req.body);
 
   // Re-evaluate policies before broadcast (guard against drift).
   // Extract from PSBT when available; fall back to client-supplied fields.
@@ -82,14 +82,18 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
 
   // Broadcast transaction (wrap in try/catch for audit logging on failure)
   try {
+    const broadcastMetadata = {
+      recipient: evalRecipient ?? recipient ?? '',
+      amount: evalAmount ?? amount ?? 0,
+      fee: fee ?? 0,
+      ...(label !== undefined && { label }),
+      ...(memo !== undefined && { memo }),
+      utxos: utxos ?? [],
+      ...(rawTxHex !== undefined && { rawTxHex }),
+    };
+
     const result = await txService.broadcastAndSave(walletId, signedPsbtBase64, {
-      recipient,
-      amount,
-      fee,
-      label,
-      memo,
-      utxos,
-      rawTxHex, // Pass raw tx for Trezor
+      ...broadcastMetadata,
     });
 
     // Record policy usage after successful broadcast
@@ -135,12 +139,10 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
  */
 router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
-  const { signedPsbt, label, memo } = req.body;
-
-  // Validation
-  if (!signedPsbt) {
-    throw new ValidationError('signedPsbt is required');
-  }
+  const { signedPsbt, label, memo } = parseTransactionRequestBody(
+    MobilePsbtBroadcastRequestSchema,
+    req.body
+  );
 
   // Parse PSBT to get transaction details
   const psbtInfo = txService.getPSBTInfo(signedPsbt);

@@ -15,6 +15,12 @@ import { validateAddress } from '../../services/bitcoin/utils';
 import { policyEvaluationEngine } from '../../services/vaultPolicy';
 import { MIN_FEE_RATE } from '../../constants';
 import * as txService from '../../services/bitcoin/transactionService';
+import {
+  MobilePsbtCreateRequestSchema,
+  MobileTransactionCreateRequestSchema,
+  MobileTransactionEstimateRequestSchema,
+} from '../../../../shared/schemas/mobileApiRequests';
+import { parseTransactionRequestBody } from './requestValidation';
 
 const router = Router();
 const log = createLogger('TX_DRAFT:ROUTE');
@@ -36,7 +42,7 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
     sendMax = false,
     subtractFees = false,
     decoyOutputs,
-  } = req.body;
+  } = parseTransactionRequestBody(MobileTransactionCreateRequestSchema, req.body);
 
   log.debug('Create transaction request', {
     walletId,
@@ -48,15 +54,6 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
     decoyOutputs,
     hasSelectedUtxos: !!selectedUtxoIds?.length,
   });
-
-  // Basic validation
-  if (!recipient || !amount) {
-    throw new ValidationError('recipient and amount are required');
-  }
-
-  if (!feeRate || feeRate < MIN_FEE_RATE) {
-    throw new ValidationError(`feeRate must be at least ${MIN_FEE_RATE} sat/vB`);
-  }
 
   // Fetch wallet data
   const wallet = await walletRepository.findById(walletId);
@@ -232,12 +229,10 @@ router.post('/wallets/:walletId/transactions/batch', requireWalletAccess('edit')
  */
 router.post('/wallets/:walletId/transactions/estimate', requireWalletAccess('view'), asyncHandler(async (req, res) => {
   const walletId = req.walletId!;
-  const { recipient, amount, feeRate, selectedUtxoIds } = req.body;
-
-  // Validation
-  if (!recipient || !amount || !feeRate) {
-    throw new ValidationError('recipient, amount, and feeRate are required');
-  }
+  const { recipient, amount, feeRate, selectedUtxoIds } = parseTransactionRequestBody(
+    MobileTransactionEstimateRequestSchema,
+    req.body
+  );
 
   // Estimate transaction
   const estimate = await txService.estimateTransaction(
@@ -262,23 +257,7 @@ router.post('/wallets/:walletId/psbt/create', requireWalletAccess('edit'), async
     recipients, // Array of { address, amount }
     feeRate,
     utxoIds, // Optional: specific UTXOs to use
-  } = req.body;
-
-  // Validation
-  if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
-    throw new ValidationError('recipients array is required');
-  }
-
-  if (!feeRate || feeRate < MIN_FEE_RATE) {
-    throw new ValidationError(`feeRate must be at least ${MIN_FEE_RATE} sat/vB`);
-  }
-
-  // Validate recipients
-  for (const recipient of recipients) {
-    if (!recipient.address || !recipient.amount) {
-      throw new ValidationError('Each recipient must have address and amount');
-    }
-  }
+  } = parseTransactionRequestBody(MobilePsbtCreateRequestSchema, req.body);
 
   // For now, only support single recipient (can be extended later)
   const { address, amount } = recipients[0];

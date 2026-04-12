@@ -2,7 +2,7 @@
 
 Date: 2026-04-11 (Pacific/Honolulu)
 Owner: TBD
-Status: Phase 0 complete; later phases draft
+Status: Phase 1 contract checkpoint complete; Phase 2 operations work is next
 
 ## Scope
 
@@ -167,19 +167,30 @@ Implemented fix:
 
 ## Phase 1 Progress Notes
 
-Status: **Started as of 2026-04-11**
+Status: **Contract checkpoint complete as of 2026-04-11**
 
 Completed in the first Phase 1 slice:
 
 - Aligned gateway push registration validation with the backend request body by validating `token` instead of the gateway-only `deviceToken` field.
 - Replaced the gateway whitelist's non-existent wallet-scoped transaction-detail path with the backend's canonical `GET /api/v1/transactions/:txid` path; server-side `findByTxidWithAccess` remains the wallet-access boundary for transaction detail.
 - Added gateway tests that reject the old push registration body field, allow the backend transaction-detail route, and keep raw transaction detail blocked unless deliberately exposed.
+- Fixed gateway validation path reconstruction so schema validation uses the same `baseUrl + path` model as whitelist checks for routes mounted through the general `/api/v1` proxy.
 
 Remaining Phase 1 work:
 
 - Complete OpenAPI coverage for implemented public and gateway-relevant domains.
 - Add broader gateway whitelist contract checks against backend route definitions or generated OpenAPI.
 - Share or generate schemas for more drift-prone gateway/backend request bodies.
+
+## Phase 2 Start Notes
+
+Status: **Next phase queued as of 2026-04-11**
+
+Start with the smallest operations slice:
+
+- Add runbooks for the highest-signal existing alerts: queue stalls, Electrum degradation, sync failures, backup/restore failures, DB saturation, and gateway audit failures.
+- Verify gateway audit persistence through the HMAC path in a focused test or local drill.
+- Document monitoring exposure assumptions so `/metrics`, Grafana, Loki, Jaeger, and Prometheus are clearly private/local or explicitly protected before production use.
 
 ## Strengths To Preserve
 

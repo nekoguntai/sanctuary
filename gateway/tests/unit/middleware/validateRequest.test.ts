@@ -310,6 +310,28 @@ describe('Request Validation Middleware', () => {
 
         expect(statusMock).toHaveBeenCalledWith(400);
       });
+
+      it('should validate schema routes mounted through /api/v1', () => {
+        mockReq.method = 'PATCH';
+        mockReq.baseUrl = '/api/v1';
+        mockReq.path = '/labels/a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+        mockReq.body = {};
+
+        validateRequest(mockReq as Request, mockRes as Response, mockNext);
+
+        expect(statusMock).toHaveBeenCalledWith(400);
+        expect(jsonMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            details: expect.arrayContaining([
+              expect.objectContaining({
+                field: 'label',
+                message: 'Invalid input: expected string, received undefined',
+              }),
+            ]),
+          })
+        );
+        expect(mockNext).not.toHaveBeenCalled();
+      });
     });
 
     describe('routes without schemas', () => {

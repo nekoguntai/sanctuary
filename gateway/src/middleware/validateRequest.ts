@@ -123,6 +123,10 @@ function findSchemaForRoute(method: string, path: string): z.ZodSchema | null {
   return match?.schema || null;
 }
 
+function getRequestPath(req: Request): string {
+  return `${req.baseUrl || ''}${req.path}`;
+}
+
 /**
  * Middleware to validate request body against Zod schema
  *
@@ -130,7 +134,8 @@ function findSchemaForRoute(method: string, path: string): z.ZodSchema | null {
  * Passes through requests without schemas unchanged.
  */
 export function validateRequest(req: Request, res: Response, next: NextFunction): void {
-  const schema = findSchemaForRoute(req.method, req.path);
+  const path = getRequestPath(req);
+  const schema = findSchemaForRoute(req.method, path);
 
   // No schema for this route - pass through
   if (!schema) {
@@ -145,7 +150,7 @@ export function validateRequest(req: Request, res: Response, next: NextFunction)
   } catch (error) {
     if (error instanceof z.ZodError) {
       log.debug('Validation failed', {
-        path: req.path,
+        path,
         errors: error.issues,
       });
 

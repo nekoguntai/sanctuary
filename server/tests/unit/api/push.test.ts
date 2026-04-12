@@ -160,6 +160,7 @@ describe('Push API Routes', () => {
         const req: any = {
           method: this.method,
           url: normalizedUrl,
+          originalUrl: this.url,
           path: pathOnly,
           headers,
           body: this.body ?? {},
@@ -692,7 +693,7 @@ describe('Push API Routes', () => {
         },
       ]);
 
-      const path = '/by-user/user-456';
+      const path = '/api/v1/push/by-user/user-456';
       const { signature, timestamp } = generateGatewaySignature('GET', path, null, 'test-gateway-secret');
 
       const res = await request(app)
@@ -720,7 +721,7 @@ describe('Push API Routes', () => {
 
     it('should return 403 with expired timestamp', async () => {
       const expiredTimestamp = (Date.now() - 10 * 60 * 1000).toString(); // 10 minutes ago
-      const path = '/by-user/user-456';
+      const path = '/api/v1/push/by-user/user-456';
       const message = `GET${path}${expiredTimestamp}`;
       const signature = createHmac('sha256', 'test-gateway-secret').update(message).digest('hex');
 
@@ -749,7 +750,7 @@ describe('Push API Routes', () => {
     it('should return 500 on service error', async () => {
       mockFindByUserId.mockRejectedValue(new Error('Database error'));
 
-      const path = '/by-user/user-456';
+      const path = '/api/v1/push/by-user/user-456';
       const { signature, timestamp } = generateGatewaySignature('GET', path, null, 'test-gateway-secret');
 
       const res = await request(app)
@@ -771,7 +772,7 @@ describe('Push API Routes', () => {
       });
       mockDeleteById.mockResolvedValue(undefined);
 
-      const path = '/device/device-1';
+      const path = '/api/v1/push/device/device-1';
       const { signature, timestamp } = generateGatewaySignature('DELETE', path, null, 'test-gateway-secret');
 
       const res = await request(app)
@@ -787,7 +788,7 @@ describe('Push API Routes', () => {
     it('should return success when device not found (idempotent)', async () => {
       mockFindById.mockResolvedValue(null);
 
-      const path = '/device/non-existent';
+      const path = '/api/v1/push/device/non-existent';
       const { signature, timestamp } = generateGatewaySignature('DELETE', path, null, 'test-gateway-secret');
 
       const res = await request(app)
@@ -809,7 +810,7 @@ describe('Push API Routes', () => {
     it('should return 500 on service error', async () => {
       mockFindById.mockRejectedValue(new Error('Database error'));
 
-      const path = '/device/device-1';
+      const path = '/api/v1/push/device/device-1';
       const { signature, timestamp } = generateGatewaySignature('DELETE', path, null, 'test-gateway-secret');
 
       const res = await request(app)
@@ -835,7 +836,7 @@ describe('Push API Routes', () => {
         username: 'testuser',
       };
 
-      const path = '/gateway-audit';
+      const path = '/api/v1/push/gateway-audit';
       const { signature, timestamp } = generateGatewaySignature('POST', path, body, 'test-gateway-secret');
 
       const res = await request(app)
@@ -870,7 +871,7 @@ describe('Push API Routes', () => {
         severity: 'high',
       };
 
-      const path = '/gateway-audit';
+      const path = '/api/v1/push/gateway-audit';
       const { signature, timestamp } = generateGatewaySignature('POST', path, body, 'test-gateway-secret');
 
       const res = await request(app)
@@ -896,7 +897,7 @@ describe('Push API Routes', () => {
         ip: '10.0.0.1',
       };
 
-      const path = '/gateway-audit';
+      const path = '/api/v1/push/gateway-audit';
       const { signature, timestamp } = generateGatewaySignature('POST', path, body, 'test-gateway-secret');
 
       const res = await request(app)
@@ -920,7 +921,7 @@ describe('Push API Routes', () => {
         category: 'security',
       };
 
-      const path = '/gateway-audit';
+      const path = '/api/v1/push/gateway-audit';
       const { signature, timestamp } = generateGatewaySignature('POST', path, body, 'test-gateway-secret');
 
       const res = await request(app)
@@ -943,7 +944,7 @@ describe('Push API Routes', () => {
         event: 'CONNECTION_OPENED',
       };
 
-      const path = '/gateway-audit';
+      const path = '/api/v1/push/gateway-audit';
       const { signature, timestamp } = generateGatewaySignature('POST', path, body, 'test-gateway-secret');
 
       const res = await request(app)
@@ -974,7 +975,7 @@ describe('Push API Routes', () => {
         category: 'auth',
       };
 
-      const path = '/gateway-audit';
+      const path = '/api/v1/push/gateway-audit';
       const { signature, timestamp } = generateGatewaySignature('POST', path, body, 'test-gateway-secret');
 
       const res = await request(app)
@@ -1002,7 +1003,7 @@ describe('Push API Routes', () => {
         event: 'AUTH_SUCCESS',
       };
 
-      const path = '/gateway-audit';
+      const path = '/api/v1/push/gateway-audit';
       const { signature, timestamp } = generateGatewaySignature('POST', path, body, 'test-gateway-secret');
 
       const res = await request(app)

@@ -9,13 +9,16 @@
 #   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 #
 # Access:
-#   - Grafana: http://localhost:3000 (admin / ENCRYPTION_KEY)
-#   - Prometheus: http://localhost:9090 (no auth)
-#   - Jaeger UI: http://localhost:16686 (no auth)
-#   - Loki: http://localhost:3100 (internal)
+#   - Monitoring ports bind to 127.0.0.1 by default. Set
+#     MONITORING_BIND_ADDR=0.0.0.0 only behind a firewall or authenticated proxy.
+#   - Grafana: http://127.0.0.1:3000 (admin / ENCRYPTION_KEY)
+#   - Prometheus: http://127.0.0.1:9090 (no auth)
+#   - Jaeger UI: http://127.0.0.1:16686 (no auth)
+#   - Loki: http://127.0.0.1:3100 (internal, no auth)
 #   - Promtail: Collects logs automatically
 #
 # Environment Variables:
+#   - MONITORING_BIND_ADDR: Host interface for monitoring ports (default: 127.0.0.1)
 #   - GRAFANA_PASSWORD: Override Grafana admin password (defaults to ENCRYPTION_KEY)
 #   - GRAFANA_ANONYMOUS_ENABLED: Set to "true" to allow viewing dashboards without login
 #
@@ -35,9 +38,9 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     ports:
-      - "${JAEGER_UI_PORT:-16686}:16686"    # Jaeger UI
-      - "4317:4317"                          # OTLP gRPC
-      - "4318:4318"                          # OTLP HTTP
+      - "${MONITORING_BIND_ADDR:-127.0.0.1}:${JAEGER_UI_PORT:-16686}:16686"    # Jaeger UI
+      - "${MONITORING_BIND_ADDR:-127.0.0.1}:4317:4317"                         # OTLP gRPC
+      - "${MONITORING_BIND_ADDR:-127.0.0.1}:4318:4318"                         # OTLP HTTP
     networks:
       - sanctuary-network
     logging:
@@ -70,7 +73,7 @@ services:
     container_name: sanctuary-loki
     restart: unless-stopped
     ports:
-      - "3100:3100"
+      - "${MONITORING_BIND_ADDR:-127.0.0.1}:3100:3100"
     volumes:
       - loki_data:/loki
       - ./docker/monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
@@ -148,7 +151,7 @@ services:
     container_name: sanctuary-prometheus
     restart: unless-stopped
     ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "${MONITORING_BIND_ADDR:-127.0.0.1}:${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./docker/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
@@ -200,7 +203,7 @@ services:
     container_name: sanctuary-alertmanager
     restart: unless-stopped
     ports:
-      - "${ALERTMANAGER_PORT:-9093}:9093"
+      - "${MONITORING_BIND_ADDR:-127.0.0.1}:${ALERTMANAGER_PORT:-9093}:9093"
     volumes:
       - ./docker/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     command:
@@ -265,7 +268,7 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: ${GRAFANA_ANONYMOUS_ENABLED:-false}
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
     ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+      - "${MONITORING_BIND_ADDR:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./docker/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro

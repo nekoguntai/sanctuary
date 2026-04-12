@@ -184,13 +184,19 @@ Remaining Phase 1 work:
 
 ## Phase 2 Start Notes
 
-Status: **Next phase queued as of 2026-04-11**
+Status: **Started as of 2026-04-11**
 
-Start with the smallest operations slice:
+Completed in the first Phase 2 slice:
 
-- Add runbooks for the highest-signal existing alerts: queue stalls, Electrum degradation, sync failures, backup/restore failures, DB saturation, and gateway audit failures.
-- Verify gateway audit persistence through the HMAC path in a focused test or local drill.
-- Document monitoring exposure assumptions so `/metrics`, Grafana, Loki, Jaeger, and Prometheus are clearly private/local or explicitly protected before production use.
+- Added `docs/OPERATIONS_RUNBOOKS.md` with triage and mitigation steps for HTTP errors, wallet sync failures, transaction broadcast failures, worker/queue stalls, Electrum degradation, DB saturation, cache hit-rate drops, WebSocket alerts, backup/restore failures, and gateway audit failures.
+- Bound optional monitoring stack host ports to `127.0.0.1` by default via `MONITORING_BIND_ADDR`, with explicit documentation for intentional remote exposure.
+- Updated server push route tests so gateway-internal HMAC verification preserves `originalUrl` and signs the same full `/api/v1/push/...` paths the gateway uses, including gateway audit persistence.
+
+Remaining Phase 2 work:
+
+- Run and record a real backup/restore drill against a non-production database.
+- Exercise the monitoring stack locally and capture any environment-specific runbook adjustments.
+- Add durable alert receiver configuration once production notification channels are chosen.
 
 ## Strengths To Preserve
 

@@ -61,7 +61,7 @@ Suggested sequencing:
 1. Phase 0 first. It fixes known defects and restores baseline signal.
 2. Phase 1 second. It prevents the same gateway/API drift from returning.
 3. Phase 2 and Phase 3 can run partly in parallel after Phase 0 if ownership is split.
-4. Phase 4 should start after Phase 1 guardrails exist and then continue as normal engineering hygiene.
+4. Phase 4 can start after the Phase 1 guardrails exist and then continue as normal engineering hygiene. It is not blocked by the remaining Phase 3 benchmark evidence, but the scalability/performance grade cannot move to A until the Phase 3 action items are completed.
 
 Domain-specific A-grade criteria:
 
@@ -217,6 +217,25 @@ Remaining Phase 3 work:
 - Run and record authenticated benchmark results for wallet sync, large wallet transaction history, WebSocket fanout with subscriptions/events, backup validation, backup restore in non-production, and worker queue processing.
 - Calibrate the scripted benchmark harness with realistic dataset size, request counts, concurrency, and strict release thresholds after the first authenticated run.
 - Validate backend scale-out with at least two backend instances and Redis-backed WebSocket broadcast delivery.
+
+Phase 3 action items carried forward while Phase 4 begins:
+
+- Obtain a non-production `SANCTUARY_TOKEN` and `SANCTUARY_WALLET_ID` for wallet list, transaction history, and wallet sync queue benchmarks.
+- Obtain a non-production `SANCTUARY_ADMIN_TOKEN` and representative `SANCTUARY_BACKUP_FILE` for backup validation, with `SANCTUARY_ALLOW_RESTORE=true` only in a restore-safe environment.
+- Stand up or identify two backend/WebSocket endpoints sharing Redis so the Redis-backed cross-instance WebSocket broadcast smoke test can be recorded.
+- Record the next benchmark output under `docs/plans/` and update this plan with the resulting p95/p99, failure rate, and go/no-go decision.
+
+## Phase 4 Start Notes
+
+Status: **Ready to start as of 2026-04-12**
+
+Phase 4 is not dependent on completing the remaining Phase 3 benchmark runs. It should focus on maintainability guardrails that are objectively good regardless of benchmark timing: centralized validation for new and touched backend routes, gateway log redaction, release-gate documentation, and opportunistic cleanup only where files are already being changed.
+
+Dependency note:
+
+- Phase 4 can add the release-gate structure now.
+- Phase 4 should reference Phase 3 benchmark artifacts as optional or pending until the authenticated and scale-out runs are recorded.
+- The final A-grade scalability/performance claim remains blocked by the Phase 3 action items above.
 
 ## Strengths To Preserve
 

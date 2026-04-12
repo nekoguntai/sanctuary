@@ -656,6 +656,72 @@ describe('OpenAPI Docs', () => {
       });
   });
 
+  it('documents admin system policy routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/admin/policies', 'get'],
+      ['/admin/policies', 'post'],
+      ['/admin/policies/{policyId}', 'patch'],
+      ['/admin/policies/{policyId}', 'delete'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.paths).not.toHaveProperty('/admin/groups/{groupId}/policies');
+    expect(openApiSpec.paths['/admin/policies'].get.responses[200].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/VaultPolicyListResponse',
+    });
+    expect(openApiSpec.paths['/admin/policies'].post.requestBody.content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/CreateVaultPolicyRequest',
+    });
+    expect(openApiSpec.paths['/admin/policies'].post.responses[201].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/VaultPolicyResponse',
+    });
+    expect(openApiSpec.components.schemas.CreateVaultPolicyRequest.required).toEqual([
+      'name',
+      'type',
+      'config',
+    ]);
+    expect(openApiSpec.components.schemas.CreateVaultPolicyRequest.properties.type.enum).toEqual([
+      ...VALID_POLICY_TYPES,
+    ]);
+    expect(openApiSpec.components.schemas.CreateVaultPolicyRequest.properties.enforcement.enum).toEqual([
+      ...VALID_ENFORCEMENT_MODES,
+    ]);
+    expect(openApiSpec.paths['/admin/policies/{policyId}'].patch.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'policyId',
+        in: 'path',
+        required: true,
+      }),
+    );
+    expect(openApiSpec.paths['/admin/policies/{policyId}'].patch.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/UpdateVaultPolicyRequest',
+      });
+    expect(openApiSpec.paths['/admin/policies/{policyId}'].patch.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/VaultPolicyResponse',
+      });
+    expect(openApiSpec.paths['/admin/policies/{policyId}'].patch.responses).toHaveProperty('403');
+    expect(openApiSpec.paths['/admin/policies/{policyId}'].patch.responses).toHaveProperty('404');
+    expect(openApiSpec.paths['/admin/policies/{policyId}'].delete.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'policyId',
+        in: 'path',
+        required: true,
+      }),
+    );
+    expect(openApiSpec.paths['/admin/policies/{policyId}'].delete.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminPolicyDeleteResponse',
+      });
+    expect(openApiSpec.paths['/admin/policies/{policyId}'].delete.responses).toHaveProperty('403');
+    expect(openApiSpec.paths['/admin/policies/{policyId}'].delete.responses).toHaveProperty('404');
+    expect(openApiSpec.components.schemas.AdminPolicyDeleteResponse.required).toEqual(['success']);
+  });
+
   it('documents admin audit log routes', () => {
     const routes: Array<[OpenApiPathKey, string]> = [
       ['/admin/audit-logs', 'get'],

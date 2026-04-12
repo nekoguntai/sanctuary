@@ -210,6 +210,13 @@ export const adminSchemas = {
     },
     required: ['message'],
   },
+  AdminPolicyDeleteResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean' },
+    },
+    required: ['success'],
+  },
   AdminFeatureFlagKey: {
     type: 'string',
     enum: [...FEATURE_FLAG_KEYS],

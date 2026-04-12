@@ -48,6 +48,13 @@ const adminGroupMemberUserIdParameter = {
   schema: { type: 'string' },
 } as const;
 
+const adminPolicyIdParameter = {
+  name: 'policyId',
+  in: 'path',
+  required: true,
+  schema: { type: 'string' },
+} as const;
+
 const jsonRequestBody = (schemaRef: string) => ({
   required: true,
   content: {
@@ -279,6 +286,66 @@ export const adminPaths = {
       parameters: [adminGroupIdParameter, adminGroupMemberUserIdParameter],
       responses: {
         200: jsonResponse('Group member removed', '#/components/schemas/AdminRemoveGroupMemberResponse'),
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        404: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+  },
+  '/admin/policies': {
+    get: {
+      tags: ['Admin'],
+      summary: 'List system policies',
+      description: 'List system-wide vault policies for administrative management.',
+      security: bearerAuth,
+      responses: {
+        200: jsonResponse('System policies', '#/components/schemas/VaultPolicyListResponse'),
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+    post: {
+      tags: ['Admin'],
+      summary: 'Create system policy',
+      description: 'Create a system-wide vault policy.',
+      security: bearerAuth,
+      requestBody: jsonRequestBody('#/components/schemas/CreateVaultPolicyRequest'),
+      responses: {
+        201: jsonResponse('Created system policy', '#/components/schemas/VaultPolicyResponse'),
+        400: apiErrorResponse,
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+  },
+  '/admin/policies/{policyId}': {
+    patch: {
+      tags: ['Admin'],
+      summary: 'Update system policy',
+      description: 'Update a system-wide vault policy. Non-system policies are rejected.',
+      security: bearerAuth,
+      parameters: [adminPolicyIdParameter],
+      requestBody: jsonRequestBody('#/components/schemas/UpdateVaultPolicyRequest'),
+      responses: {
+        200: jsonResponse('Updated system policy', '#/components/schemas/VaultPolicyResponse'),
+        400: apiErrorResponse,
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        404: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+    delete: {
+      tags: ['Admin'],
+      summary: 'Delete system policy',
+      description: 'Delete a system-wide vault policy. Non-system policies are rejected.',
+      security: bearerAuth,
+      parameters: [adminPolicyIdParameter],
+      responses: {
+        200: jsonResponse('System policy deleted', '#/components/schemas/AdminPolicyDeleteResponse'),
         401: apiErrorResponse,
         403: apiErrorResponse,
         404: apiErrorResponse,

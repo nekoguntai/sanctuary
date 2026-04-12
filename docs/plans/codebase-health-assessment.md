@@ -2,7 +2,7 @@
 
 Date: 2026-04-11 (Pacific/Honolulu)
 Owner: TBD
-Status: Phase 3 scalability/performance work in progress; Phase 4 is not started
+Status: Phase 4 maintainability work in progress; Phase 3 benchmark action items are carried forward
 
 ## Scope
 
@@ -119,7 +119,7 @@ Priority meanings:
 | P1 | Add gateway whitelist contract tests against real backend route definitions or OpenAPI. | First Phase 1 slice completed for transaction detail route alignment; broader generated/OpenAPI-backed contract tests still remain. | Gateway whitelist now exposes backend `GET /api/v1/transactions/:txid` and blocks the old non-existent wallet-scoped detail route. |
 | P1 | Start using centralized request validation for backend APIs in new and touched routes. | `req.body`, `req.params`, and `req.query` are read directly in many routes. Schema-first validation improves security, error consistency, and generated contract quality. | `server/src/middleware/validate.ts` exists, but no `validate(...)` use was found in `server/src/api`. |
 | P1 | Harden browser token handling and CSP. | Access tokens in localStorage make XSS higher impact, and the backend CSP has broad inline/CDN exceptions. Moving docs UI exceptions to a narrower route or self-hosting assets reduces exposure. | `src/api/client.ts` stores `sanctuary_token` in `localStorage`. `server/src/index.ts` allows `'unsafe-inline'` and `https://unpkg.com` for scripts/styles. |
-| P1 | Add gateway log redaction before metadata volume grows. | Server logging has structured redaction, but gateway logging stringifies metadata directly. Shared redaction reduces the chance of leaking tokens, device IDs, or other sensitive fields as gateway features expand. | `server/src/utils/logger.ts` uses `redactObject`; `gateway/src/utils/logger.ts` logs `JSON.stringify(meta)`. |
+| P1 | Add gateway log redaction before metadata volume grows. | Completed in Phase 4. Gateway logs now serialize metadata through shared redaction and safe serialization, reducing the chance of leaking tokens, secrets, or credentials as gateway features expand. | `shared/utils/redact.ts`, `gateway/src/utils/logger.ts`, `gateway/tests/unit/utils/logger.test.ts`. |
 | P1 | Add runbooks for alerts and routine operations. | The monitoring stack is present, but operators need triage steps for wallet sync failures, Electrum degradation, queue stalls, restore failures, DB saturation, and gateway audit failures. | `docker-compose.monitoring.yml`, `docker/monitoring/alert_rules.yml`, health checks, and support-package collectors exist; no obvious runbook ties alerts to actions. |
 | P2 | Add a small load/performance gate for high-risk workflows. | The architecture is performance-aware, but load tests would catch regressions in wallet sync, large wallet list views, WebSocket fanout, backup/restore, and transaction-history aggregation. | Existing code has caching, indexes, and queues, but this assessment did not find a repeatable perf budget or load-test gate. |
 | P2 | Document the supported scale-out topology. | Redis bridge, distributed locks, worker queues, and health checks suggest scale-out intent, but the default Compose topology is single backend and single worker. Operators need clear guidance on what can be replicated and what must stay singleton. | `docker-compose.yml` runs one backend service and one worker service by default; worker comments describe single ownership of background processing. |
@@ -227,7 +227,7 @@ Phase 3 action items carried forward while Phase 4 begins:
 
 ## Phase 4 Start Notes
 
-Status: **Ready to start as of 2026-04-12**
+Status: **In progress as of 2026-04-12**
 
 Phase 4 is not dependent on completing the remaining Phase 3 benchmark runs. It should focus on maintainability guardrails that are objectively good regardless of benchmark timing: centralized validation for new and touched backend routes, gateway log redaction, release-gate documentation, and opportunistic cleanup only where files are already being changed.
 
@@ -236,6 +236,18 @@ Dependency note:
 - Phase 4 can add the release-gate structure now.
 - Phase 4 should reference Phase 3 benchmark artifacts as optional or pending until the authenticated and scale-out runs are recorded.
 - The final A-grade scalability/performance claim remains blocked by the Phase 3 action items above.
+
+Completed in the first Phase 4 slice:
+
+- Added shared dependency-free metadata redaction in `shared/utils/redact.ts`.
+- Updated the gateway logger to serialize metadata through shared redaction instead of raw `JSON.stringify(meta)`.
+- Added gateway logger tests for sensitive field redaction, circular metadata, and bigint-safe serialization.
+
+Remaining Phase 4 work:
+
+- Start using centralized backend request validation for new and touched routes.
+- Add release-gate documentation for the A-grade checks, with Phase 3 benchmark gates marked pending where they still need operator data.
+- Keep large-file cleanup opportunistic and tied to files already being changed.
 
 ## Strengths To Preserve
 

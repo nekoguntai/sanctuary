@@ -225,6 +225,52 @@ describe('Logger', () => {
       expect(metaArg).toContain('"count":42');
     });
 
+    it('should redact sensitive metadata before serializing', async () => {
+      vi.doMock('../../../src/config', () => ({
+        config: { logLevel: 'debug' },
+      }));
+
+      const { createLogger } = await import('../../../src/utils/logger');
+      const logger = createLogger('TEST');
+
+      logger.info('test message', {
+        token: 'access-token-value',
+        authorization: 'Bearer secret-token',
+        nested: {
+          password: 'plain-password',
+          keep: 'visible',
+        },
+      });
+
+      const metaArg = consoleLogSpy.mock.calls[0][1];
+      expect(metaArg).toContain('"token":"[REDACTED]"');
+      expect(metaArg).toContain('"authorization":"[REDACTED]"');
+      expect(metaArg).toContain('"password":"[REDACTED]"');
+      expect(metaArg).toContain('"keep":"visible"');
+      expect(metaArg).not.toContain('access-token-value');
+      expect(metaArg).not.toContain('secret-token');
+      expect(metaArg).not.toContain('plain-password');
+    });
+
+    it('should serialize circular and bigint metadata safely', async () => {
+      vi.doMock('../../../src/config', () => ({
+        config: { logLevel: 'debug' },
+      }));
+
+      const { createLogger } = await import('../../../src/utils/logger');
+      const logger = createLogger('TEST');
+      const meta: Record<string, unknown> = {
+        amount: BigInt(42),
+      };
+      meta.self = meta;
+
+      expect(() => logger.info('test message', meta)).not.toThrow();
+
+      const metaArg = consoleLogSpy.mock.calls[0][1];
+      expect(metaArg).toContain('"amount":"42"');
+      expect(metaArg).toContain('"self":"[CIRCULAR]"');
+    });
+
     it('should handle missing metadata gracefully', async () => {
       vi.doMock('../../../src/config', () => ({
         config: { logLevel: 'debug' },

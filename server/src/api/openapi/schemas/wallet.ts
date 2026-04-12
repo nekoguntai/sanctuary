@@ -15,6 +15,7 @@ import {
   WALLET_IMPORT_WALLET_TYPE_VALUES,
 } from '../../../services/walletImport/types';
 import { WALLET_EXPORT_FORMAT_VALUES } from '../../../services/export/types';
+import { DEFAULT_AUTOPILOT_SETTINGS } from '../../../services/autopilot/types';
 
 export const walletSchemas = {
   Wallet: {
@@ -388,5 +389,133 @@ export const walletSchemas = {
       },
     },
     required: ['formats'],
+  },
+  WalletTelegramSettings: {
+    type: 'object',
+    properties: {
+      enabled: { type: 'boolean', default: false },
+      notifyReceived: { type: 'boolean', default: true },
+      notifySent: { type: 'boolean', default: true },
+      notifyConsolidation: { type: 'boolean', default: true },
+      notifyDraft: { type: 'boolean', default: true },
+    },
+    required: ['enabled', 'notifyReceived', 'notifySent', 'notifyConsolidation', 'notifyDraft'],
+  },
+  WalletTelegramSettingsResponse: {
+    type: 'object',
+    properties: {
+      settings: { $ref: '#/components/schemas/WalletTelegramSettings' },
+    },
+    required: ['settings'],
+  },
+  UpdateWalletTelegramSettingsRequest: {
+    type: 'object',
+    properties: {
+      enabled: { type: 'boolean' },
+      notifyReceived: { type: 'boolean' },
+      notifySent: { type: 'boolean' },
+      notifyConsolidation: { type: 'boolean' },
+      notifyDraft: { type: 'boolean' },
+    },
+    additionalProperties: false,
+  },
+  WalletSettingsUpdateResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean' },
+      message: { type: 'string' },
+    },
+    required: ['success', 'message'],
+  },
+  WalletAutopilotSettings: {
+    type: 'object',
+    properties: {
+      enabled: { type: 'boolean', default: DEFAULT_AUTOPILOT_SETTINGS.enabled },
+      maxFeeRate: { type: 'number', minimum: 0, default: DEFAULT_AUTOPILOT_SETTINGS.maxFeeRate },
+      minUtxoCount: { type: 'integer', minimum: 0, default: DEFAULT_AUTOPILOT_SETTINGS.minUtxoCount },
+      dustThreshold: { type: 'integer', minimum: 0, default: DEFAULT_AUTOPILOT_SETTINGS.dustThreshold },
+      cooldownHours: { type: 'integer', minimum: 0, default: DEFAULT_AUTOPILOT_SETTINGS.cooldownHours },
+      notifyTelegram: { type: 'boolean', default: DEFAULT_AUTOPILOT_SETTINGS.notifyTelegram },
+      notifyPush: { type: 'boolean', default: DEFAULT_AUTOPILOT_SETTINGS.notifyPush },
+      minDustCount: { type: 'integer', minimum: 0, default: DEFAULT_AUTOPILOT_SETTINGS.minDustCount },
+      maxUtxoSize: { type: 'integer', minimum: 0, default: DEFAULT_AUTOPILOT_SETTINGS.maxUtxoSize },
+    },
+    required: [
+      'enabled',
+      'maxFeeRate',
+      'minUtxoCount',
+      'dustThreshold',
+      'cooldownHours',
+      'notifyTelegram',
+      'notifyPush',
+      'minDustCount',
+      'maxUtxoSize',
+    ],
+  },
+  WalletAutopilotSettingsResponse: {
+    type: 'object',
+    properties: {
+      settings: { $ref: '#/components/schemas/WalletAutopilotSettings' },
+    },
+    required: ['settings'],
+  },
+  UpdateWalletAutopilotSettingsRequest: {
+    type: 'object',
+    properties: {
+      enabled: { type: 'boolean' },
+      maxFeeRate: { type: 'number', minimum: 0 },
+      minUtxoCount: { type: 'integer', minimum: 0 },
+      dustThreshold: { type: 'integer', minimum: 0 },
+      cooldownHours: { type: 'integer', minimum: 0 },
+      notifyTelegram: { type: 'boolean' },
+      notifyPush: { type: 'boolean' },
+      minDustCount: { type: 'integer', minimum: 0 },
+      maxUtxoSize: { type: 'integer', minimum: 0 },
+    },
+    additionalProperties: false,
+  },
+  WalletAutopilotUtxoHealth: {
+    type: 'object',
+    properties: {
+      totalUtxos: { type: 'integer', minimum: 0 },
+      dustCount: { type: 'integer', minimum: 0 },
+      dustValue: { type: 'string', description: 'Satoshis serialized as a string' },
+      totalValue: { type: 'string', description: 'Satoshis serialized as a string' },
+      avgUtxoSize: { type: 'string', description: 'Satoshis serialized as a string' },
+      smallestUtxo: { type: 'string', description: 'Satoshis serialized as a string' },
+      largestUtxo: { type: 'string', description: 'Satoshis serialized as a string' },
+      consolidationCandidates: { type: 'integer', minimum: 0 },
+    },
+    required: [
+      'totalUtxos',
+      'dustCount',
+      'dustValue',
+      'totalValue',
+      'avgUtxoSize',
+      'smallestUtxo',
+      'largestUtxo',
+      'consolidationCandidates',
+    ],
+  },
+  WalletAutopilotFeeSnapshot: {
+    type: 'object',
+    properties: {
+      timestamp: { type: 'number' },
+      fastest: { type: 'number' },
+      halfHour: { type: 'number' },
+      hour: { type: 'number' },
+      economy: { type: 'number' },
+      minimum: { type: 'number' },
+    },
+    required: ['timestamp', 'fastest', 'halfHour', 'hour', 'economy', 'minimum'],
+  },
+  WalletAutopilotStatusResponse: {
+    type: 'object',
+    properties: {
+      utxoHealth: { $ref: '#/components/schemas/WalletAutopilotUtxoHealth' },
+      feeSnapshot: { $ref: '#/components/schemas/WalletAutopilotFeeSnapshot' },
+      settings: { $ref: '#/components/schemas/WalletAutopilotSettings' },
+    },
+    required: ['utxoHealth', 'feeSnapshot', 'settings'],
   },
 } as const;

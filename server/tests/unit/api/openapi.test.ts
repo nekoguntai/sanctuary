@@ -36,6 +36,7 @@ import {
   WALLET_IMPORT_WALLET_TYPE_VALUES,
 } from '../../../src/services/walletImport/types';
 import { WALLET_EXPORT_FORMAT_VALUES } from '../../../src/services/export/types';
+import { DEFAULT_AUTOPILOT_SETTINGS } from '../../../src/services/autopilot/types';
 
 type HandlerResponse = {
   statusCode: number;
@@ -285,6 +286,51 @@ describe('OpenAPI Docs', () => {
     expect(openApiSpec.paths['/wallets/{walletId}/export/labels'].get.responses[200].content).toHaveProperty(
       'application/jsonl',
     );
+  });
+
+  it('documents wallet Telegram and Autopilot settings routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/wallets/{walletId}/telegram', 'get'],
+      ['/wallets/{walletId}/telegram', 'patch'],
+      ['/wallets/{walletId}/autopilot', 'get'],
+      ['/wallets/{walletId}/autopilot', 'patch'],
+      ['/wallets/{walletId}/autopilot/status', 'get'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.components.schemas.WalletTelegramSettings.required).toEqual([
+      'enabled',
+      'notifyReceived',
+      'notifySent',
+      'notifyConsolidation',
+      'notifyDraft',
+    ]);
+    expect(openApiSpec.paths['/wallets/{walletId}/telegram'].patch.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/UpdateWalletTelegramSettingsRequest',
+      });
+    expect(openApiSpec.components.schemas.WalletAutopilotSettings.properties.maxFeeRate.default).toBe(
+      DEFAULT_AUTOPILOT_SETTINGS.maxFeeRate,
+    );
+    expect(openApiSpec.components.schemas.WalletAutopilotSettings.properties.dustThreshold.default).toBe(
+      DEFAULT_AUTOPILOT_SETTINGS.dustThreshold,
+    );
+    expect(openApiSpec.paths['/wallets/{walletId}/autopilot'].patch.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/UpdateWalletAutopilotSettingsRequest',
+      });
+    expect(openApiSpec.paths['/wallets/{walletId}/autopilot/status'].get.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/WalletAutopilotStatusResponse',
+      });
+    expect(openApiSpec.components.schemas.WalletAutopilotStatusResponse.required).toEqual([
+      'utxoHealth',
+      'feeSnapshot',
+      'settings',
+    ]);
   });
 
   it('documents implemented device item routes', () => {

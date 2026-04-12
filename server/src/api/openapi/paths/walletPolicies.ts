@@ -108,6 +108,19 @@ const policyEventQueryParameters = [
 ] as const;
 
 export const walletPolicyPaths = {
+  '/approvals/pending': {
+    get: {
+      tags: ['Wallets'],
+      summary: 'List pending approvals',
+      description: 'List pending approval requests across wallets where the authenticated user has owner or approver access.',
+      security: bearerAuth,
+      responses: {
+        200: jsonResponse('Pending approvals', '#/components/schemas/PendingApprovalsResponse'),
+        401: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+  },
   '/wallets/{walletId}/policies/events': {
     get: {
       tags: ['Wallets'],

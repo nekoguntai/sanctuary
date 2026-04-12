@@ -793,8 +793,69 @@ describe('OpenAPI Docs', () => {
     ]);
   });
 
+  it('documents API health and readiness routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/health', 'get'],
+      ['/health/live', 'get'],
+      ['/health/ready', 'get'],
+      ['/health/circuits', 'get'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+      expect(openApiSpec.paths[path][method]).not.toHaveProperty('security');
+    }
+
+    expect(openApiSpec.components.schemas.HealthStatus.enum).toEqual([
+      'healthy',
+      'degraded',
+      'unhealthy',
+    ]);
+    expect(openApiSpec.paths['/health'].get.responses[200].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/HealthResponse',
+    });
+    expect(openApiSpec.paths['/health'].get.responses[503].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/HealthResponse',
+    });
+    expect(openApiSpec.components.schemas.HealthResponse.required).toEqual([
+      'status',
+      'timestamp',
+      'uptime',
+      'version',
+      'components',
+    ]);
+    expect(openApiSpec.components.schemas.HealthResponse.properties.components.required).toEqual([
+      'database',
+      'redis',
+      'electrum',
+      'websocket',
+      'sync',
+      'jobQueue',
+      'cacheInvalidation',
+      'startup',
+      'circuitBreakers',
+      'memory',
+      'disk',
+    ]);
+    expect(openApiSpec.components.schemas.HealthLiveResponse.properties.status.enum).toEqual(['alive']);
+    expect(openApiSpec.components.schemas.HealthReadyResponse.properties.status.enum).toEqual([
+      'ready',
+      'not ready',
+    ]);
+    expect(openApiSpec.paths['/health/ready'].get.responses[503].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/HealthReadyResponse',
+    });
+    expect(openApiSpec.components.schemas.CircuitBreakerHealth.properties.state.enum).toEqual([
+      'closed',
+      'open',
+      'half-open',
+    ]);
+    expect(openApiSpec.components.schemas.HealthCircuitsResponse.required).toEqual(['overall', 'circuits']);
+  });
+
   it('documents wallet policy and approval routes', () => {
     const routes: Array<[OpenApiPathKey, string]> = [
+      ['/approvals/pending', 'get'],
       ['/wallets/{walletId}/policies/events', 'get'],
       ['/wallets/{walletId}/policies/evaluate', 'post'],
       ['/wallets/{walletId}/policies', 'get'],
@@ -846,6 +907,22 @@ describe('OpenAPI Docs', () => {
     expect(openApiSpec.components.schemas.ApprovalVoteRequest.properties.decision.enum).toEqual([
       ...VALID_VOTE_DECISIONS,
     ]);
+    expect(openApiSpec.paths['/approvals/pending'].get.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/PendingApprovalsResponse',
+      });
+    expect(openApiSpec.components.schemas.PendingApproval.required).toEqual([
+      'id',
+      'draftTransactionId',
+      'walletId',
+      'status',
+      'requiredApprovals',
+      'currentApprovals',
+      'totalVotes',
+      'amount',
+      'createdAt',
+    ]);
+    expect(openApiSpec.components.schemas.PendingApprovalsResponse.required).toEqual(['approvals', 'total']);
     expect(openApiSpec.paths['/wallets/{walletId}/drafts/{draftId}/approvals/{requestId}/vote'].post.requestBody.content['application/json'].schema)
       .toEqual({
         $ref: '#/components/schemas/ApprovalVoteRequest',

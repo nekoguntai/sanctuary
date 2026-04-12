@@ -21,6 +21,7 @@ import { transferSchemas } from './schemas/transfers';
 import { intelligenceSchemas } from './schemas/intelligence';
 import { aiSchemas } from './schemas/ai';
 import { adminSchemas } from './schemas/admin';
+import { healthSchemas } from './schemas/health';
 
 // Paths
 import { authPaths } from './paths/auth';
@@ -43,6 +44,7 @@ import { transferPaths } from './paths/transfers';
 import { intelligencePaths } from './paths/intelligence';
 import { aiPaths } from './paths/ai';
 import { adminPaths } from './paths/admin';
+import { healthPaths } from './paths/health';
 
 export const openApiSpec = {
   openapi: '3.0.3',
@@ -81,8 +83,10 @@ export const openApiSpec = {
     { name: 'Intelligence', description: 'Treasury Intelligence insights and conversations' },
     { name: 'AI', description: 'AI assistant features and model management' },
     { name: 'Admin', description: 'Administrative operations' },
+    { name: 'Health', description: 'Health, readiness, and circuit breaker status' },
   ],
   paths: {
+    ...healthPaths,
     ...authPaths,
     ...walletPaths,
     ...walletSharingPaths,
@@ -132,6 +136,7 @@ export const openApiSpec = {
       ...intelligenceSchemas,
       ...aiSchemas,
       ...adminSchemas,
+      ...healthSchemas,
     },
   },
 };

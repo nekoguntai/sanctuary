@@ -702,6 +702,44 @@ export const walletSchemas = {
     },
     required: ['approvals'],
   },
+  PendingApproval: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      draftTransactionId: { type: 'string' },
+      walletId: { type: 'string' },
+      status: { type: 'string' },
+      requiredApprovals: { type: 'integer', minimum: 0 },
+      currentApprovals: { type: 'integer', minimum: 0 },
+      totalVotes: { type: 'integer', minimum: 0 },
+      recipient: { type: 'string', nullable: true },
+      amount: { type: 'string', description: 'Satoshis serialized as a string' },
+      expiresAt: { type: 'string', format: 'date-time', nullable: true },
+      createdAt: { type: 'string', format: 'date-time' },
+    },
+    required: [
+      'id',
+      'draftTransactionId',
+      'walletId',
+      'status',
+      'requiredApprovals',
+      'currentApprovals',
+      'totalVotes',
+      'amount',
+      'createdAt',
+    ],
+  },
+  PendingApprovalsResponse: {
+    type: 'object',
+    properties: {
+      approvals: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/PendingApproval' },
+      },
+      total: { type: 'integer', minimum: 0 },
+    },
+    required: ['approvals', 'total'],
+  },
   ApprovalVoteRequest: {
     type: 'object',
     properties: {

@@ -7,13 +7,15 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../errors/errorHandler';
 import { userRepository } from '../../repositories/userRepository';
-import { InvalidInputError, UnauthorizedError } from '../../errors/ApiError';
+import { UnauthorizedError } from '../../errors/ApiError';
 import { createLogger } from '../../utils/logger';
 import { generateToken, verifyRefreshToken, decodeToken } from '../../utils/jwt';
 import { revokeToken, revokeAllUserTokens } from '../../services/tokenRevocation';
 import * as refreshTokenService from '../../services/refreshTokenService';
 import { auditService, AuditAction, AuditCategory, getClientInfo } from '../../services/auditService';
 import { authenticate } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
+import { LogoutSchema, RefreshTokenSchema } from '../schemas/auth';
 
 const router = Router();
 const log = createLogger('AUTH_TOKEN:ROUTE');
@@ -23,12 +25,8 @@ const log = createLogger('AUTH_TOKEN:ROUTE');
  * Exchange a refresh token for a new access token (SEC-005)
  * Supports optional token rotation for enhanced security
  */
-router.post('/refresh', asyncHandler(async (req, res) => {
+router.post('/refresh', validate({ body: RefreshTokenSchema }, { message: 'Refresh token is required' }), asyncHandler(async (req, res) => {
   const { refreshToken: refreshTokenStr } = req.body;
-
-  if (!refreshTokenStr) {
-    throw new InvalidInputError('Refresh token is required');
-  }
 
   // Verify refresh token JWT signature and expiration
   // Keep inner try/catch: specific error handling for token verification
@@ -86,7 +84,7 @@ router.post('/refresh', asyncHandler(async (req, res) => {
  * POST /api/v1/auth/logout
  * Revoke current access token and optionally the refresh token (SEC-003)
  */
-router.post('/logout', authenticate, asyncHandler(async (req, res) => {
+router.post('/logout', authenticate, validate({ body: LogoutSchema }), asyncHandler(async (req, res) => {
   const { refreshToken: refreshTokenStr } = req.body;
 
   // Revoke access token

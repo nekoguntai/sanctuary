@@ -9,8 +9,10 @@ import { userRepository } from '../../../repositories';
 import * as twoFactorService from '../../../services/twoFactorService';
 import { auditService, AuditAction, AuditCategory } from '../../../services/auditService';
 import { authenticate } from '../../../middleware/auth';
+import { validate } from '../../../middleware/validate';
 import { asyncHandler } from '../../../errors/errorHandler';
 import { NotFoundError, InvalidInputError } from '../../../errors/ApiError';
+import { TwoFactorEnableSchema } from '../../schemas/auth';
 
 /**
  * Create the 2FA setup router
@@ -51,12 +53,8 @@ export function createSetupRouter(): Router {
    * POST /api/v1/auth/2fa/enable
    * Verify token and enable 2FA
    */
-  router.post('/2fa/enable', authenticate, asyncHandler(async (req, res) => {
+  router.post('/2fa/enable', authenticate, validate({ body: TwoFactorEnableSchema }, { message: 'Verification token is required' }), asyncHandler(async (req, res) => {
     const { token } = req.body;
-
-    if (!token) {
-      throw new InvalidInputError('Verification token is required');
-    }
 
     const user = await userRepository.findById(req.user!.userId);
 

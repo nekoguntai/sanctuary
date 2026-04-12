@@ -12,8 +12,10 @@ import { generateToken, verify2FAToken } from '../../../utils/jwt';
 import * as twoFactorService from '../../../services/twoFactorService';
 import * as refreshTokenService from '../../../services/refreshTokenService';
 import { auditService, AuditAction, AuditCategory, getClientInfo } from '../../../services/auditService';
+import { validate } from '../../../middleware/validate';
 import { asyncHandler } from '../../../errors/errorHandler';
-import { InvalidInputError, UnauthorizedError } from '../../../errors/ApiError';
+import { UnauthorizedError } from '../../../errors/ApiError';
+import { TwoFactorVerifySchema } from '../../schemas/auth';
 
 const log = createLogger('AUTH_2FA:ROUTE');
 
@@ -28,12 +30,8 @@ export function createVerifyRouter(twoFactorLimiter: RequestHandler): Router {
    * POST /api/v1/auth/2fa/verify
    * Verify 2FA code during login (uses temporary token)
    */
-  router.post('/2fa/verify', twoFactorLimiter, asyncHandler(async (req, res) => {
+  router.post('/2fa/verify', twoFactorLimiter, validate({ body: TwoFactorVerifySchema }, { message: 'Temporary token and verification code are required' }), asyncHandler(async (req, res) => {
     const { tempToken, code } = req.body;
-
-    if (!tempToken || !code) {
-      throw new InvalidInputError('Temporary token and verification code are required');
-    }
 
     // SEC-006: Verify temp token with audience claim
     let decoded;

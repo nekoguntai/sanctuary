@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { PasswordSchema } from '../../../src/api/schemas/auth';
+import { PasswordSchema, RegisterSchema } from '../../../src/api/schemas/auth';
 import { SystemSettingsUpdateSchema } from '../../../src/api/schemas/admin';
 
 describe('Auth Schemas', () => {
@@ -34,6 +34,23 @@ describe('Auth Schemas', () => {
     it('should reject short password', () => {
       const result = PasswordSchema.safeParse('Ab1');
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe('RegisterSchema', () => {
+    it('requires email to match the public registration contract', () => {
+      const missingEmail = RegisterSchema.safeParse({
+        username: 'user123',
+        password: 'StrongPass1',
+      });
+      expect(missingEmail.success).toBe(false);
+
+      const withEmail = RegisterSchema.safeParse({
+        username: 'user123',
+        password: 'StrongPass1',
+        email: 'user@example.com',
+      });
+      expect(withEmail.success).toBe(true);
     });
   });
 });

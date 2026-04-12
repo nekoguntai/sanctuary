@@ -20,6 +20,10 @@ interface ValidationSchemas {
   query?: ZodSchema;
 }
 
+interface ValidationOptions {
+  message?: string | ((issues: Array<{ path: string; message: string }>) => string);
+}
+
 function assignParsedQuery(req: Request, query: unknown): void {
   // Express 5 exposes req.query through a getter, so direct assignment can throw.
   Object.defineProperty(req, 'query', {
@@ -34,7 +38,7 @@ function assignParsedQuery(req: Request, query: unknown): void {
  * Express middleware that validates request data against Zod schemas.
  * Replaces req.body/params/query with the parsed (and potentially transformed) values.
  */
-export function validate(schemas: ValidationSchemas) {
+export function validate(schemas: ValidationSchemas, options: ValidationOptions = {}) {
   return (req: Request, _res: Response, next: NextFunction): void => {
     try {
       if (schemas.params) {
@@ -49,13 +53,17 @@ export function validate(schemas: ValidationSchemas) {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
+        const issues = error.issues.map(issue => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        }));
+        const message = typeof options.message === 'function'
+          ? options.message(issues)
+          : options.message ?? 'Validation failed';
         const details = {
-          issues: error.issues.map(issue => ({
-            path: issue.path.join('.'),
-            message: issue.message,
-          })),
+          issues,
         };
-        next(new ValidationError('Validation failed', undefined, details));
+        next(new ValidationError(message, undefined, details));
         return;
       }
       next(error);

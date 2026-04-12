@@ -12,6 +12,7 @@ import { verifyPassword } from '../../utils/password';
 import { VerifyEmailSchema, UpdateEmailSchema } from '../schemas/email';
 import { createLogger } from '../../utils/logger';
 import { authenticate } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../errors/errorHandler';
 import { NotFoundError, ValidationError, UnauthorizedError, ConflictError } from '../../errors/ApiError';
 import { auditService, AuditAction, AuditCategory, getClientInfo } from '../../services/auditService';
@@ -34,15 +35,8 @@ export function createEmailRouter(
    * Verify email address using token from email link.
    * Public endpoint (no auth required).
    */
-  router.post('/email/verify', verifyLimiter, asyncHandler(async (req, res: Response) => {
-    const parseResult = VerifyEmailSchema.safeParse(req.body);
-    if (!parseResult.success) {
-      throw new ValidationError('Invalid request', undefined, {
-        details: parseResult.error.issues as unknown as Record<string, unknown>,
-      });
-    }
-
-    const { token } = parseResult.data;
+  router.post('/email/verify', verifyLimiter, validate({ body: VerifyEmailSchema }, { message: 'Invalid request' }), asyncHandler(async (req, res: Response) => {
+    const { token } = req.body;
     const result = await verifyEmail(token);
 
     if (!result.success) {
@@ -160,15 +154,9 @@ export function createEmailRouter(
     '/me/email',
     authenticate,
     updateLimiter,
+    validate({ body: UpdateEmailSchema }, { message: 'Invalid request' }),
     asyncHandler(async (req, res) => {
-      const parseResult = UpdateEmailSchema.safeParse(req.body);
-      if (!parseResult.success) {
-        throw new ValidationError('Invalid request', undefined, {
-          details: parseResult.error.issues as unknown as Record<string, unknown>,
-        });
-      }
-
-      const { email, password } = parseResult.data;
+      const { email, password } = req.body;
       const userId = req.user!.userId;
 
       // Get full user record to verify password

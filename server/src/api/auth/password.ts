@@ -14,6 +14,8 @@ import { hashPassword, verifyPassword, validatePasswordStrength } from '../../ut
 import { auditService, AuditAction, AuditCategory } from '../../services/auditService';
 import { revokeAllUserTokens } from '../../services/tokenRevocation';
 import { getErrorMessage } from '../../utils/errors';
+import { validate } from '../../middleware/validate';
+import { ChangePasswordPresenceSchema } from '../schemas/auth';
 
 const router = Router();
 const log = createLogger('AUTH_PASSWORD:ROUTE');
@@ -68,13 +70,8 @@ export function createPasswordRouter(passwordChangeLimiter: RequestHandler): Rou
    * POST /api/v1/auth/me/change-password
    * Change user password
    */
-  router.post('/me/change-password', passwordChangeLimiter, asyncHandler(async (req, res) => {
+  router.post('/me/change-password', passwordChangeLimiter, validate({ body: ChangePasswordPresenceSchema }, { message: 'Current password and new password are required' }), asyncHandler(async (req, res) => {
     const { currentPassword, newPassword } = req.body;
-
-    // Validation
-    if (!currentPassword || !newPassword) {
-      throw new InvalidInputError('Current password and new password are required');
-    }
 
     // Validate new password strength (same requirements as registration)
     const passwordValidation = validatePasswordStrength(newPassword);

@@ -10,8 +10,14 @@ import { verifyPassword } from '../../../utils/password';
 import * as twoFactorService from '../../../services/twoFactorService';
 import { auditService, AuditAction, AuditCategory } from '../../../services/auditService';
 import { authenticate } from '../../../middleware/auth';
+import { validate } from '../../../middleware/validate';
 import { asyncHandler } from '../../../errors/errorHandler';
 import { NotFoundError, InvalidInputError, UnauthorizedError } from '../../../errors/ApiError';
+import {
+  BackupCodesRegenerateSchema,
+  BackupCodesRequestSchema,
+  TwoFactorDisableSchema,
+} from '../../schemas/auth';
 
 /**
  * Create the 2FA management router
@@ -23,12 +29,8 @@ export function createManagementRouter(): Router {
    * POST /api/v1/auth/2fa/disable
    * Disable 2FA (requires password and current 2FA token)
    */
-  router.post('/2fa/disable', authenticate, asyncHandler(async (req, res) => {
+  router.post('/2fa/disable', authenticate, validate({ body: TwoFactorDisableSchema }, { message: 'Password and 2FA token are required' }), asyncHandler(async (req, res) => {
     const { password, token } = req.body;
-
-    if (!password || !token) {
-      throw new InvalidInputError('Password and 2FA token are required');
-    }
 
     const user = await userRepository.findById(req.user!.userId);
 
@@ -81,12 +83,8 @@ export function createManagementRouter(): Router {
    * Get remaining backup codes count (requires password verification)
    * Changed from GET to POST to prevent password exposure in URL/logs
    */
-  router.post('/2fa/backup-codes', authenticate, asyncHandler(async (req, res) => {
+  router.post('/2fa/backup-codes', authenticate, validate({ body: BackupCodesRequestSchema }, { message: 'Password is required' }), asyncHandler(async (req, res) => {
     const { password } = req.body;
-
-    if (!password || typeof password !== 'string') {
-      throw new InvalidInputError('Password is required');
-    }
 
     const user = await userRepository.findById(req.user!.userId);
 
@@ -113,12 +111,8 @@ export function createManagementRouter(): Router {
    * POST /api/v1/auth/2fa/backup-codes/regenerate
    * Generate new backup codes (requires password and 2FA token)
    */
-  router.post('/2fa/backup-codes/regenerate', authenticate, asyncHandler(async (req, res) => {
+  router.post('/2fa/backup-codes/regenerate', authenticate, validate({ body: BackupCodesRegenerateSchema }, { message: 'Password and 2FA token are required' }), asyncHandler(async (req, res) => {
     const { password, token } = req.body;
-
-    if (!password || !token) {
-      throw new InvalidInputError('Password and 2FA token are required');
-    }
 
     const user = await userRepository.findById(req.user!.userId);
 

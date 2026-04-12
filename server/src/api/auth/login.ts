@@ -15,8 +15,10 @@ import * as refreshTokenService from '../../services/refreshTokenService';
 import { SystemSettingSchemas } from '../../utils/safeJson';
 import { isUsingInitialPassword } from './password';
 import { isValidEmail } from '../../utils/validators';
+import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../errors/errorHandler';
 import { InvalidInputError, ValidationError, ConflictError, ForbiddenError } from '../../errors/ApiError';
+import { LoginSchema } from '../schemas/auth';
 import {
   isVerificationRequired,
   createVerificationToken,
@@ -182,13 +184,8 @@ export function createLoginRouter(
    * POST /api/v1/auth/login
    * Login existing user
    */
-  router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
+  router.post('/login', loginLimiter, validate({ body: LoginSchema }, { message: 'Username and password are required' }), asyncHandler(async (req, res) => {
     const { username, password } = req.body;
-
-    // Validation
-    if (!username || !password) {
-      throw new InvalidInputError('Username and password are required');
-    }
 
     // Find user
     const user = await userRepository.findByUsername(username);

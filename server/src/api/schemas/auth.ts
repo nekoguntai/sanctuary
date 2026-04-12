@@ -46,7 +46,7 @@ export const LoginPasswordSchema = z.string().min(1, 'Password is required');
 export const RegisterSchema = z.object({
   username: UsernameSchema,
   password: PasswordSchema,
-  email: EmailSchema.optional(),
+  email: EmailSchema,
 });
 
 // =============================================================================
@@ -100,6 +100,11 @@ export const BackupCodesRegenerateSchema = z.object({
 export const ChangePasswordSchema = z.object({
   currentPassword: LoginPasswordSchema,
   newPassword: PasswordSchema,
+});
+
+export const ChangePasswordPresenceSchema = z.object({
+  currentPassword: LoginPasswordSchema,
+  newPassword: LoginPasswordSchema,
 });
 
 // =============================================================================

@@ -193,4 +193,23 @@ describe('validate middleware', () => {
     expect(issues[0].path).toBe('name');
     expect(issues[1].path).toBe('age');
   });
+
+  it('supports route-specific validation error messages', () => {
+    const schema = z.object({ token: z.string() });
+    const middleware = validate({ body: schema }, { message: 'Token is required' });
+
+    const req = createMockReq({ body: {} });
+    const next = vi.fn();
+
+    middleware(req, res, next);
+
+    const error = next.mock.calls[0][0];
+    expect(error).toBeInstanceOf(ValidationError);
+    expect(error.message).toBe('Token is required');
+    expect(error.details!.issues).toEqual([
+      expect.objectContaining({
+        path: 'token',
+      }),
+    ]);
+  });
 });

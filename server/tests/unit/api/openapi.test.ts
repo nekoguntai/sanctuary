@@ -478,6 +478,115 @@ describe('OpenAPI Docs', () => {
       });
   });
 
+  it('documents admin backup, restore, encryption-key, and support-package routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/admin/encryption-keys', 'post'],
+      ['/admin/backup', 'post'],
+      ['/admin/backup/validate', 'post'],
+      ['/admin/restore', 'post'],
+      ['/admin/support-package', 'post'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.paths['/admin/encryption-keys'].post.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminEncryptionKeysRequest',
+      });
+    expect(openApiSpec.components.schemas.AdminEncryptionKeysRequest.required).toEqual(['password']);
+    expect(openApiSpec.components.schemas.AdminEncryptionKeysResponse.required).toEqual([
+      'encryptionKey',
+      'encryptionSalt',
+      'hasEncryptionKey',
+      'hasEncryptionSalt',
+    ]);
+    expect(openApiSpec.paths['/admin/encryption-keys'].post.responses[401].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminSimpleErrorResponse',
+      });
+
+    expect(openApiSpec.paths['/admin/backup'].post.requestBody).toMatchObject({
+      required: false,
+    });
+    expect(openApiSpec.paths['/admin/backup'].post.requestBody.content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/AdminCreateBackupRequest',
+    });
+    expect(openApiSpec.paths['/admin/backup'].post.responses[200].headers).toHaveProperty('Content-Disposition');
+    expect(openApiSpec.paths['/admin/backup'].post.responses[200].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/AdminSanctuaryBackup',
+    });
+    expect(openApiSpec.components.schemas.AdminCreateBackupRequest).toHaveProperty(
+      'additionalProperties',
+      false,
+    );
+    expect(openApiSpec.components.schemas.AdminSanctuaryBackup.required).toEqual(['meta', 'data']);
+    expect(openApiSpec.components.schemas.AdminBackupMeta.required).toEqual([
+      'version',
+      'appVersion',
+      'schemaVersion',
+      'createdAt',
+      'createdBy',
+      'includesCache',
+      'recordCounts',
+    ]);
+
+    expect(openApiSpec.paths['/admin/backup/validate'].post.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminBackupPayloadRequest',
+      });
+    expect(openApiSpec.components.schemas.AdminBackupPayloadRequest.required).toEqual(['backup']);
+    expect(openApiSpec.paths['/admin/backup/validate'].post.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminBackupValidationResponse',
+      });
+    expect(openApiSpec.components.schemas.AdminBackupValidationResponse.required).toEqual([
+      'valid',
+      'issues',
+      'warnings',
+      'info',
+    ]);
+
+    expect(openApiSpec.paths['/admin/restore'].post.requestBody.content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/AdminRestoreRequest',
+    });
+    expect(openApiSpec.components.schemas.AdminRestoreRequest.required).toEqual(['backup', 'confirmationCode']);
+    expect(openApiSpec.components.schemas.AdminRestoreRequest.properties.confirmationCode).toMatchObject({
+      enum: ['CONFIRM_RESTORE'],
+    });
+    expect(openApiSpec.paths['/admin/restore'].post.responses[200].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/AdminRestoreSuccessResponse',
+    });
+    expect(openApiSpec.paths['/admin/restore'].post.responses[400].content['application/json'].schema.oneOf)
+      .toContainEqual({
+        $ref: '#/components/schemas/AdminRestoreInvalidBackupResponse',
+      });
+    expect(openApiSpec.paths['/admin/restore'].post.responses[500].content['application/json'].schema.oneOf)
+      .toContainEqual({
+        $ref: '#/components/schemas/AdminRestoreFailedResponse',
+      });
+
+    expect(openApiSpec.paths['/admin/support-package'].post.responses[200].headers).toHaveProperty(
+      'Content-Disposition',
+    );
+    expect(openApiSpec.paths['/admin/support-package'].post.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminSupportPackage',
+      });
+    expect(openApiSpec.paths['/admin/support-package'].post.responses[429].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminSimpleErrorResponse',
+      });
+    expect(openApiSpec.components.schemas.AdminSupportPackage.required).toEqual([
+      'version',
+      'generatedAt',
+      'serverVersion',
+      'collectors',
+      'meta',
+    ]);
+  });
+
   it('documents admin user management routes', () => {
     const routes: Array<[OpenApiPathKey, string]> = [
       ['/admin/users', 'get'],

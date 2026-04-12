@@ -64,8 +64,32 @@ const jsonRequestBody = (schemaRef: string) => ({
   },
 });
 
+const optionalJsonRequestBody = (schemaRef: string) => ({
+  required: false,
+  content: {
+    'application/json': {
+      schema: { $ref: schemaRef },
+    },
+  },
+});
+
 const jsonResponse = (description: string, schemaRef: string) => ({
   description,
+  content: {
+    'application/json': {
+      schema: { $ref: schemaRef },
+    },
+  },
+});
+
+const jsonDownloadResponse = (description: string, schemaRef: string) => ({
+  description,
+  headers: {
+    'Content-Disposition': {
+      schema: { type: 'string' },
+      description: 'Attachment filename for the generated JSON document.',
+    },
+  },
   content: {
     'application/json': {
       schema: { $ref: schemaRef },
@@ -111,6 +135,108 @@ export const adminPaths = {
         400: apiErrorResponse,
         401: apiErrorResponse,
         403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+  },
+  '/admin/encryption-keys': {
+    post: {
+      tags: ['Admin'],
+      summary: 'Get encryption keys',
+      description: 'Return backup restoration encryption keys after admin password re-authentication.',
+      security: bearerAuth,
+      requestBody: jsonRequestBody('#/components/schemas/AdminEncryptionKeysRequest'),
+      responses: {
+        200: jsonResponse('Encryption key material status', '#/components/schemas/AdminEncryptionKeysResponse'),
+        400: apiErrorResponse,
+        401: jsonResponse('Password verification failed', '#/components/schemas/AdminSimpleErrorResponse'),
+        403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+  },
+  '/admin/backup': {
+    post: {
+      tags: ['Admin'],
+      summary: 'Create backup',
+      description: 'Create and download a Sanctuary backup JSON document.',
+      security: bearerAuth,
+      requestBody: optionalJsonRequestBody('#/components/schemas/AdminCreateBackupRequest'),
+      responses: {
+        200: jsonDownloadResponse('Backup JSON document', '#/components/schemas/AdminSanctuaryBackup'),
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+  },
+  '/admin/backup/validate': {
+    post: {
+      tags: ['Admin'],
+      summary: 'Validate backup',
+      description: 'Validate a Sanctuary backup JSON document before restore.',
+      security: bearerAuth,
+      requestBody: jsonRequestBody('#/components/schemas/AdminBackupPayloadRequest'),
+      responses: {
+        200: jsonResponse('Backup validation result', '#/components/schemas/AdminBackupValidationResponse'),
+        400: apiErrorResponse,
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+  },
+  '/admin/restore': {
+    post: {
+      tags: ['Admin'],
+      summary: 'Restore backup',
+      description: 'Restore the database from a Sanctuary backup. Requires the explicit CONFIRM_RESTORE confirmation code.',
+      security: bearerAuth,
+      requestBody: jsonRequestBody('#/components/schemas/AdminRestoreRequest'),
+      responses: {
+        200: jsonResponse('Restore completed', '#/components/schemas/AdminRestoreSuccessResponse'),
+        400: {
+          description: 'Invalid input or backup validation failure',
+          content: {
+            'application/json': {
+              schema: {
+                oneOf: [
+                  { $ref: '#/components/schemas/ApiError' },
+                  { $ref: '#/components/schemas/AdminRestoreInvalidBackupResponse' },
+                ],
+              },
+            },
+          },
+        },
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: {
+          description: 'Restore failed or unexpected error',
+          content: {
+            'application/json': {
+              schema: {
+                oneOf: [
+                  { $ref: '#/components/schemas/ApiError' },
+                  { $ref: '#/components/schemas/AdminRestoreFailedResponse' },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  '/admin/support-package': {
+    post: {
+      tags: ['Admin'],
+      summary: 'Generate support package',
+      description: 'Generate and download a diagnostic support package JSON document.',
+      security: bearerAuth,
+      responses: {
+        200: jsonDownloadResponse('Support package JSON document', '#/components/schemas/AdminSupportPackage'),
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        429: jsonResponse('Support package generation already in progress', '#/components/schemas/AdminSimpleErrorResponse'),
         500: apiErrorResponse,
       },
     },

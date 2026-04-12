@@ -2121,6 +2121,112 @@ describe('OpenAPI Docs', () => {
     });
   });
 
+  it('documents secondary auth profile, email, Telegram, and 2FA management routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/auth/registration-status', 'get'],
+      ['/auth/2fa/setup', 'post'],
+      ['/auth/2fa/enable', 'post'],
+      ['/auth/2fa/disable', 'post'],
+      ['/auth/2fa/backup-codes', 'post'],
+      ['/auth/2fa/backup-codes/regenerate', 'post'],
+      ['/auth/me/groups', 'get'],
+      ['/auth/me/change-password', 'post'],
+      ['/auth/me/email', 'put'],
+      ['/auth/users/search', 'get'],
+      ['/auth/email/verify', 'post'],
+      ['/auth/email/resend', 'post'],
+      ['/auth/telegram/chat-id', 'post'],
+      ['/auth/telegram/test', 'post'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.paths['/auth/registration-status'].get).not.toHaveProperty('security');
+    expect(openApiSpec.paths['/auth/email/verify'].post).not.toHaveProperty('security');
+    expect(openApiSpec.paths['/auth/2fa/setup'].post.security).toEqual([{ bearerAuth: [] }]);
+    expect(openApiSpec.paths['/auth/email/resend'].post.security).toEqual([{ bearerAuth: [] }]);
+    expect(openApiSpec.paths['/auth/telegram/chat-id'].post.security).toEqual([{ bearerAuth: [] }]);
+
+    expect(openApiSpec.components.schemas.RegistrationStatusResponse.required).toEqual(['enabled']);
+    expect(openApiSpec.components.schemas.RegisterRequest.required).toEqual(['username', 'password', 'email']);
+    expect(openApiSpec.components.schemas.RegisterRequest.properties.email).toMatchObject({
+      type: 'string',
+      format: 'email',
+    });
+    expect(openApiSpec.components.schemas.LoginResponse.properties).toHaveProperty('tempToken');
+    expect(openApiSpec.components.schemas.LoginResponse.properties).toHaveProperty('emailVerificationRequired');
+
+    expect(
+      openApiSpec.paths['/auth/2fa/enable'].post.requestBody.content['application/json'].schema
+    ).toEqual({
+      $ref: '#/components/schemas/TwoFactorTokenRequest',
+    });
+    expect(
+      openApiSpec.paths['/auth/2fa/disable'].post.requestBody.content['application/json'].schema
+    ).toEqual({
+      $ref: '#/components/schemas/TwoFactorDisableRequest',
+    });
+    expect(
+      openApiSpec.paths['/auth/2fa/backup-codes/regenerate'].post.requestBody.content['application/json'].schema
+    ).toEqual({
+      $ref: '#/components/schemas/TwoFactorBackupCodesRegenerateRequest',
+    });
+    expect(openApiSpec.components.schemas.TwoFactorSetupResponse.required).toEqual(['secret', 'qrCodeDataUrl']);
+    expect(openApiSpec.components.schemas.TwoFactorBackupCodesResponse.required).toEqual(['success', 'backupCodes']);
+    expect(openApiSpec.components.schemas.BackupCodesCountResponse.required).toEqual(['remaining']);
+
+    expect(
+      openApiSpec.paths['/auth/me/change-password'].post.requestBody.content['application/json'].schema
+    ).toEqual({
+      $ref: '#/components/schemas/ChangePasswordRequest',
+    });
+    expect(openApiSpec.components.schemas.ChangePasswordRequest.required).toEqual([
+      'currentPassword',
+      'newPassword',
+    ]);
+    expect(openApiSpec.paths['/auth/users/search'].get.parameters).toContainEqual(expect.objectContaining({
+      name: 'q',
+      in: 'query',
+      required: true,
+      schema: expect.objectContaining({ minLength: 2 }),
+    }));
+    expect(
+      openApiSpec.paths['/auth/me/groups'].get.responses[200].content['application/json'].schema.items
+    ).toEqual({
+      $ref: '#/components/schemas/UserGroupSummary',
+    });
+    expect(
+      openApiSpec.paths['/auth/users/search'].get.responses[200].content['application/json'].schema.items
+    ).toEqual({
+      $ref: '#/components/schemas/UserSearchResult',
+    });
+
+    expect(openApiSpec.paths['/auth/email/verify'].post.requestBody.content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/VerifyEmailRequest',
+    });
+    expect(openApiSpec.components.schemas.UpdateEmailRequest.required).toEqual(['email', 'password']);
+    expect(
+      openApiSpec.paths['/auth/me/email'].put.requestBody.content['application/json'].schema
+    ).toEqual({
+      $ref: '#/components/schemas/UpdateEmailRequest',
+    });
+    expect(openApiSpec.components.schemas.EmailResendResponse.required).toEqual(['success', 'message', 'expiresAt']);
+
+    expect(
+      openApiSpec.paths['/auth/telegram/chat-id'].post.requestBody.content['application/json'].schema
+    ).toEqual({
+      $ref: '#/components/schemas/TelegramChatIdRequest',
+    });
+    expect(
+      openApiSpec.paths['/auth/telegram/test'].post.requestBody.content['application/json'].schema
+    ).toEqual({
+      $ref: '#/components/schemas/TelegramTestRequest',
+    });
+    expect(openApiSpec.components.schemas.TelegramTestRequest.required).toEqual(['botToken', 'chatId']);
+  });
+
   it('documents gateway-exposed transaction routes', () => {
     const routes: Array<[OpenApiPathKey, string]> = [
       ['/wallets/{walletId}/transactions', 'get'],

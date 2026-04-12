@@ -38,6 +38,7 @@ export interface CreateAuditLogInput {
  */
 export interface AuditLogFilter {
   userId?: string;
+  username?: string;
   action?: string;
   category?: AuditCategory;
   success?: boolean;
@@ -83,6 +84,12 @@ export async function findMany(
 
   if (filter.userId) {
     where.userId = filter.userId;
+  }
+  if (filter.username) {
+    where.username = {
+      contains: filter.username,
+      mode: 'insensitive',
+    };
   }
   if (filter.action) {
     where.action = filter.action;

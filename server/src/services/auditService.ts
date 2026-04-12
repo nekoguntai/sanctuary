@@ -243,6 +243,7 @@ class AuditService {
   }> {
     const {
       userId,
+      username,
       action,
       category,
       success,
@@ -255,6 +256,7 @@ class AuditService {
     const result = await auditLogRepository.findMany(
       {
         userId,
+        username,
         action,
         category: category as RepoAuditCategory | undefined,
         success,

@@ -44,6 +44,8 @@ import {
   VALID_VOTE_DECISIONS,
 } from '../../../src/services/vaultPolicy/types';
 import {
+  AUDIT_DEFAULT_PAGE_SIZE,
+  AUDIT_STATS_DAYS,
   DEFAULT_CONFIRMATION_THRESHOLD,
   DEFAULT_SMTP_FROM_NAME,
   DEFAULT_SMTP_PORT,
@@ -474,6 +476,65 @@ describe('OpenAPI Docs', () => {
       .toEqual({
         $ref: '#/components/schemas/AdminUpdateFeatureFlagRequest',
       });
+  });
+
+  it('documents admin audit log routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/admin/audit-logs', 'get'],
+      ['/admin/audit-logs/stats', 'get'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.paths['/admin/audit-logs'].get.responses[200].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/AdminAuditLogsResponse',
+    });
+    expect(openApiSpec.paths['/admin/audit-logs'].get.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'username',
+        schema: expect.objectContaining({ type: 'string' }),
+      }),
+    );
+    expect(openApiSpec.paths['/admin/audit-logs'].get.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'limit',
+        schema: expect.objectContaining({
+          maximum: 500,
+          default: AUDIT_DEFAULT_PAGE_SIZE,
+        }),
+      }),
+    );
+    expect(openApiSpec.components.schemas.AdminAuditLogsResponse.required).toEqual([
+      'logs',
+      'total',
+      'limit',
+      'offset',
+    ]);
+    expect(openApiSpec.components.schemas.AdminAuditLog.properties.userId).toMatchObject({
+      nullable: true,
+    });
+    expect(openApiSpec.components.schemas.AdminAuditLog.properties.details).toMatchObject({
+      nullable: true,
+    });
+
+    expect(openApiSpec.paths['/admin/audit-logs/stats'].get.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminAuditStatsResponse',
+      });
+    expect(openApiSpec.paths['/admin/audit-logs/stats'].get.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'days',
+        schema: expect.objectContaining({ minimum: 1, default: AUDIT_STATS_DAYS }),
+      }),
+    );
+    expect(openApiSpec.components.schemas.AdminAuditStatsResponse.required).toEqual([
+      'totalEvents',
+      'byCategory',
+      'byAction',
+      'failedEvents',
+    ]);
   });
 
   it('documents implemented device item routes', () => {

@@ -129,4 +129,62 @@ export const adminSchemas = {
     required: ['enabled'],
     additionalProperties: false,
   },
+  AdminAuditLog: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      userId: { type: 'string', nullable: true },
+      username: { type: 'string' },
+      action: { type: 'string' },
+      category: { type: 'string' },
+      details: { type: 'object', additionalProperties: true, nullable: true },
+      ipAddress: { type: 'string', nullable: true },
+      userAgent: { type: 'string', nullable: true },
+      success: { type: 'boolean' },
+      errorMsg: { type: 'string', nullable: true },
+      createdAt: { type: 'string', format: 'date-time' },
+    },
+    required: [
+      'id',
+      'userId',
+      'username',
+      'action',
+      'category',
+      'details',
+      'ipAddress',
+      'userAgent',
+      'success',
+      'errorMsg',
+      'createdAt',
+    ],
+  },
+  AdminAuditLogsResponse: {
+    type: 'object',
+    properties: {
+      logs: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/AdminAuditLog' },
+      },
+      total: { type: 'integer', minimum: 0 },
+      limit: { type: 'integer', minimum: 1, maximum: 500 },
+      offset: { type: 'integer', minimum: 0 },
+    },
+    required: ['logs', 'total', 'limit', 'offset'],
+  },
+  AdminAuditStatsResponse: {
+    type: 'object',
+    properties: {
+      totalEvents: { type: 'integer', minimum: 0 },
+      byCategory: {
+        type: 'object',
+        additionalProperties: { type: 'integer', minimum: 0 },
+      },
+      byAction: {
+        type: 'object',
+        additionalProperties: { type: 'integer', minimum: 0 },
+      },
+      failedEvents: { type: 'integer', minimum: 0 },
+    },
+    required: ['totalEvents', 'byCategory', 'byAction', 'failedEvents'],
+  },
 } as const;

@@ -1068,6 +1068,19 @@ describe('Admin Routes', () => {
       );
     });
 
+    it('should filter by username', async () => {
+      mockAuditService.query.mockResolvedValue({ logs: [], total: 0 });
+
+      const response = await request(app)
+        .get('/api/v1/admin/audit-logs')
+        .query({ username: 'admin' });
+
+      expect(response.status).toBe(200);
+      expect(mockAuditService.query).toHaveBeenCalledWith(
+        expect.objectContaining({ username: 'admin' })
+      );
+    });
+
     it('should filter by success flag when provided', async () => {
       mockAuditService.query.mockResolvedValue({ logs: [], total: 0 });
 

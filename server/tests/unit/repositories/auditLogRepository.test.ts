@@ -156,6 +156,25 @@ describe('Audit Log Repository', () => {
       });
     });
 
+    it('should filter by username with partial case-insensitive matching', async () => {
+      (prisma.auditLog.findMany as Mock).mockResolvedValue([mockAuditLog]);
+      (prisma.auditLog.count as Mock).mockResolvedValue(1);
+
+      await auditLogRepository.findMany({ username: 'admin' });
+
+      expect(prisma.auditLog.findMany).toHaveBeenCalledWith({
+        where: {
+          username: {
+            contains: 'admin',
+            mode: 'insensitive',
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        skip: 0,
+      });
+    });
+
     it('should filter by action', async () => {
       (prisma.auditLog.findMany as Mock).mockResolvedValue([mockAuditLog]);
       (prisma.auditLog.count as Mock).mockResolvedValue(1);

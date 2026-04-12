@@ -6,8 +6,10 @@
  */
 
 import { FEATURE_FLAG_KEYS } from '../../../services/featureFlags/definitions';
+import { AUDIT_DEFAULT_PAGE_SIZE, AUDIT_STATS_DAYS } from '../../../constants';
 
 const bearerAuth = [{ bearerAuth: [] }] as const;
+const AUDIT_LOG_LIMIT_MAX = 500;
 
 const apiErrorResponse = {
   description: 'Error response',
@@ -103,6 +105,103 @@ export const adminPaths = {
             },
           },
         },
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+  },
+  '/admin/audit-logs': {
+    get: {
+      tags: ['Admin'],
+      summary: 'List audit logs',
+      description: 'List administrative audit logs with filters and clamped pagination.',
+      security: bearerAuth,
+      parameters: [
+        {
+          name: 'userId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'username',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'action',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'category',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'success',
+          in: 'query',
+          required: false,
+          schema: { type: 'boolean' },
+        },
+        {
+          name: 'startDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'endDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'integer',
+            minimum: 1,
+            maximum: AUDIT_LOG_LIMIT_MAX,
+            default: AUDIT_DEFAULT_PAGE_SIZE,
+          },
+        },
+        {
+          name: 'offset',
+          in: 'query',
+          required: false,
+          schema: { type: 'integer', minimum: 0, default: 0 },
+        },
+      ],
+      responses: {
+        200: jsonResponse('Audit log entries', '#/components/schemas/AdminAuditLogsResponse'),
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+  },
+  '/admin/audit-logs/stats': {
+    get: {
+      tags: ['Admin'],
+      summary: 'Get audit log statistics',
+      description: 'Get aggregate audit log statistics for a recent day window.',
+      security: bearerAuth,
+      parameters: [
+        {
+          name: 'days',
+          in: 'query',
+          required: false,
+          schema: { type: 'integer', minimum: 1, default: AUDIT_STATS_DAYS },
+        },
+      ],
+      responses: {
+        200: jsonResponse('Audit log statistics', '#/components/schemas/AdminAuditStatsResponse'),
         401: apiErrorResponse,
         403: apiErrorResponse,
         500: apiErrorResponse,

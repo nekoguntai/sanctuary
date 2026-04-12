@@ -273,6 +273,17 @@ describe('Audit Service', () => {
       );
     });
 
+    it('should filter by username', async () => {
+      mockFindMany.mockResolvedValue({ logs: [], total: 0 });
+
+      await auditService.query({ username: 'admin' });
+
+      expect(mockFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ username: 'admin' }),
+        expect.any(Object)
+      );
+    });
+
     it('should filter by category', async () => {
       mockFindMany.mockResolvedValue({ logs: [], total: 0 });
 

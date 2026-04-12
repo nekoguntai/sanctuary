@@ -501,6 +501,23 @@ describe('Admin Routes', () => {
       expect(response.body.message).toContain('already');
     });
 
+    it('should reject invalid email format on update', async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 'user-1',
+        username: 'oldname',
+        email: 'old@test.com',
+        isAdmin: false,
+      });
+
+      const response = await request(app)
+        .put('/api/v1/admin/users/user-1')
+        .send({ email: 'invalid-email' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain('email');
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
     it('should update email successfully', async () => {
       // When only sending email (no username), the username check is skipped
       mockPrisma.user.findUnique
@@ -724,8 +741,7 @@ describe('Admin Routes', () => {
       expect(response.body.error).toBe('Internal');
     });
 
-    // Note: Email format is NOT validated on update in the admin endpoint
-    // The endpoint only checks for duplicate emails, not format validation
+    // Email format is validated on update before duplicate checks.
   });
 
   // ========================================

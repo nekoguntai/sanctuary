@@ -478,6 +478,80 @@ describe('OpenAPI Docs', () => {
       });
   });
 
+  it('documents admin user management routes', () => {
+    const routes: Array<[OpenApiPathKey, string]> = [
+      ['/admin/users', 'get'],
+      ['/admin/users', 'post'],
+      ['/admin/users/{userId}', 'put'],
+      ['/admin/users/{userId}', 'delete'],
+    ];
+
+    for (const [path, method] of routes) {
+      expectDocumentedMethod(path, method);
+    }
+
+    expect(openApiSpec.components.schemas.AdminUser.required).toEqual([
+      'id',
+      'username',
+      'email',
+      'emailVerified',
+      'isAdmin',
+      'createdAt',
+    ]);
+    expect(openApiSpec.components.schemas.AdminUser.properties.email).toMatchObject({
+      format: 'email',
+      nullable: true,
+    });
+    expect(openApiSpec.components.schemas.AdminCreateUserRequest.required).toEqual([
+      'username',
+      'password',
+      'email',
+    ]);
+    expect(openApiSpec.components.schemas.AdminCreateUserRequest.properties.username).toMatchObject({
+      minLength: 3,
+    });
+    expect(openApiSpec.components.schemas.AdminCreateUserRequest.properties.password).toMatchObject({
+      minLength: 8,
+    });
+    expect(openApiSpec.components.schemas.AdminCreateUserRequest.properties.email).toMatchObject({
+      format: 'email',
+    });
+    expect(openApiSpec.components.schemas.AdminUpdateUserRequest.required).toBeUndefined();
+    expect(openApiSpec.components.schemas.AdminUpdateUserRequest.properties.email.oneOf).toContainEqual({
+      type: 'string',
+      format: 'email',
+    });
+    expect(openApiSpec.components.schemas.AdminUpdateUserRequest.properties.email.oneOf).toContainEqual({
+      type: 'string',
+      enum: [''],
+    });
+    expect(openApiSpec.paths['/admin/users'].get.responses[200].content['application/json'].schema).toEqual({
+      type: 'array',
+      items: { $ref: '#/components/schemas/AdminUser' },
+    });
+    expect(openApiSpec.paths['/admin/users'].post.requestBody.content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/AdminCreateUserRequest',
+    });
+    expect(openApiSpec.paths['/admin/users'].post.responses[201].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/AdminUser',
+    });
+    expect(openApiSpec.paths['/admin/users/{userId}'].put.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'userId',
+        in: 'path',
+        required: true,
+      }),
+    );
+    expect(openApiSpec.paths['/admin/users/{userId}'].put.requestBody.content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminUpdateUserRequest',
+      });
+    expect(openApiSpec.paths['/admin/users/{userId}'].delete.responses[200].content['application/json'].schema)
+      .toEqual({
+        $ref: '#/components/schemas/AdminDeleteUserResponse',
+      });
+  });
+
   it('documents admin audit log routes', () => {
     const routes: Array<[OpenApiPathKey, string]> = [
       ['/admin/audit-logs', 'get'],

@@ -196,6 +196,7 @@ describe('UsersGroups', () => {
 
       await user.type(screen.getByPlaceholderText(/username/i), 'newuser');
       await user.type(screen.getByPlaceholderText(/password/i), 'password123');
+      await user.type(screen.getByPlaceholderText(/user@example.com/i), 'newuser@example.com');
 
       await user.click(screen.getByText('Create User'));
 
@@ -204,6 +205,7 @@ describe('UsersGroups', () => {
           expect.objectContaining({
             username: 'newuser',
             password: 'password123',
+            email: 'newuser@example.com',
           })
         );
       });
@@ -234,6 +236,10 @@ describe('UsersGroups', () => {
 
       // Enter password
       await user.type(screen.getByPlaceholderText(/password/i), 'password123');
+      expect(createButton).toBeDisabled(); // Still disabled without email
+
+      // Enter email
+      await user.type(screen.getByPlaceholderText(/user@example.com/i), 'testuser@example.com');
       expect(createButton).not.toBeDisabled(); // Now enabled
     });
 
@@ -482,6 +488,7 @@ describe('UsersGroups', () => {
       await user.click(screen.getByText('Add User'));
       await user.type(screen.getByPlaceholderText(/username/i), 'admin');
       await user.type(screen.getByPlaceholderText(/password/i), 'password');
+      await user.type(screen.getByPlaceholderText(/user@example.com/i), 'admin@example.com');
       await user.click(screen.getByText('Create User'));
 
       await waitFor(() => {

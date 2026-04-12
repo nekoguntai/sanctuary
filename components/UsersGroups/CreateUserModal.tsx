@@ -85,7 +85,7 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Email (optional)</label>
+          <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Email *</label>
           <Input
             type="email"
             value={email}
@@ -102,7 +102,11 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
 
       <div className="flex justify-end space-x-3 mt-6">
         <Button variant="secondary" onClick={handleClose}>Cancel</Button>
-        <Button onClick={handleCreate} isLoading={isCreating} disabled={!username || !password}>
+        <Button
+          onClick={handleCreate}
+          isLoading={isCreating}
+          disabled={!username.trim() || !password.trim() || !email.trim()}
+        >
           Create User
         </Button>
       </div>

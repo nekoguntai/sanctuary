@@ -12,6 +12,7 @@ export interface AdminUser {
   id: string;
   username: string;
   email: string | null;
+  emailVerified: boolean;
   isAdmin: boolean;
   createdAt: string;
   updatedAt?: string;
@@ -20,7 +21,7 @@ export interface AdminUser {
 export interface CreateUserRequest {
   username: string;
   password: string;
-  email?: string;
+  email: string;
   isAdmin?: boolean;
 }
 

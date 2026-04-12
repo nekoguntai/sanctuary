@@ -132,6 +132,10 @@ router.put('/:userId', authenticate, requireAdmin, asyncHandler(async (req, res)
   if (email !== undefined) {
     const normalizedEmail = email ? email.toLowerCase() : null;
     if (normalizedEmail && normalizedEmail !== existingUser.email) {
+      if (!isValidEmail(normalizedEmail)) {
+        throw new InvalidInputError('Invalid email address format');
+      }
+
       // Check if new email is taken
       const emailTaken = await userRepository.findByEmail(normalizedEmail);
       if (emailTaken) {

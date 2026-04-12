@@ -75,7 +75,7 @@ vi.mock('../../components/UsersGroups/CreateUserModal', () => ({
             onCreate({
               username: '  alice  ',
               password: 'pw',
-              email: '   ',
+              email: '  alice@example.com  ',
               isAdmin: false,
             })
           }
@@ -224,7 +224,7 @@ describe('UsersGroups branch coverage', () => {
       expect(adminApi.createUser).toHaveBeenCalledWith({
         username: 'alice',
         password: 'pw',
-        email: undefined,
+        email: 'alice@example.com',
         isAdmin: false,
       });
     });

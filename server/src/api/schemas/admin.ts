@@ -70,7 +70,7 @@ export const MempoolConfigSchema = z.object({
 export const CreateUserSchema = z.object({
   username: UsernameSchema,
   password: PasswordSchema,
-  email: EmailSchema.optional(),
+  email: EmailSchema,
   isAdmin: z.boolean().default(false),
 });
 

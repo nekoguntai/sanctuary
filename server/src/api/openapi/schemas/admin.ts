@@ -74,6 +74,62 @@ export const adminSchemas = {
     },
     additionalProperties: true,
   },
+  AdminUser: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      username: { type: 'string' },
+      email: { type: 'string', format: 'email', nullable: true },
+      emailVerified: { type: 'boolean' },
+      emailVerifiedAt: { type: 'string', format: 'date-time', nullable: true },
+      isAdmin: { type: 'boolean' },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+    },
+    required: ['id', 'username', 'email', 'emailVerified', 'isAdmin', 'createdAt'],
+  },
+  AdminCreateUserRequest: {
+    type: 'object',
+    properties: {
+      username: { type: 'string', minLength: 3 },
+      password: {
+        type: 'string',
+        minLength: 8,
+        description: 'Must include uppercase, lowercase, and numeric characters.',
+      },
+      email: { type: 'string', format: 'email' },
+      isAdmin: { type: 'boolean', default: false },
+    },
+    required: ['username', 'password', 'email'],
+    additionalProperties: false,
+  },
+  AdminUpdateUserRequest: {
+    type: 'object',
+    properties: {
+      username: { type: 'string', minLength: 3 },
+      password: {
+        type: 'string',
+        minLength: 8,
+        description: 'Must include uppercase, lowercase, and numeric characters.',
+      },
+      email: {
+        oneOf: [
+          { type: 'string', format: 'email' },
+          { type: 'string', enum: [''] },
+        ],
+        description: 'Use an empty string to clear the user email address.',
+      },
+      isAdmin: { type: 'boolean' },
+    },
+    additionalProperties: false,
+  },
+  AdminDeleteUserResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+    },
+    required: ['message'],
+  },
   AdminFeatureFlagKey: {
     type: 'string',
     enum: [...FEATURE_FLAG_KEYS],

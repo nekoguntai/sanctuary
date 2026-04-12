@@ -27,6 +27,13 @@ const adminFeatureKeyParameter = {
   schema: { $ref: '#/components/schemas/AdminFeatureFlagKey' },
 } as const;
 
+const adminUserIdParameter = {
+  name: 'userId',
+  in: 'path',
+  required: true,
+  schema: { type: 'string' },
+} as const;
+
 const jsonRequestBody = (schemaRef: string) => ({
   required: true,
   content: {
@@ -83,6 +90,79 @@ export const adminPaths = {
         400: apiErrorResponse,
         401: apiErrorResponse,
         403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+  },
+  '/admin/users': {
+    get: {
+      tags: ['Admin'],
+      summary: 'List users',
+      description: 'List user account summaries for administrative management.',
+      security: bearerAuth,
+      responses: {
+        200: {
+          description: 'User account summaries',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'array',
+                items: { $ref: '#/components/schemas/AdminUser' },
+              },
+            },
+          },
+        },
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+    post: {
+      tags: ['Admin'],
+      summary: 'Create user',
+      description: 'Create a trusted user account with an auto-verified email address.',
+      security: bearerAuth,
+      requestBody: jsonRequestBody('#/components/schemas/AdminCreateUserRequest'),
+      responses: {
+        201: jsonResponse('Created user', '#/components/schemas/AdminUser'),
+        400: apiErrorResponse,
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        409: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+  },
+  '/admin/users/{userId}': {
+    put: {
+      tags: ['Admin'],
+      summary: 'Update user',
+      description: 'Update user account fields, admin status, email verification state, or password.',
+      security: bearerAuth,
+      parameters: [adminUserIdParameter],
+      requestBody: jsonRequestBody('#/components/schemas/AdminUpdateUserRequest'),
+      responses: {
+        200: jsonResponse('Updated user', '#/components/schemas/AdminUser'),
+        400: apiErrorResponse,
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        404: apiErrorResponse,
+        409: apiErrorResponse,
+        500: apiErrorResponse,
+      },
+    },
+    delete: {
+      tags: ['Admin'],
+      summary: 'Delete user',
+      description: 'Delete a user account. The current admin cannot delete their own account.',
+      security: bearerAuth,
+      parameters: [adminUserIdParameter],
+      responses: {
+        200: jsonResponse('User deleted', '#/components/schemas/AdminDeleteUserResponse'),
+        400: apiErrorResponse,
+        401: apiErrorResponse,
+        403: apiErrorResponse,
+        404: apiErrorResponse,
         500: apiErrorResponse,
       },
     },

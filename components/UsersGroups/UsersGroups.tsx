@@ -47,13 +47,13 @@ export const UsersGroups: React.FC = () => {
 
   // User CRUD handlers
   const handleCreateUser = async (data: { username: string; password: string; email: string; isAdmin: boolean }) => {
-    if (!data.username.trim() || !data.password.trim()) return;
+    if (!data.username.trim() || !data.password.trim() || !data.email.trim()) return;
 
     const result = await runCreateUser(async () => {
       await adminApi.createUser({
         username: data.username.trim(),
         password: data.password,
-        email: data.email.trim() || undefined,
+        email: data.email.trim(),
         isAdmin: data.isAdmin
       });
     });
